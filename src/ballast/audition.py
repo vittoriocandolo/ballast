@@ -238,7 +238,7 @@ def audition(path, text: str, p: Patch, *, watch: bool = False, bpm: float | Non
 
 
 def _stream(rate: int, channels: int, fill):
-    """An output stream at exactly `rate`, with a generous buffer so that renders never starve it."""
+    """An output stream at exactly `rate`, at the device's high latency so that renders do not starve it."""
     try:
         import sounddevice as sd
     except (ImportError, OSError) as e:
