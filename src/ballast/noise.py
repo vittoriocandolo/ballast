@@ -28,8 +28,8 @@ import math
 import numpy as np
 
 COMPONENTS = 20000
-KEY = b"kick/noise/v1"
-DITHER_KEY = b"kick/dither/v1"
+KEY = b"ballast/noise/v1"
+DITHER_KEY = b"ballast/dither/v1"
 
 
 def _stream(key: bytes, seed: int, size: int) -> bytes:

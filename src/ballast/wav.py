@@ -18,7 +18,7 @@ from .patch import midi_pitch
 
 FLOAT = 3  # WAVE_FORMAT_IEEE_FLOAT
 PCM = 1  # WAVE_FORMAT_PCM
-PRIVATE = b"kick"
+PRIVATE = b"blst"  # the chunk that holds the patch text and provenance
 
 
 def root_note(hz: float) -> tuple[int, int]:
