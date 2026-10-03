@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import json
 import sys
 from importlib import resources
 
-from .patch import CURVES, PatchError, dumps, loads, parse_tune, stretch
+from .patch import CURVES, PatchError, dumps, edit, loads, parse_tune, read_text, stretch
 
 REFERENCES = ("round", "tight", "long", "driven")
 
@@ -19,8 +18,7 @@ def reference_text(name: str) -> str:
 
 def _read(path: str) -> str:
     try:
-        with open(path, encoding="utf-8") as f:
-            return f.read()
+        return read_text(path)
     except OSError as e:
         raise SystemExit(_fail(f"{path}: {e.strerror}"))
 
@@ -41,7 +39,7 @@ def cmd_init(args) -> int:
     p = loads(reference_text(args.reference))
     if args.tune is not None:
         try:
-            p = dataclasses.replace(p, body=dataclasses.replace(p.body, tune_hz=parse_tune(args.tune)))
+            p = edit(p, "body.tune_hz", parse_tune(args.tune))
         except (ValueError, PatchError) as e:
             return _fail(f"--tune {args.tune}: {e}")
     sys.stdout.write(dumps(p))
@@ -51,7 +49,7 @@ def cmd_init(args) -> int:
 def cmd_tune(args) -> int:
     p = _patch(args.patch, _read(args.patch))
     try:
-        p = dataclasses.replace(p, body=dataclasses.replace(p.body, tune_hz=parse_tune(args.note)))
+        p = edit(p, "body.tune_hz", parse_tune(args.note))
     except (ValueError, PatchError) as e:
         problems = e.problems if isinstance(e, PatchError) else [str(e)]
         return _fail(f"{args.patch}: cannot tune to {args.note}\n" + "\n".join(f"  {m}" for m in problems))

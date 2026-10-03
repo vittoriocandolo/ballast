@@ -25,7 +25,7 @@ from typing import Callable
 
 import numpy as np
 
-from .patch import PatchError, loads
+from .patch import PatchError, loads, read_text
 from .render import db, render
 
 GAP_S = 0.5
@@ -164,9 +164,8 @@ class Watcher:
             stamp = (st.st_mtime_ns, st.st_size)
             if stamp == self._stamp:
                 return
-            with open(self.path, encoding="utf-8") as f:
-                text = f.read()
-        except OSError:
+            text = read_text(self.path)
+        except (OSError, UnicodeDecodeError):  # unreadable mid-save: the next poll retries
             return
         self._stamp = stamp
         if text == self._text:
@@ -200,8 +199,7 @@ class Session:
 
     def __init__(self, path, *, watch: bool = False, bpm: float | None = None, bed=None, out=sys.stdout):
         self.out = out
-        with open(path, encoding="utf-8") as f:
-            text = f.read()
+        text = read_text(path)
         audio, report = render(loads(text))
         print(report, file=out)
         if report.over:
