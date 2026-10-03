@@ -111,7 +111,7 @@ class Decimator:
 
 
 def manifest() -> dict:
-    return json.loads(resources.files("kick").joinpath("data", "decimators.json").read_text())
+    return json.loads(resources.files(__package__).joinpath("data", "decimators.json").read_text())
 
 
 def load_taps(raw: bytes, entry: dict) -> np.ndarray:
@@ -127,7 +127,7 @@ def load_taps(raw: bytes, entry: dict) -> np.ndarray:
 def decimator(base: int, k: int = K) -> Decimator:
     """A frozen decimator from kick/data, verified against its checksum."""
     entry = manifest()["filters"][f"{base}x{k}"]
-    raw = resources.files("kick").joinpath("data", entry["file"]).read_bytes()
+    raw = resources.files(__package__).joinpath("data", entry["file"]).read_bytes()
     return Decimator(base, k, load_taps(raw, entry), entry["sha256"], entry["stopband_db"])
 
 

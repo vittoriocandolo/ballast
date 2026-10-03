@@ -14,7 +14,7 @@ REFERENCES = ("round", "tight", "long", "driven")
 
 
 def reference_text(name: str) -> str:
-    return resources.files("kick").joinpath("data", "presets", f"{name}.toml").read_text(encoding="utf-8")
+    return resources.files(__package__).joinpath("data", "presets", f"{name}.toml").read_text(encoding="utf-8")
 
 
 def _read(path: str) -> str:
