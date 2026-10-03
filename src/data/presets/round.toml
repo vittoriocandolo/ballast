@@ -1,0 +1,43 @@
+schema = 1
+seed = 1
+
+[body]
+tune_hz   = 48.999
+level_db  = 0.0
+h2        = 0.08            # second harmonic, 0 … 0.5
+phase_deg = 0.0
+phase_ref = "onset"         # "onset" | "tail"
+pitch = [                   # ratio to tune_hz; starts at 0 ms, ends at 1
+  { ms = 0.0,  ratio = 4.5 },
+  { ms = 12.0, ratio = 1.7 },
+  { ms = 90.0, ratio = 1.0 },
+]
+amp = [                     # shape: 0 at both ends, highest point exactly 1
+  { ms = 0.0,   gain = 0.0 },
+  { ms = 0.6,   gain = 1.0 },
+  { ms = 60.0,  gain = 0.85 },
+  { ms = 220.0, gain = 0.42 },
+  { ms = 420.0, gain = 0.12 },
+  { ms = 600.0, gain = 0.0 },
+]
+
+[attack]
+level_db      = -28.0
+tone_hz       = 900.0
+noise_mix     = 0.3         # 0 = tone … 1 = noise
+noise_band_hz = [300.0, 4000.0]
+amp = [
+  { ms = 0.0,  gain = 0.0 },
+  { ms = 0.4,  gain = 1.0 },
+  { ms = 3.0,  gain = 0.3 },
+  { ms = 12.0, gain = 0.0 },
+]
+
+[drive]
+db = 3.0                    # small-signal gain; 0 = bypass
+
+[output]
+sample_rate = 48000
+mode        = "gain"        # "gain" | "peak"
+db          = -6.0          # gain in dB, or peak target in dBFS
+polarity    = 1

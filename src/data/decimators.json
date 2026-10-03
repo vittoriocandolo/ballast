@@ -1,0 +1,36 @@
+{
+  "design": {
+    "method": "Kaiser linear-phase prototype, minimum_phase(method='homomorphic', half=False), taps renormalized to sum to 1",
+    "passband_hz": 20000.0,
+    "attenuation_db": 116.0,
+    "n_fft": 1048576,
+    "numpy": "2.4.6",
+    "scipy": "1.17.1"
+  },
+  "filters": {
+    "44100x16": {
+      "base": 44100,
+      "K": 16,
+      "rate": 705600,
+      "taps": 2593,
+      "file": "decimator-44100x16.f64",
+      "sha256": "0932afce82f960c811e1a3bf74ccc4636a5aefd2161f5d69466b0a522955c7d0",
+      "passband_db": 1.6695453221504165e-05,
+      "stopband_db": 115.67581692177917,
+      "length_ms": 3.674886621315193,
+      "energy99_ms": 0.8489229024943311
+    },
+    "48000x16": {
+      "base": 48000,
+      "K": 16,
+      "rate": 768000,
+      "taps": 1447,
+      "file": "decimator-48000x16.f64",
+      "sha256": "753e10eadb9b6550d7dfc81847d7a3057b578c8d3bfe07278d0b474d7e29b676",
+      "passband_db": 1.4885490510370135e-05,
+      "stopband_db": 115.85767975538461,
+      "length_ms": 1.8841145833333333,
+      "energy99_ms": 0.51953125
+    }
+  }
+}
