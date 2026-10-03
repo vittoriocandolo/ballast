@@ -108,26 +108,6 @@ class Curve:
         y = np.where(x < self.t[0], self.v[0] * (x - self.t[0]), y)
         return np.where(x > self.t[-1], self.total + self.v[-1] * (x - self.t[-1]), y)
 
-    def derivative(self, x) -> np.ndarray:
-        x = np.asarray(x, dtype=float)
-        i, h, va, vb, da, db = self._segment(x)
-        s = (x - self.t[i]) / h
-        y = 6 * (vb - va) / h * s * (1 - s) + da * (1 - s) * (1 - 3 * s) - db * s * (2 - 3 * s)
-        return np.where((x < self.t[0]) | (x > self.t[-1]), 0.0, y)
-
-    def jumps(self) -> tuple[np.ndarray, np.ndarray]:
-        """Jumps in the second and third derivatives at each knot; the curve is constant outside.
-
-        The curve is only C¹, so these jumps set how fast its spectrum falls.
-        """
-        h, d = self.h, self.d
-        m = np.diff(self.v) / h
-        start = (6 * m - 4 * d[:-1] - 2 * d[1:]) / h  # second derivative just after each segment starts
-        end = (-6 * m + 2 * d[:-1] + 4 * d[1:]) / h  # and just before it ends
-        third = 6 * (d[:-1] + d[1:] - 2 * m) / h**2  # constant on each segment
-        jump = lambda after, before: np.concatenate((after, [0.0])) - np.concatenate(([0.0], before))  # noqa: E731
-        return jump(start, end), jump(third, third)
-
     def remaining(self, x) -> np.ndarray:
         """Integral from x to the last knot."""
         x = np.asarray(x, dtype=float)

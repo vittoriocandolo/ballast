@@ -67,16 +67,6 @@ def amplitudes(seed: int, lo: float, hi: float) -> tuple[np.ndarray, np.ndarray]
     return amp, theta
 
 
-def at(seed: int, lo: float, hi: float, t, derivative: bool = False) -> np.ndarray:
-    """n(t), or n′(t), at arbitrary times, by summing the components (for a few points)."""
-    amp, theta = amplitudes(seed, lo, hi)
-    k = np.arange(1, COMPONENTS + 1, dtype=float)
-    phase = 2 * np.pi * np.mod(np.outer(np.atleast_1d(t), k), 1.0) + theta
-    if derivative:
-        return -(np.sin(phase) @ (2 * np.pi * k * amp))
-    return np.cos(phase) @ amp
-
-
 def dither(seed: int, count: int) -> np.ndarray:
     """Triangular (TPDF) dither in LSB for `count` samples, from SHAKE-256 of its own key and the seed.
 

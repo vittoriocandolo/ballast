@@ -9,20 +9,14 @@ it in the background. A finished render is used only if its generation is
 still the newest, so stale results are dropped; an invalid edit, or a
 gain-mode render over full scale, leaves the last valid buffer playing.
 
-Two additions make the benchmark's comparison (docs/BENCHMARK.md) a single
-command. A bed (`--with`), such as the track's bass line or loop, plays
-under the hits; it restarts on the tempo grid, so it never drifts from them.
-A sample (`--against`) alternates with the render hit by hit, matched to the
-render's loudness: the sample is scaled, never the render. With `--blind`
-each pair plays in random order, revealed when audition stops. Neither file
-is ever resampled.
+A bed (`--with`), such as the track's bass line or loop, plays under the
+hits; it restarts on the tempo grid, so it never drifts from them. It is
+never resampled.
 """
 
 from __future__ import annotations
 
-import math
 import os
-import random
 import sys
 import threading
 import time
@@ -31,7 +25,6 @@ from typing import Callable
 
 import numpy as np
 
-from .loudness import momentary_max
 from .patch import PatchError, loads
 from .render import db, render
 
@@ -94,44 +87,27 @@ class Bed:
 
 
 class Hits:
-    """Mixes hits into output blocks. `offer` may be called from any thread.
+    """Mixes hits into output blocks. `offer` may be called from any thread."""
 
-    With a sample, hits alternate between the render and the sample in pairs;
-    `rng` makes each pair's order random, and `order` records it (True when
-    the render played first).
-    """
-
-    def __init__(self, rate: int, bpm: float | None = None, *, bed: Bed | None = None, rng=None):
-        self.rate, self.bpm, self.bed, self.rng = rate, bpm, bed, rng
+    def __init__(self, rate: int, bpm: float | None = None, *, bed: Bed | None = None):
+        self.rate, self.bpm, self.bed = rate, bpm, bed
         self.channels = bed.channels if bed is not None else 1
-        self._offer: tuple[int, np.ndarray, np.ndarray | None] | None = None
-        self.generation, self.buffer, self.sample = -1, None, None  # what new hits play
+        self._offer: tuple[int, np.ndarray] | None = None
+        self.generation, self.buffer = -1, None  # what new hits play
         self.voices: list[tuple[int, np.ndarray]] = []  # (start sample, buffer)
         self.clock = 0  # index of the next output sample
         self.next_hit: int | None = None
         self.origin, self.count = 0, 0
-        self.order: list[bool] = []
 
-    def offer(self, generation: int, buffer: np.ndarray, sample: np.ndarray | None = None) -> None:
-        """Queue a buffer, and the sample matched to it, for the next hit boundary.
-
-        An older generation never replaces a newer one.
-        """
+    def offer(self, generation: int, buffer: np.ndarray) -> None:
+        """Queue a buffer for the next hit boundary. An older generation never replaces a newer one."""
         current = self._offer
         if current is None or generation > current[0]:
-            self._offer = (generation, buffer, sample)
+            self._offer = (generation, buffer)
 
     def wait(self) -> float:
         """Seconds until the next hit."""
         return 0.0 if self.next_hit is None else max(0, self.next_hit - self.clock) / self.rate
-
-    def _next_buffer(self) -> np.ndarray:
-        if self.sample is None:
-            return self.buffer
-        if self.count % 2 == 0:
-            self.order.append(True if self.rng is None else self.rng.random() < 0.5)
-        render_turn = (self.count % 2 == 0) == self.order[-1]
-        return self.buffer if render_turn else self.sample
 
     def fill(self, frames: int) -> np.ndarray:
         out = np.zeros(frames, dtype=np.float32)
@@ -141,14 +117,13 @@ class Hits:
         while self.next_hit is not None and self.next_hit < end:
             offered = self._offer
             if offered is not None and offered[0] > self.generation:
-                self.generation, self.buffer, self.sample = offered
-            buf = self._next_buffer()
-            self.voices.append((self.next_hit, buf))
+                self.generation, self.buffer = offered
+            self.voices.append((self.next_hit, self.buffer))
             self.count += 1
             if self.bpm:
                 self.next_hit = self.origin + round(self.count * self.rate * 60 / self.bpm)
             else:
-                self.next_hit += buf.size + round(GAP_S * self.rate)
+                self.next_hit += self.buffer.size + round(GAP_S * self.rate)
         playing = []
         for start, buf in self.voices:
             a, b = max(self.clock, start), min(end, start + buf.size)
@@ -223,18 +198,7 @@ class Watcher:
 class Session:
     """One audition: the hits, and the watcher when watching. `poll` is called about every 0.1 s."""
 
-    def __init__(
-        self,
-        path,
-        *,
-        watch: bool = False,
-        bpm: float | None = None,
-        bed=None,
-        against=None,
-        blind: bool = False,
-        rng=None,
-        out=sys.stdout,
-    ):
+    def __init__(self, path, *, watch: bool = False, bpm: float | None = None, bed=None, out=sys.stdout):
         self.out = out
         with open(path, encoding="utf-8") as f:
             text = f.read()
@@ -244,16 +208,8 @@ class Session:
             raise OverError(report)
         self.rate, self.bpm = report.sample_rate, bpm
         self.bed = self._bed(bed, bpm) if bed is not None else None
-        self.sample, self.sample_lufs = self._sample(against) if against is not None else (None, None)
-        if blind and self.sample is None:
-            raise AuditionError("--blind needs --against: a blind comparison needs a sample")
-        self.blind = blind
-        self.hits = Hits(self.rate, bpm, bed=self.bed, rng=(rng or random.SystemRandom()) if blind else None)
-        matched, notes = self._prepare(audio, report)
-        self.hits.offer(0, audio, matched)
-        for note in notes:
-            print(note, file=out)
-        self._pairs_said = 0
+        self.hits = Hits(self.rate, bpm, bed=self.bed)
+        self._offer(0, audio)
         self.watcher = Watcher(path, lambda t: render(loads(t)), self._done, text) if watch else None
 
     def _bed(self, path, bpm) -> Bed:
@@ -277,59 +233,24 @@ class Session:
         )
         return Bed(frames, self.rate, bpm, bars)
 
-    def _sample(self, path) -> tuple[np.ndarray, float]:
-        rate, frames = _load(path)
-        if rate != self.rate:
-            raise AuditionError(f"{path}: {rate} Hz, but the patch renders at {self.rate} Hz; audition never resamples")
-        mid = frames.mean(axis=1)  # a stereo sample plays as its mid channel
-        level = momentary_max(mid, rate)
-        if level == -math.inf:
-            raise AuditionError(f"{path}: the sample is silent")
-        return mid, level
-
-    def _prepare(self, audio: np.ndarray, report) -> tuple[np.ndarray | None, list[str]]:
-        """The sample matched to this render's loudness, and what to say about it and the mix."""
-        notes, matched = [], None
-        if self.sample is not None:
-            gain = report.loudness - self.sample_lufs if report.loudness > -math.inf else -math.inf
-            matched = (self.sample * 10.0 ** (gain / 20.0)).astype(np.float32)
-            peak = float(np.max(np.abs(matched)))
-            clip = (
-                f"; its peak is then {db(peak):+.1f} dBFS, which the device will clip, so lower output.db"
-                if peak > 1.0
-                else ""
-            )
-            notes.append(
-                f"{'sample':<9}plays at {gain:+.1f} dB, matched to the render's loudness "
-                f"(the largest 400 ms momentary loudness, BS.1770){clip}"
-            )
+    def _offer(self, generation: int, audio: np.ndarray) -> None:
+        """Queue the render, and warn if the hits over the bed would clip."""
+        self.hits.offer(generation, audio)
         if self.bed is not None:
             # One loop after a kick's length has passed holds every overlap of the steady state.
             probe = Hits(self.rate, self.bpm, bed=self.bed)
-            probe.offer(0, audio, matched)
+            probe.offer(0, audio)
             peak = float(np.max(np.abs(probe.fill(self.bed.start(1) + audio.size))))
             if peak > 1.0:
-                notes.append(
+                print(
                     f"warning: the hits over the bed peak at {db(peak):+.1f} dBFS, which the device "
-                    "will clip; lower the bed or output.db"
+                    "will clip; lower the bed or output.db",
+                    file=self.out,
                 )
-        return matched, notes
 
     def poll(self) -> None:
         if self.watcher is not None:
             self.watcher.poll()
-        if self.blind:
-            started = (self.hits.count + 1) // 2
-            while self._pairs_said < started:
-                self._pairs_said += 1
-                print(f"pair {self._pairs_said}", file=self.out)
-
-    def reveal(self) -> str | None:
-        """The blind order, once audition stops: R is the render, S the sample."""
-        if not self.blind:
-            return None
-        pairs = " ".join(f"{i + 1}:{'RS' if first else 'SR'}" for i, first in enumerate(self.hits.order))
-        return f"blind order (R = render, S = sample): {pairs or 'no pair played'}"
 
     def _done(self, generation, result, elapsed, newest) -> None:
         say = lambda msg: print(f"[{generation}] {msg}", file=self.out)  # noqa: E731
@@ -351,18 +272,11 @@ class Session:
                     "Still playing the last valid buffer."
                 )
             else:
-                matched, notes = self._prepare(audio, report)
-                self.hits.offer(generation, audio, matched)
                 say(
-                    "\n".join(
-                        [
-                            f"rendered in {1000 * elapsed:.0f} ms; plays at the next hit, in "
-                            f"{1000 * self.hits.wait():.0f} ms",
-                            str(report),
-                            *notes,
-                        ]
-                    )
+                    f"rendered in {1000 * elapsed:.0f} ms; plays at the next hit, in "
+                    f"{1000 * self.hits.wait():.0f} ms\n{report}"
                 )
+                self._offer(generation, audio)
 
 
 class OverError(Exception):
@@ -376,15 +290,12 @@ def audition(
     watch: bool = False,
     bpm: float | None = None,
     bed=None,
-    against=None,
-    blind: bool = False,
     out=sys.stdout,
     stream_factory=None,
-    rng=None,
 ) -> int:
     """Play the patch until interrupted; with `watch`, re-render on every edit."""
     try:
-        session = Session(path, watch=watch, bpm=bpm, bed=bed, against=against, blind=blind, rng=rng, out=out)
+        session = Session(path, watch=watch, bpm=bpm, bed=bed, out=out)
     except (OSError, PatchError) as e:
         print(f"{path}: {e}", file=sys.stderr)
         return 2
@@ -406,10 +317,6 @@ def audition(
                 session.poll()
     except KeyboardInterrupt:
         return 0
-    finally:
-        revealed = session.reveal()
-        if revealed:
-            print(revealed, file=out)
 
 
 def _sounddevice_stream(rate: int, channels: int, fill):

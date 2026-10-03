@@ -1,4 +1,4 @@
-"""Command line: kick init | render | audition | verify | extract (plan §7), and stretch and tune (§8.4)."""
+"""Command line: kick init | render | audition | extract (plan §7), and stretch and tune (§8.4)."""
 
 from __future__ import annotations
 
@@ -101,17 +101,7 @@ def cmd_render(args) -> int:
 def cmd_audition(args) -> int:
     from .audition import audition
 
-    return audition(args.patch, watch=args.watch, bpm=args.bpm, bed=args.bed, against=args.against, blind=args.blind)
-
-
-def cmd_verify(args) -> int:
-    from .reference import verify
-
-    p = _patch(args.patch, _read(args.patch))
-    print(f"{args.patch}: comparing the shipping render with its 8× reference (16× convergence check)")
-    v = verify(p)
-    print(v)
-    return 0 if v.passed else 1
+    return audition(args.patch, watch=args.watch, bpm=args.bpm, bed=args.bed)
 
 
 def cmd_extract(args) -> int:
@@ -177,19 +167,7 @@ def main(argv=None) -> int:
         metavar="WAV",
         help="loop a bed under the hits, such as the track's bass line: a whole number of bars at --bpm",
     )
-    p.add_argument(
-        "--against",
-        metavar="WAV",
-        help="alternate with a sample, hit by hit, the sample matched to the render's loudness",
-    )
-    p.add_argument(
-        "--blind", action="store_true", help="with --against, play each pair in random order, revealed at the end"
-    )
     p.set_defaults(run=cmd_audition)
-
-    p = sub.add_parser("verify", help="compare one patch with its reference render")
-    p.add_argument("patch")
-    p.set_defaults(run=cmd_verify)
 
     p = sub.add_parser("extract", help="print the patch embedded in an exported WAV")
     p.add_argument("wav")
