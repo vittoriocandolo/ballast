@@ -17,7 +17,7 @@ audition = ["sounddevice>=0.4"]
 ballast = "ballast.cli:main"
 
 [tool.setuptools.package-data]
-ballast = ["data/*.json", "data/*.f64", "data/presets/*.toml"]
+ballast = ["data/*.f64", "data/presets/*.toml"]
 
 [tool.ruff]
 line-length = 120

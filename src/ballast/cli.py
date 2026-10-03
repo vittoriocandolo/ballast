@@ -71,27 +71,24 @@ def cmd_stretch(args) -> int:
 
 
 def cmd_render(args) -> int:
-    from .render import db, export, render
+    from .render import FORMATS, export, render
 
-    if args.allow_over and args.format != "float32":
+    bits = FORMATS[args.format]
+    if args.allow_over and bits is not None:
         return _fail("--allow-over writes float32 only: PCM cannot hold samples beyond full scale")
     text = _read(args.patch)
-    audio, report = render(_patch(args.patch, text), args.format)
+    p = _patch(args.patch, text)
+    audio, report = render(p, bits)
     print(report)
-    if report.over and args.format != "float32":
-        return _fail(
-            f"not written: the peak is {db(report.peak):+.4f} dBFS, above {args.format}'s ceiling of "
-            f"{db(report.ceiling):.4f} dBFS, which keeps 2 LSB for dither. Lower output.db by at least "
-            f"{db(report.peak / report.ceiling):.4f} dB.",
-            1,
-        )
+    if report.over and bits is not None:
+        return _fail(f"not written: lower output.db by at least {report.over_db:.4f} dB", 1)
     if report.over and not args.allow_over:
         return _fail(
-            f"not written: the peak is {db(report.peak):+.2f} dBFS. Lower output.db by at least "
-            f"{db(report.peak):.2f} dB, or pass --allow-over to write a float file with overs.",
+            f"not written: lower output.db by at least {report.over_db:.2f} dB, "
+            "or pass --allow-over to write a float file with overs",
             1,
         )
-    export(args.out, audio, report, text)
+    export(args.out, p, text, audio, bits)
     print(f"wrote {args.out}")
     return 0
 

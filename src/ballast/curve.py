@@ -1,4 +1,4 @@
-"""Monotone cubic Hermite curves with exact integrals (plan §2.2).
+"""Monotone cubic Hermite curves with exact integrals.
 
 A curve passes through its knots with slopes from the PCHIP rule:
 
@@ -21,7 +21,7 @@ from __future__ import annotations
 import numpy as np
 
 
-def pchip_slopes(t, v) -> np.ndarray:
+def _slopes(t, v) -> np.ndarray:
     """Knot slopes from the PCHIP rule, before any override."""
     t = np.asarray(t, dtype=float)
     v = np.asarray(v, dtype=float)
@@ -73,7 +73,7 @@ class Curve:
     @classmethod
     def pchip(cls, t, v, *, first: float | None = None, last: float | None = None) -> Curve:
         """PCHIP curve; `first` and `last` override the end slopes."""
-        d = pchip_slopes(t, v)
+        d = _slopes(t, v)
         if first is not None:
             d[0] = first
         if last is not None:

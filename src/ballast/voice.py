@@ -1,4 +1,4 @@
-"""Body, attack and drive as pure functions of time (plan §2.3–§2.5, §3).
+"""Body, attack and drive as pure functions of time.
 
     x(t) = b(t) + a(t),    y(t) = S_α(x(t))
 
@@ -9,18 +9,14 @@ changes a sample's value.
 
 from __future__ import annotations
 
-import functools
 import math
 from dataclasses import dataclass
 
 import numpy as np
 from scipy.optimize import brentq
 
-from . import noise
 from .curve import Curve, amplitude_curve, pitch_curve
 from .patch import Patch
-
-BLOCK = 2**16
 
 
 def drive_alpha(db: float) -> float:
@@ -155,24 +151,3 @@ def saturate(v: Voice, x: np.ndarray) -> np.ndarray:
     with np.errstate(over="ignore"):
         return np.copysign(np.tanh(v.alpha * np.abs(x)), x) / norm
 
-
-def noise_table(v: Voice, rate: int) -> np.ndarray | None:
-    """The attack noise at every internal sample of one period, cached while the seed and band stay the same."""
-    return _table(v.seed, v.band[0], v.band[1], rate) if v.uses_noise else None
-
-
-@functools.lru_cache(maxsize=2)
-def _table(seed: int, lo: float, hi: float, rate: int) -> np.ndarray:
-    table = noise.table(seed, lo, hi, rate)
-    table.flags.writeable = False
-    return table
-
-
-def internal(v: Voice, rate: int, count: int) -> np.ndarray:
-    """y[n] = y(n / rate) for 0 ≤ n < count, in blocks aligned to n = 0."""
-    table = noise_table(v, rate)
-    y = np.empty(count)
-    for n0 in range(0, count, BLOCK):
-        n1 = min(n0 + BLOCK, count)
-        y[n0:n1] = saturate(v, sources(v, rate, n0, n1, table))
-    return y
