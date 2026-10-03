@@ -94,9 +94,17 @@ def cmd_render(args) -> int:
 
 
 def cmd_audition(args) -> int:
-    from .audition import audition
+    from .audition import AuditionError, audition
 
-    return audition(args.patch, watch=args.watch, bpm=args.bpm, bed=args.bed)
+    text = _read(args.patch)
+    p = _patch(args.patch, text)
+    try:
+        audition(args.patch, text, p, watch=args.watch, bpm=args.bpm, bed=args.bed)
+    except AuditionError as e:
+        return _fail(str(e), 1)
+    except KeyboardInterrupt:
+        pass
+    return 0
 
 
 def cmd_extract(args) -> int:
@@ -171,6 +179,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     if getattr(args, "bpm", None) is not None and not args.bpm > 0:
         ap.error("--bpm must be positive")
+    if getattr(args, "bed", None) and args.bpm is None:
+        ap.error("--with needs --bpm, so the hits land on the bed's beats")
     try:
         return args.run(args)
     except SystemExit as e:
