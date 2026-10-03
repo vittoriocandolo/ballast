@@ -8,9 +8,10 @@ file is exactly the 48 kHz file with the in-between samples filled in.
 Nothing trims, fades, high-passes or removes DC, and the whole filter tail
 is kept.
 
-The internal signal is computed in blocks aligned to the trigger. Every
-sample is a pure function of its time, so the blocks never change a value,
-and a longer render never changes earlier samples.
+The internal signal is computed in blocks aligned to the trigger, in
+parallel. Every sample is a pure function of its time, so neither the blocks
+nor the threads change a value, and a longer render never changes earlier
+samples.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ from .patch import Output, Patch, describe_tuning
 from .voice import sample_count, saturate, sources, voice
 
 K = 16
-BLOCK = 2**16
+BLOCK = 2**15
 FAMILY = {44100: 44100, 88200: 44100, 48000: 48000, 96000: 48000}
 # One frozen minimum-phase FIR per family, shipped as data so the sound cannot drift with SciPy:
 # flat to 0.001 dB up to 20 kHz, at least 110 dB down from base/2, taps summing to exactly 1.
@@ -43,6 +44,7 @@ DECIMATORS = {
     48000: ("decimator-48000x16.f64", "753e10eadb9b6550d7dfc81847d7a3057b578c8d3bfe07278d0b474d7e29b676"),
 }
 FORMATS = {"float32": None, "pcm24": 24, "pcm16": 16}  # the PCM bit depth of each export format
+POOL = ThreadPoolExecutor(os.cpu_count())  # NumPy releases the GIL in the work that matters
 
 
 class RenderError(RuntimeError):
@@ -86,8 +88,7 @@ def decimate(taps: np.ndarray, y: np.ndarray, factor: int) -> np.ndarray:
         stop = y.size if m1 == n_out else (m1 - 1) * factor + 1
         return upfirdn(taps, y[start:stop], down=factor)[m0 - start // factor : m1 - start // factor]
 
-    with ThreadPoolExecutor(workers) as pool:
-        return np.concatenate(list(pool.map(chunk, edges[:-1], edges[1:])))
+    return np.concatenate(list(POOL.map(chunk, edges[:-1], edges[1:])))
 
 
 def synthesize(p: Patch) -> np.ndarray:
@@ -97,9 +98,12 @@ def synthesize(p: Patch) -> np.ndarray:
     count = sample_count(v.t_src, rate)
     table = noise.table(v.seed, *v.band, rate) if v.uses_noise else None
     y = np.empty(count)
-    for n0 in range(0, count, BLOCK):
+
+    def block(n0: int) -> None:
         n1 = min(n0 + BLOCK, count)
         y[n0:n1] = saturate(v, sources(v, rate, n0, n1, table))
+
+    list(POOL.map(block, range(0, count, BLOCK)))
     return decimate(decimator(base), y, factor)
 
 
