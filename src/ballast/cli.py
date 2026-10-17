@@ -129,11 +129,11 @@ def cmd_extract(a) -> None:
     _emit(json.loads(found[wav.PRIVATE])["patch"], a.out)
 
 
-def _bpm(text: str) -> float:
-    bpm = float(text)
-    if not (math.isfinite(bpm) and bpm > 0):
+def bpm(text: str) -> float:
+    value = float(text)
+    if not (math.isfinite(value) and value > 0):
         raise argparse.ArgumentTypeError("must be a positive number")
-    return bpm
+    return value
 
 
 def main(argv=None) -> int:
@@ -182,7 +182,7 @@ def main(argv=None) -> int:
     p = sub.add_parser("audition", help="play a patch in a loop")
     p.add_argument("patch")
     p.add_argument("--watch", action="store_true", help="re-render whenever the file changes")
-    p.add_argument("--bpm", type=_bpm, help="hit on the beat instead of after each kick")
+    p.add_argument("--bpm", type=bpm, help="hit on the beat instead of after each kick")
     p.add_argument(
         "--with",
         dest="bed",

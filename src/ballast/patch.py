@@ -68,18 +68,23 @@ def _number(path, v, problems, lo=None, hi=None, *, below=False, silence=False):
     return x
 
 
-def _f(x) -> str:
-    return repr(float(x))
+def _toml(v) -> str:
+    """A scalar or a pair in TOML, floats by repr so that they read back exactly."""
+    if isinstance(v, str):
+        return f'"{v}"'
+    if isinstance(v, tuple):
+        return f"[{', '.join(map(repr, v))}]"
+    return repr(v)
 
 
 # Field declarations. Each carries `parse(path, raw, problems, section)`, which
 # appends any problems and returns the normalized value or None; `section` holds
-# the fields of the same section parsed before it. `toml` writes a scalar, and
-# `key` names the value of each knot in a curve.
+# the fields of the same section parsed before it. `key` names the value of each
+# knot in a curve.
 
 
-def _rule(parse, toml=None, note="", key=None):
-    return field(metadata={"parse": parse, "toml": toml, "note": note, "key": key})
+def _rule(parse, note="", key=None):
+    return field(metadata={"parse": parse, "note": note, "key": key})
 
 
 def number(lo, hi, note="", *, below=False, silence=False):
@@ -88,30 +93,19 @@ def number(lo, hi, note="", *, below=False, silence=False):
     def parse(path, v, problems, section):
         return _number(path, v, problems, lo, hi(section) if callable(hi) else hi, below=below, silence=silence)
 
-    return _rule(parse, _f, note)
-
-
-def integer(allowed, note=""):
-    def parse(path, v, problems, section):
-        if isinstance(v, bool) or not isinstance(v, int):
-            problems.append(f"{path}: expected an integer, found {_kind(v)}")
-            return None
-        if v not in allowed:
-            problems.append(f"{path}: {v} is not one of {', '.join(map(str, allowed))}")
-            return None
-        return v
-
-    return _rule(parse, str, note)
+    return _rule(parse, note)
 
 
 def choice(allowed, note=""):
+    """One of `allowed`, and of its type: neither true nor 48000.0 passes for an integer."""
+
     def parse(path, v, problems, section):
-        if isinstance(v, str) and v in allowed:
+        if type(v) is type(allowed[0]) and v in allowed:
             return v
         problems.append(f"{path}: expected one of {', '.join(map(repr, allowed))}, found {v!r}")
         return None
 
-    return _rule(parse, lambda v: f'"{v}"', note)
+    return _rule(parse, note)
 
 
 def band(lo, hi, note=""):
@@ -128,7 +122,7 @@ def band(lo, hi, note=""):
             problems.append(f"{path}: the low edge must be below the high edge")
         return edges
 
-    return _rule(parse, lambda v: f"[{_f(v[0])}, {_f(v[1])}]", note)
+    return _rule(parse, note)
 
 
 def knots(key, count, max_ms, check, note=""):
@@ -164,7 +158,7 @@ def knots(key, count, max_ms, check, note=""):
         check(path, pairs, problems, section)
         return pairs
 
-    return _rule(parse, note=note, key=key)
+    return _rule(parse, note, key)
 
 
 def _pitch(path, pairs, problems, section):
@@ -222,10 +216,10 @@ class Drive:
 
 @dataclass(frozen=True)
 class Output:
-    sample_rate: int = integer(SAMPLE_RATES)
+    sample_rate: int = choice(SAMPLE_RATES)
     mode: str = choice(("gain", "peak"), '"gain" | "peak"')
     db: float = number(-60.0, lambda o: 0.0 if o["mode"] == "peak" else 24.0, "gain in dB, or peak target in dBFS")
-    polarity: int = integer((1, -1))
+    polarity: int = choice((1, -1))
 
 
 @dataclass(frozen=True)
@@ -321,12 +315,12 @@ def dumps(p: Patch) -> str:
         for f in fields(cls):
             m, v = f.metadata, getattr(section, f.name)
             if m["key"] is None:
-                rows.append((f.name, m["toml"](v), m["note"]))
+                rows.append((f.name, _toml(v), m["note"]))
                 continue
-            ms = [_f(t) + "," for t, _ in v]
+            ms = [f"{t!r}," for t, _ in v]
             width = max(map(len, ms))
             curves += [_note(f"{f.name} = [", m["note"])]
-            curves += [f"  {{ ms = {t.ljust(width)} {m['key']} = {_f(x)} }}," for t, (_, x) in zip(ms, v)]
+            curves += [f"  {{ ms = {t.ljust(width)} {m['key']} = {x!r} }}," for t, (_, x) in zip(ms, v)]
             curves += ["]"]
         width = max(len(key) for key, _, _ in rows)
         lines += ["", f"[{name}]", *(_note(f"{key.ljust(width)} = {text}", note) for key, text, note in rows), *curves]
@@ -366,7 +360,6 @@ def stretch(p: Patch, curve: str, factor: float, anchor_ms: float | None = None)
 # Tuning vocabulary shared by `ballast init`, the render report and the WAV root note.
 
 _NOTES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
-_LETTERS = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 
 
 def midi_pitch(hz: float) -> float:
@@ -386,7 +379,7 @@ def parse_tune(text: str) -> float:
     """A note name such as F1, C#2 or Db2 (Hz rounded to 3 decimals), or a frequency in Hz."""
     m = re.fullmatch(r"([A-Ga-g])([#b]?)(-?\d+)", text.strip())
     if m:
-        midi = _LETTERS[m.group(1).upper()] + {"#": 1, "b": -1, "": 0}[m.group(2)] + 12 * (int(m.group(3)) + 1)
+        midi = _NOTES.index(m[1].upper()) + {"#": 1, "b": -1, "": 0}[m[2]] + 12 * (int(m[3]) + 1)
         return round(440.0 * 2.0 ** ((midi - 69) / 12), 3)
     try:
         return float(text)
