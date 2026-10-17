@@ -6,10 +6,10 @@ overlapping tails sum as in a DAW. Hits repeat every rendered length plus
 such as the track's bass line, can loop under them; it restarts on the tempo
 grid, so it never drifts from the hits.
 
-When watching, each change to the file gets an increasing generation and is
-rendered in the background. A finished render is used only if its generation
-is still the newest, so stale results are dropped; an invalid edit, or a
-render over full scale, leaves the last valid buffer playing.
+When watching, the file is polled every 0.1 s and each new version is
+numbered and rendered. A render is used only if the file has not changed
+again meanwhile; an invalid edit, or a render over full scale, leaves the
+last valid buffer playing.
 
 Nothing is ever resampled: the device opens at the patch's sample rate or
 not at all. On Windows that takes WASAPI, since MME and DirectSound resample
@@ -20,11 +20,11 @@ from __future__ import annotations
 
 import os
 import sys
-import threading
 import time
 import warnings
 
 import numpy as np
+from scipy.io import wavfile
 
 from .patch import Patch, PatchError, loads, read_text
 from .render import db, render
@@ -37,23 +37,24 @@ class AuditionError(Exception):
     pass
 
 
+def beat(n: int, rate: int, bpm: float) -> int:
+    """The sample where beat n starts. Hits and bed loops both start on it, so they never drift apart."""
+    return round(n * rate * 60 / bpm)
+
+
 class Bed:
-    """A loop restarted every `bars` bars on the tempo grid.
+    """A loop restarted every `beats` beats, playing as much of itself as fits before the next start."""
 
-    Loop k starts at round(k · bars · 4 · 60 / bpm · rate), the same rounding
-    as the hits, and plays as much of the bed as fits before the next start.
-    """
-
-    def __init__(self, frames: np.ndarray, rate: int, bpm: float, bars: int):
-        self.frames, self.rate, self.bpm, self.bars = frames, rate, bpm, bars
+    def __init__(self, frames: np.ndarray, rate: int, bpm: float, beats: int):
+        self.frames, self.rate, self.bpm, self.beats = frames, rate, bpm, beats
 
     def start(self, k: int) -> int:
-        return round(k * self.bars * 4 * self.rate * 60 / self.bpm)
+        return beat(k * self.beats, self.rate, self.bpm)
 
     def add(self, out: np.ndarray, clock: int) -> None:
         """Add the bed to `out`, the block that starts at sample `clock`."""
         end = clock + len(out)
-        k = max(0, int(clock // (self.bars * 4 * self.rate * 60 / self.bpm)) - 1)
+        k = max(0, int(clock // (self.beats * self.rate * 60 / self.bpm)) - 1)
         while self.start(k) < end:
             s = self.start(k)
             a, b = max(clock, s), min(end, self.start(k + 1), s + len(self.frames))
@@ -64,8 +65,6 @@ class Bed:
 
 def load_bed(path, rate: int, bpm: float) -> Bed:
     """A mono or stereo WAV at the patch's rate, lasting a whole number of bars at `bpm`."""
-    from scipy.io import wavfile
-
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", wavfile.WavFileWarning)  # chunks it does not know
@@ -91,52 +90,39 @@ def load_bed(path, rate: int, bpm: float) -> Bed:
         )
     layout = "stereo" if frames.shape[1] == 2 else "mono"
     print(f"{'bed':<9}{path}: {bars} bar{'s' if bars > 1 else ''} at {bpm:g} bpm, {layout}")
-    return Bed(frames.astype(np.float32), rate, bpm, bars)
+    return Bed(frames.astype(np.float32), rate, bpm, 4 * bars)
 
 
 class Hits:
-    """The output: the hits, and the bed under them, mixed block by block. `offer` may be called from any thread."""
+    """The output: the hits, from sample 0 on, and the bed under them, mixed block by block."""
 
-    def __init__(self, rate: int, bpm: float | None = None, bed: Bed | None = None):
+    def __init__(self, buffer: np.ndarray, rate: int, bpm: float | None = None, bed: Bed | None = None):
+        self.buffer = buffer  # what the next hit plays; the main thread replaces it while the stream runs
         self.rate, self.bpm, self.bed = rate, bpm, bed
         self.channels = 1 if bed is None else bed.frames.shape[1]
-        self._offer: tuple[int, np.ndarray] | None = None
-        self.generation, self.buffer = -1, None  # what new hits play
         self.voices: list[tuple[int, np.ndarray]] = []  # (start sample, buffer) of the hits still sounding
         self.clock = 0  # the next output sample
-        self.next_hit: int | None = None
-        self.origin, self.count = 0, 0
-
-    def offer(self, generation: int, buffer: np.ndarray) -> None:
-        """Queue a buffer for the next hit; an older generation never replaces a newer one."""
-        offered = self._offer
-        if offered is None or generation > offered[0]:
-            self._offer = (generation, buffer)
+        self.next_hit = self.count = 0
 
     def wait(self) -> float:
         """Seconds until the next hit."""
-        return 0.0 if self.next_hit is None else max(0, self.next_hit - self.clock) / self.rate
+        return max(0, self.next_hit - self.clock) / self.rate
 
     def fill(self, frames: int) -> np.ndarray:
         """The next `frames` samples, as frames × channels."""
         end = self.clock + frames
-        if self.next_hit is None and self._offer is not None:
-            self.next_hit = self.origin = self.clock
-        while self.next_hit is not None and self.next_hit < end:
-            offered = self._offer
-            if offered[0] > self.generation:
-                self.generation, self.buffer = offered
-            self.voices.append((self.next_hit, self.buffer))
+        while self.next_hit < end:
+            buffer = self.buffer
+            self.voices.append((self.next_hit, buffer))
             self.count += 1
             if self.bpm:
-                self.next_hit = self.origin + round(self.count * self.rate * 60 / self.bpm)
+                self.next_hit = beat(self.count, self.rate, self.bpm)
             else:
-                self.next_hit += self.buffer.size + round(GAP_S * self.rate)
+                self.next_hit += buffer.size + round(GAP_S * self.rate)
         out = np.zeros((frames, self.channels), dtype=np.float32)
         for start, buf in self.voices:
             a, b = max(self.clock, start), min(end, start + buf.size)
-            if a < b:
-                out[a - self.clock : b - self.clock] += buf[a - start : b - start, None]
+            out[a - self.clock : b - self.clock] += buf[a - start : b - start, None]
         self.voices = [(start, buf) for start, buf in self.voices if start + buf.size > end]
         if self.bed is not None:
             self.bed.add(out, self.clock)
@@ -145,51 +131,26 @@ class Hits:
 
 
 class Watcher:
-    """Renders the newest version of a file in the background, and hands each result to `done`."""
+    """A file's text, read again whenever its size or modification time changes."""
 
-    def __init__(self, path, text: str, work, done):
-        self.path, self.work, self.done = path, work, done
-        self.generation = 0
-        self._stamp, self._text = None, text  # the version already rendered
-        self._pending: tuple[int, str] | None = None
-        self._cv = threading.Condition()
-        threading.Thread(target=self._run, daemon=True).start()
+    def __init__(self, path, text: str):
+        self.path, self.text, self.stamp = path, text, None
 
-    def poll(self) -> None:
-        """Start a new generation if the file's content changed."""
+    def poll(self) -> str | None:
+        """The file's new text, or None while its content stays the same."""
         try:
             st = os.stat(self.path)
             stamp = (st.st_mtime_ns, st.st_size)
-            if stamp == self._stamp:
-                return
+            if stamp == self.stamp:
+                return None
             text = read_text(self.path)
         except (OSError, UnicodeDecodeError):  # unreadable mid-save: the next poll retries
-            return
-        self._stamp = stamp
-        if text == self._text:
-            return
-        self._text = text
-        with self._cv:
-            self.generation += 1
-            self._pending = (self.generation, text)  # an older request not yet started is superseded
-            self._cv.notify()
-
-    def _run(self) -> None:
-        while True:
-            with self._cv:
-                while self._pending is None:
-                    self._cv.wait()
-                generation, text = self._pending
-                self._pending = None
-            start = time.perf_counter()
-            try:
-                result = self.work(text)
-            except Exception as e:  # handed to `done`; the last valid buffer keeps playing
-                result = e
-            elapsed = time.perf_counter() - start
-            with self._cv:
-                newest = generation == self.generation
-            self.done(generation, result, elapsed, newest)
+            return None
+        self.stamp = stamp
+        if text == self.text:
+            return None
+        self.text = text
+        return text
 
 
 def audition(path, text: str, p: Patch, *, watch: bool = False, bpm: float | None = None, bed=None) -> None:
@@ -199,44 +160,50 @@ def audition(path, text: str, p: Patch, *, watch: bool = False, bpm: float | Non
     if report.over:
         raise AuditionError(f"over full scale by {report.over_db:.2f} dB: lower output.db to audition it")
     rate = report.sample_rate
-    hits = Hits(rate, bpm, load_bed(bed, rate, bpm) if bed else None)
+    hits = Hits(audio, rate, bpm, load_bed(bed, rate, bpm) if bed else None)
 
-    def play(generation: int, audio: np.ndarray) -> None:
-        hits.offer(generation, audio)
+    def play(audio: np.ndarray) -> None:
+        hits.buffer = audio
         if hits.bed is not None:
             # One loop, plus a kick's length, holds every overlap of the steady state.
-            probe = Hits(rate, bpm, hits.bed)
-            probe.offer(0, audio)
-            peak = float(np.max(np.abs(probe.fill(hits.bed.start(1) + audio.size))))
+            peak = float(np.max(np.abs(Hits(audio, rate, bpm, hits.bed).fill(hits.bed.start(1) + audio.size))))
             if peak > 1.0:
                 print(f"warning: the hits over the bed peak at {db(peak):+.1f} dBFS, which the device will clip")
 
-    def done(generation: int, result, elapsed: float, newest: bool) -> None:
-        def say(message):
-            print(f"[{generation}] {message}")
-
-        audio, report = result if isinstance(result, tuple) else (None, None)
-        if not newest:
-            say("dropped: a newer edit is rendering")
-        elif isinstance(result, PatchError):
-            say("invalid patch, still playing the last valid one:\n" + "\n".join(f"  {m}" for m in result.problems))
-        elif isinstance(result, Exception):
-            say(f"render failed, still playing the last valid one: {result}")
-        elif report.over:
-            say(f"over full scale by {report.over_db:.2f} dB; still playing the last valid one")
-        elif report.sample_rate != rate:
-            say(f"now at {report.sample_rate} Hz; restart audition to hear it. Still playing the last valid one")
-        else:
-            say(f"rendered in {1000 * elapsed:.0f} ms; plays at the next hit, in {1000 * hits.wait():.0f} ms\n{report}")
-            play(generation, audio)
-
-    play(0, audio)
-    watcher = Watcher(path, text, lambda t: render(loads(t)), done) if watch else None
+    play(audio)
+    watcher = Watcher(path, text)
+    generation = 0
     with _stream(rate, hits.channels, hits.fill):
         while True:
             time.sleep(0.1)
-            if watcher is not None:
-                watcher.poll()
+            edit = watcher.poll() if watch else None
+            while edit is not None:  # render edits until the file holds still
+                generation += 1
+                message, audio = _rerender(edit, rate, hits)
+                edit = watcher.poll()
+                if edit is not None:
+                    message, audio = "dropped: a newer edit is rendering", None
+                print(f"[{generation}] {message}")
+                if audio is not None:
+                    play(audio)
+
+
+def _rerender(text: str, rate: int, hits: Hits) -> tuple[str, np.ndarray | None]:
+    """Render an edit: the message to show, and the buffer to play if it can replace the last one."""
+    start = time.perf_counter()
+    try:
+        audio, report = render(loads(text))
+    except PatchError as e:
+        return "invalid patch, still playing the last valid one:\n" + "\n".join(f"  {m}" for m in e.problems), None
+    except Exception as e:  # whatever goes wrong, the last valid buffer keeps playing
+        return f"render failed, still playing the last valid one: {e}", None
+    elapsed = time.perf_counter() - start
+    if report.over:
+        return f"over full scale by {report.over_db:.2f} dB; still playing the last valid one", None
+    if report.sample_rate != rate:
+        return f"now at {report.sample_rate} Hz; restart audition to hear it. Still playing the last valid one", None
+    message = f"rendered in {1000 * elapsed:.0f} ms; plays at the next hit, in {1000 * hits.wait():.0f} ms\n{report}"
+    return message, audio
 
 
 def _stream(rate: int, channels: int, fill):
