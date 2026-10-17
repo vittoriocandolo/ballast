@@ -1,20 +1,28 @@
 [build-system]
-requires = ["setuptools>=64"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
 
 [project]
 name = "ballast"
 version = "0.1.0"
-description = "A one-voice kick drum synthesizer, rendered offline to WAV"
+description = "A kick drum synthesizer that renders a text patch to an alias-free, sampler-ready WAV"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [{ name = "Vittorio Candolo" }]
-keywords = ["audio", "synthesizer", "kick drum", "dsp", "wav"]
+keywords = ["audio", "synthesizer", "kick drum", "drum synthesis", "dsp", "wav", "sampler"]
 classifiers = [
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
-    "Programming Language :: Python :: 3",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Multimedia :: Sound/Audio :: Sound Synthesis",
-    "Private :: Do Not Upload",
 ]
 dependencies = ["numpy>=1.24", "scipy>=1.14"]
 
@@ -26,9 +34,6 @@ ballast = "ballast.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
-
-[tool.setuptools.package-data]
-ballast = ["data/*.f64", "data/presets/*.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

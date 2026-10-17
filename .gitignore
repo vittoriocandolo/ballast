@@ -5,3 +5,4 @@ build/
 dist/
 *.wav
 !docs/audio/*.wav
+.venv/
