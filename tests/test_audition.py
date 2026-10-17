@@ -39,7 +39,7 @@ def test_a_new_buffer_plays_from_the_next_hit():
 
 
 def test_block_sizes_never_change_the_mix():
-    bed = Bed(np.random.default_rng(0).standard_normal((90_495, 2)).astype(np.float32), RATE, 127.3, 4)
+    bed = Bed(np.random.default_rng(0).standard_normal((90_495, 2)).astype(np.float32), 4)
     kick = np.random.default_rng(1).standard_normal(30_000).astype(np.float32)
     sizes = [1, 511, 4096, 30_000] * 10
     hits = Hits(kick, RATE, 127.3, bed)
@@ -49,15 +49,14 @@ def test_block_sizes_never_change_the_mix():
 
 def test_the_bed_restarts_on_the_same_beats_as_the_hits():
     bpm, beats = 127.3, 4
-    frames = np.arange(1, 100_001, dtype=np.float32)[:, None]  # a ramp, so each position is recognizable
-    bed = Bed(frames, RATE, bpm, beats)
-    out = np.zeros((300_000, 1), np.float32)
-    bed.add(out, 0)
+    ramp = np.arange(1, 100_001, dtype=np.float32)[:, None]  # longer than a loop, and each position recognizable
+    hits = Hits(np.zeros(1, np.float32), RATE, bpm, Bed(ramp, beats))
+    out = hits.fill(300_000)[:, 0]
     for k in range(3):
-        start = bed.start(k)
+        start = hits.loop_start(k)
         assert start == beat(k * beats, RATE, bpm)
-        assert out[start, 0] == 1.0  # the loop starts over, cut off at the next start
-    assert out[bed.start(1) - 1, 0] == bed.start(1) - bed.start(0)
+        assert out[start] == 1.0  # the loop starts over…
+    assert out[hits.loop_start(1) - 1] == hits.loop_start(1)  # …cut off where the next one starts
 
 
 def write_bed(path, frames, rate=RATE):
@@ -109,31 +108,42 @@ def test_the_watcher_reports_new_text_only(tmp_path):
 
 
 class FakeOutputStream:
-    def __init__(self, **settings):
-        self.settings = settings
+    """Opens at 48 kHz, or at any rate with extra settings, and pulls one block when it starts."""
+
+    opened: list[dict] = []
+
+    def __init__(self, samplerate, channels, dtype, latency, callback, **settings):
+        FakeOutputStream.opened.append({"samplerate": samplerate, **settings})
+        if samplerate != 48000 and "extra_settings" not in settings:
+            raise PortAudioError("Invalid sample rate")
+        self.device, self.channels, self.callback = 0, channels, callback
 
     def __enter__(self):
+        self.block = np.zeros((256, self.channels), np.float32)
+        self.callback(self.block, 256, None, None)
+        FakeOutputStream.played = self.block
         return self
 
     def __exit__(self, *exc):
         return False
 
 
+class PortAudioError(Exception):
+    pass
+
+
 @pytest.fixture
 def device(monkeypatch):
-    """A sound device that accepts 48 kHz only, and plays nothing."""
+    """A sound device on Linux, through a stand-in for sounddevice."""
     sd = types.SimpleNamespace(
-        PortAudioError=type("PortAudioError", (Exception,), {}),
-        query_hostapis=lambda: [],
+        PortAudioError=PortAudioError,
+        query_hostapis=lambda: [{"name": "Windows WASAPI", "default_output_device": 3}],
         query_devices=lambda device=None, kind=None: {"name": "Test Device"},
         OutputStream=FakeOutputStream,
+        WasapiSettings=lambda exclusive: ("wasapi", exclusive),
+        CoreAudioSettings=lambda **flags: ("coreaudio", flags),
     )
-
-    def check_output_settings(samplerate, **settings):
-        if samplerate != 48000:
-            raise sd.PortAudioError("Invalid sample rate")
-
-    sd.check_output_settings = check_output_settings
+    FakeOutputStream.opened.clear()
     monkeypatch.setitem(sys.modules, "sounddevice", sd)
     monkeypatch.setattr(sys, "platform", "linux")
     return sd
@@ -193,3 +203,68 @@ def test_the_watch_loop_rerenders_every_edit(tmp_path, tight_text, device, monke
 def test_audition_refuses_a_rate_the_device_cannot_play(tight, device):
     with pytest.raises(AuditionError, match="cannot play 96000 Hz; audition never resamples"):
         audition.audition("kick.toml", "", patch.edit(tight, "output.sample_rate", 96000))
+
+
+def test_windows_falls_back_to_exclusive_wasapi_for_a_rate_the_mixer_does_not_run_at(device, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "platform", "win32")
+    audition._stream(96000, 1, lambda frames: None)
+    shared, exclusive = FakeOutputStream.opened  # shared mode refused the rate
+    assert shared["device"] == 3 and "extra_settings" not in shared
+    assert exclusive["device"] == 3 and exclusive["extra_settings"] == ("wasapi", True)
+    assert capsys.readouterr().out == "device   Test Device, in exclusive mode\n"
+
+
+def test_macos_asks_core_audio_to_switch_the_device_rate_or_fail(device, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    audition._stream(96000, 1, lambda frames: None)
+    flags = FakeOutputStream.opened[-1]["extra_settings"][1]
+    assert flags == {"change_device_parameters": True, "fail_if_conversion_required": True}
+
+
+def test_audition_without_sounddevice_says_what_it_needs(monkeypatch):
+    monkeypatch.setitem(sys.modules, "sounddevice", None)  # import fails
+    with pytest.raises(AuditionError, match="audition needs the sounddevice package and PortAudio"):
+        audition._stream(48000, 1, lambda frames: None)
+
+
+def test_a_failed_render_keeps_the_last_buffer_playing(tight_text, monkeypatch):
+    def broken(p, *args):
+        raise RuntimeError("out of memory")
+
+    monkeypatch.setattr(audition, "render", broken)
+    hits = Hits(np.zeros(1, np.float32), RATE)
+    assert audition._rerender(tight_text, RATE, hits) == (
+        "render failed, still playing the last valid one: out of memory",
+        None,
+    )
+
+
+def test_load_bed_refuses_what_is_not_a_wav(tmp_path):
+    (tmp_path / "bed.wav").write_bytes(b"not a wave file")
+    with pytest.raises(AuditionError, match="bed.wav: "):
+        load_bed(tmp_path / "bed.wav", RATE, 128.0)
+
+
+def test_windows_without_wasapi_uses_the_default_device(device, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    device.query_hostapis = lambda: [{"name": "MME", "default_output_device": 0}]
+    audition._stream(48000, 1, lambda frames: None)
+    assert FakeOutputStream.opened == [{"samplerate": 48000}]
+
+
+@pytest.mark.parametrize(("level", "warned"), [(0.9, True), (0.1, False)])
+def test_a_bed_that_would_clip_under_the_hits_gets_a_warning(
+    tmp_path, tight, device, monkeypatch, capsys, level, warned
+):
+    bed = write_bed(tmp_path / "bed.wav", np.full((round(4 * RATE * 60 / 128.0), 2), level, np.float32))
+
+    def stop(_):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(audition.time, "sleep", stop)
+    with pytest.raises(KeyboardInterrupt):
+        audition.audition("kick.toml", "", tight, bpm=128.0, bed=bed)
+    out = capsys.readouterr().out
+    assert ("warning: the hits over the bed peak at +3.0 dBFS, which the device will clip" in out) == warned
+    played = FakeOutputStream.played
+    assert played.shape == (256, 2) and played[0, 0] == np.float32(level)  # the bed, from sample 0

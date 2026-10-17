@@ -1,19 +1,22 @@
 """Audition: play the exact render buffer, and re-render on every edit.
 
-Hits are unchoked one-shots: each plays its buffer to the end, so on the beat
+Every sound is an unchoked one-shot that plays to its end, so on the beat
 overlapping tails sum as in a DAW. Hits repeat every rendered length plus
 0.5 s, or on the beat, and a new buffer takes over at the next hit. A bed,
-such as the track's bass line, can loop under them; it restarts on the tempo
-grid, so it never drifts from the hits.
+such as the track's bass line, can loop under them: each loop starts on the
+tempo grid and plays until the next one starts, so it never drifts from the
+hits.
 
 When watching, the file is polled every 0.1 s and each new version is
 numbered and rendered. A render is used only if the file has not changed
 again meanwhile; an invalid edit, or a render over full scale, leaves the
 last valid buffer playing.
 
-Nothing is ever resampled: the device opens at the patch's sample rate or
-not at all. On Windows that takes WASAPI, since MME and DirectSound resample
-silently.
+Ballast never resamples: the stream opens at the patch's sample rate or not
+at all. On Windows that takes WASAPI, since MME and DirectSound resample
+silently, and on macOS Core Audio is asked to switch the device's rate or
+fail. On Linux a sound server such as PipeWire may still resample to its own
+rate.
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ import os
 import sys
 import time
 import warnings
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.io import wavfile
@@ -38,29 +42,16 @@ class AuditionError(Exception):
 
 
 def beat(n: int, rate: int, bpm: float) -> int:
-    """The sample where beat n starts. Hits and bed loops both start on it, so they never drift apart."""
+    """The sample where beat n starts. Hits and bed loops all start on beats, so they never drift apart."""
     return round(n * rate * 60 / bpm)
 
 
+@dataclass(frozen=True)
 class Bed:
-    """A loop restarted every `beats` beats, playing as much of itself as fits before the next start."""
+    """A loop of whole bars, as frames × channels."""
 
-    def __init__(self, frames: np.ndarray, rate: int, bpm: float, beats: int):
-        self.frames, self.rate, self.bpm, self.beats = frames, rate, bpm, beats
-
-    def start(self, k: int) -> int:
-        return beat(k * self.beats, self.rate, self.bpm)
-
-    def add(self, out: np.ndarray, clock: int) -> None:
-        """Add the bed to `out`, the block that starts at sample `clock`."""
-        end = clock + len(out)
-        k = max(0, int(clock // (self.beats * self.rate * 60 / self.bpm)) - 1)
-        while self.start(k) < end:
-            s = self.start(k)
-            a, b = max(clock, s), min(end, self.start(k + 1), s + len(self.frames))
-            if a < b:
-                out[a - clock : b - clock] += self.frames[a - s : b - s]
-            k += 1
+    frames: np.ndarray
+    beats: int
 
 
 def load_bed(path, rate: int, bpm: float) -> Bed:
@@ -90,19 +81,22 @@ def load_bed(path, rate: int, bpm: float) -> Bed:
         )
     layout = "stereo" if frames.shape[1] == 2 else "mono"
     print(f"{'bed':<9}{path}: {bars} bar{'s' if bars > 1 else ''} at {bpm:g} bpm, {layout}")
-    return Bed(frames.astype(np.float32), rate, bpm, 4 * bars)
+    return Bed(frames.astype(np.float32), 4 * bars)
 
 
 class Hits:
-    """The output: the hits, from sample 0 on, and the bed under them, mixed block by block."""
+    """The output: the hits from sample 0 on, and the bed looping under them, mixed block by block."""
 
     def __init__(self, buffer: np.ndarray, rate: int, bpm: float | None = None, bed: Bed | None = None):
         self.buffer = buffer  # what the next hit plays; the main thread replaces it while the stream runs
         self.rate, self.bpm, self.bed = rate, bpm, bed
         self.channels = 1 if bed is None else bed.frames.shape[1]
-        self.voices: list[tuple[int, np.ndarray]] = []  # (start sample, buffer) of the hits still sounding
+        self.sounding: list[tuple[int, np.ndarray]] = []  # (start sample, frames × channels) still playing
         self.clock = 0  # the next output sample
-        self.next_hit = self.count = 0
+        self.next_hit = self.hits = self.loops = 0
+
+    def loop_start(self, k: int) -> int:
+        return beat(k * self.bed.beats, self.rate, self.bpm)
 
     def wait(self) -> float:
         """Seconds until the next hit."""
@@ -113,19 +107,21 @@ class Hits:
         end = self.clock + frames
         while self.next_hit < end:
             buffer = self.buffer
-            self.voices.append((self.next_hit, buffer))
-            self.count += 1
+            self.sounding.append((self.next_hit, buffer[:, None]))
+            self.hits += 1
             if self.bpm:
-                self.next_hit = beat(self.count, self.rate, self.bpm)
+                self.next_hit = beat(self.hits, self.rate, self.bpm)
             else:
                 self.next_hit += buffer.size + round(GAP_S * self.rate)
+        while self.bed is not None and (start := self.loop_start(self.loops)) < end:
+            self.loops += 1
+            self.sounding.append((start, self.bed.frames[: self.loop_start(self.loops) - start]))
+        self.sounding.sort(key=lambda sound: sound[0])  # summed in order of start, so block sizes never change the mix
         out = np.zeros((frames, self.channels), dtype=np.float32)
-        for start, buf in self.voices:
-            a, b = max(self.clock, start), min(end, start + buf.size)
-            out[a - self.clock : b - self.clock] += buf[a - start : b - start, None]
-        self.voices = [(start, buf) for start, buf in self.voices if start + buf.size > end]
-        if self.bed is not None:
-            self.bed.add(out, self.clock)
+        for start, sound in self.sounding:
+            a, b = max(self.clock, start), min(end, start + len(sound))
+            out[a - self.clock : b - self.clock] += sound[a - start : b - start]
+        self.sounding = [(start, sound) for start, sound in self.sounding if start + len(sound) > end]
         self.clock = end
         return out
 
@@ -166,7 +162,7 @@ def audition(path, text: str, p: Patch, *, watch: bool = False, bpm: float | Non
         hits.buffer = audio
         if hits.bed is not None:
             # One loop, plus a kick's length, holds every overlap of the steady state.
-            peak = float(np.max(np.abs(Hits(audio, rate, bpm, hits.bed).fill(hits.bed.start(1) + audio.size))))
+            peak = float(np.max(np.abs(Hits(audio, rate, bpm, hits.bed).fill(hits.loop_start(1) + audio.size))))
             if peak > 1.0:
                 print(f"warning: the hits over the bed peak at {db(peak):+.1f} dBFS, which the device will clip")
 
@@ -212,26 +208,29 @@ def _stream(rate: int, channels: int, fill):
         import sounddevice as sd
     except (ImportError, OSError) as e:
         raise AuditionError(f"audition needs the sounddevice package and PortAudio ({e})") from None
-    choices = [{}]
+    choices = [({}, "")]  # stream settings, and what to say about them
     if sys.platform == "win32":
         # WASAPI refuses a rate it cannot play: shared mode plays the mixer's rate, exclusive mode
         # any rate the device itself supports, while it silences other applications.
         wasapi = [api for api in sd.query_hostapis() if api["name"] == "Windows WASAPI"]
         if wasapi:
-            device = wasapi[0]["default_output_device"]
-            choices = [{"device": device}, {"device": device, "extra_settings": sd.WasapiSettings(exclusive=True)}]
-    for choice in choices:
+            shared = {"device": wasapi[0]["default_output_device"]}
+            exclusive = {**shared, "extra_settings": sd.WasapiSettings(exclusive=True)}
+            choices = [(shared, ""), (exclusive, ", in exclusive mode")]
+    elif sys.platform == "darwin":
+        switch = sd.CoreAudioSettings(change_device_parameters=True, fail_if_conversion_required=True)
+        choices = [({"extra_settings": switch}, "")]
+
+    def callback(outdata, frames, _time, _status):
+        outdata[:] = fill(frames)
+
+    for settings, note in choices:
         try:
-            sd.check_output_settings(samplerate=rate, channels=channels, dtype="float32", **choice)
+            stream = sd.OutputStream(
+                samplerate=rate, channels=channels, dtype="float32", latency="high", callback=callback, **settings
+            )
         except (sd.PortAudioError, ValueError):
             continue
-        device = sd.query_devices(choice["device"]) if "device" in choice else sd.query_devices(kind="output")
-        print(f"{'device':<9}{device['name']}" + (", in exclusive mode" if "extra_settings" in choice else ""))
-
-        def callback(outdata, frames, _time, _status):
-            outdata[:] = fill(frames)
-
-        return sd.OutputStream(
-            samplerate=rate, channels=channels, dtype="float32", latency="high", callback=callback, **choice
-        )
+        print(f"{'device':<9}{sd.query_devices(stream.device)['name']}{note}")
+        return stream
     raise AuditionError(f"the output device cannot play {rate} Hz; audition never resamples")
