@@ -1,24 +1,50 @@
 # Ballast
 
-A one-voice kick drum synthesizer, rendered offline to mono WAV. A tonal body
-and a synthesized attack are summed into one saturator, computed at 16 times
-the sample rate, and band-limited once by a frozen minimum-phase decimator.
+![Waveforms of the four presets, tight, driven, round and long, rendered at 48 kHz](docs/figures/presets.svg)
 
-    x(t) = b(t) + a(t),    y(t) = S_α(x(t)),    out[m] = p · g_out · Σ_k h[k] · y((mK − k) / F)
+**A one-voice kick drum synthesizer, rendered offline to WAV.** You write a kick
+as a short, complete text patch. Ballast synthesizes a tonal body and an attack
+at 16 times the sample rate, saturates their sum, and band-limits it once with
+a frozen minimum-phase filter. The same patch gives the same samples, run after
+run, and every WAV carries the patch that made it.
 
-Everything before the decimator is a pure function of time, so a render
-depends only on the patch, the renderer version and the frozen filter.
+To hear the presets and explore the design, open
+[`docs/index.html`](docs/index.html) in a browser. It is a single local page
+and loads nothing from the network.
 
-## Install
+## Highlights
 
-Python 3.11 or later.
+- **Deterministic.** Every sample is a pure function of the patch and its
+  time, and the decimator ships as checksummed data, so the sound cannot drift
+  with library versions.
+- **Alias-free by construction.** The internal rate is 16 times the base rate,
+  and a minimum-phase FIR rejects everything above half the base rate by at
+  least 110 dB (115.7 dB measured), with 0–20 kHz flat to ±0.00002 dB.
+- **The patch travels with the sound.** `ballast extract` returns the exact
+  patch text from any rendered WAV, comments included.
+- **Strict patches.** Every field is required, nothing is clamped, and every
+  problem is reported with its field path.
+- **Live audition.** Plays the exact render buffer, renders again on every
+  save, and loops a bass line under the hits in tempo.
+- **Sampler-ready.** The root key sits in the `smpl` chunk, and 16- and 24-bit
+  PCM use seeded TPDF dither that never clips.
+- **Tested.** The test suite checks every promise in this README in a few
+  seconds.
+
+## Quick start
+
+Python 3.11 or later, with [uv](https://docs.astral.sh/uv/):
 
 ```
-pip install -e .              # NumPy and SciPy
-pip install -e ".[audition]"  # adds sounddevice (needs PortAudio) for `ballast audition`
+uv sync --extra audition                            # NumPy and SciPy, plus sounddevice (needs PortAudio)
+uv run ballast init tight --tune F1 -o kick.toml    # a complete starting patch
+uv run ballast audition kick.toml --watch --bpm 128 # plays it; renders again on every save
+uv run ballast render kick.toml -o kick.wav         # a mono WAV with root note and patch
 ```
 
-## Use
+With pip instead: `pip install -e ".[audition]"`, then run `ballast` directly.
+
+## Commands
 
 ```
 ballast init tight --tune F1 -o kick.toml           # a complete starting patch (writes tune_hz = 43.654)
@@ -34,7 +60,7 @@ Windows, prefer `-o` to shell redirection: PowerShell re-encodes what it
 redirects. Such files still load, but the characters in their comments may
 not survive.
 
-The four presets are `round`, `tight`, `long` and `driven`.
+The four presets are `tight`, `driven`, `round` and `long`.
 
 For hardware samplers, `ballast render kick.toml -o kick.wav --format pcm24`
 (or `pcm16`) writes integer PCM with triangular dither. The dither is seeded
@@ -67,6 +93,8 @@ A patch is a complete TOML description of one kick. Every field is required
 and the renderer has no defaults, so a future default can never change an
 old patch. The parser rejects anything outside the valid domain, with every
 problem and its field path, and never clamps or repairs.
+
+![The tight preset's pitch, body and attack curves through their knots, and the first 60 ms of its output](docs/figures/anatomy.svg)
 
 ```toml
 schema = 1
@@ -128,6 +156,8 @@ polarity    = 1
 - **Drive.** `drive.db` is the small-signal gain of the tanh saturator; 0 dB
   is exact bypass.
 
+![Spectrogram of the tight preset: the body sweeps from 385 Hz down to 55 Hz while the attack adds a short broadband burst](docs/figures/spectrum.svg)
+
 The valid domain:
 
 | Quantity | Valid range |
@@ -150,15 +180,22 @@ The valid domain:
 ## What a render reports
 
 ```
-tuning   43.654 Hz, F1 +0.0 cents
+tuning   55.000 Hz, A1 +0.0 cents
 length   240.0 ms source, 241.9 ms exported (11611 samples at 48000 Hz)
-peak     -5.76 dBFS sample, -5.73 dBTP true
-render   149 ms
+peak     -5.68 dBFS sample, -5.66 dBTP true
+render   14 ms
 ```
 
 The true peak is a 4× oversampled estimate of the peak between samples.
 
 ## How it renders
+
+![Signal flow: body and attack are summed into the drive at 16 times the base rate, then decimated, scaled and written to WAV](docs/figures/pipeline.svg)
+
+    x(t) = b(t) + a(t),    y(t) = S_α(x(t)),    out[m] = p · g_out · Σ_k h[k] · y((mK − k) / F)
+
+Everything before the decimator is a pure function of time, so a render
+depends only on the patch, the renderer version and the frozen filter.
 
 - **Rates.** The internal rate is 16 times the base rate: 705.6 kHz for the
   44.1 kHz family, 768 kHz for 48 kHz. The 88.2 and 96 kHz exports reuse
@@ -179,14 +216,34 @@ The true peak is a 4× oversampled estimate of the peak between samples.
   renderer version, decimator checksum and dependency versions (and, for
   PCM, the dither's key and seed).
 
-| Module | Responsibility |
+![Magnitude response of both decimators: flat to 20 kHz, at least 110 dB down from half the base rate, with the passband ripple in detail](docs/figures/decimator.svg)
+
+## Development
+
+```
+uv sync --all-extras             # the package, audition, pytest and ruff
+uv run pytest                    # the test suite
+uv run ruff check                # lint
+uv run ruff format --check       # formatting
+uv run python docs/build.py      # rebuild the showcase: runs the tests, renders the sounds, draws the figures
+```
+
+The tests check properties rather than stored hashes, so they hold on any
+platform: rendering in blocks or in parallel never changes a sample, a 96 kHz
+render fills in the 48 kHz one bit for bit, the decimators meet their
+specification, every patch rule reports its exact message and path, and
+`extract` returns the patch byte for byte.
+
+| Path | Responsibility |
 |---|---|
-| `patch.py` | the schema, declared once on the dataclass fields; parsing, canonical TOML, edits, tuning |
-| `curve.py` | monotone cubic Hermite curves with exact integrals |
-| `noise.py` | seeded continuous-time noise, and the PCM dither |
-| `voice.py` | body, attack and saturator as pure functions of time, evaluated in blocks |
-| `render.py` | rates, frozen decimators, parallel decimation, output stage, report, export |
-| `wav.py` | the RIFF writer, and the chunk reader behind `extract` |
-| `audition.py` | hits, bed, watcher and playback |
-| `cli.py` | the commands |
-| `data/` | the two decimators and the four presets |
+| `src/ballast/patch.py` | the schema, declared once on the dataclass fields; parsing, canonical TOML, edits, tuning |
+| `src/ballast/curve.py` | monotone cubic Hermite curves with exact integrals |
+| `src/ballast/noise.py` | seeded continuous-time noise, and the PCM dither |
+| `src/ballast/voice.py` | body, attack and saturator as pure functions of time, evaluated in blocks |
+| `src/ballast/render.py` | rates, frozen decimators, parallel decimation, output stage, report, export |
+| `src/ballast/wav.py` | the RIFF writer, and the chunk reader behind `extract` |
+| `src/ballast/audition.py` | hits, bed, watcher and playback |
+| `src/ballast/cli.py` | the commands |
+| `src/ballast/data/` | the two decimators and the four presets |
+| `tests/` | the test suite, one file per module |
+| `docs/` | the showcase page, its figures and sounds, and `build.py`, which makes them |
