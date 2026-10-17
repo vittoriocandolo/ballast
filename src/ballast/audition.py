@@ -86,7 +86,9 @@ def load_bed(path, rate: int, bpm: float) -> Bed:
     bar = rate * 4 * 60 / bpm
     bars = round(len(frames) / bar)
     if bars < 1 or abs(len(frames) - bars * bar) > BAR_TOLERANCE_S * rate:
-        raise AuditionError(f"{path}: {len(frames) / bar:.3f} bars at {bpm:g} bpm; a bed must be a whole number of bars")
+        raise AuditionError(
+            f"{path}: {len(frames) / bar:.3f} bars at {bpm:g} bpm; a bed must be a whole number of bars"
+        )
     layout = "stereo" if frames.shape[1] == 2 else "mono"
     print(f"{'bed':<9}{path}: {bars} bar{'s' if bars > 1 else ''} at {bpm:g} bpm, {layout}")
     return Bed(frames.astype(np.float32), rate, bpm, bars)
