@@ -1,4 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" class="fig" viewBox="0 0 960 464" role="img" aria-labelledby="presets-title" width="960" height="464"><title id="presets-title">Waveforms of the four presets</title><style>.fig{--paper:#fbfcfd;--panel:#f1f4f7;--ink:#0e1116;--ink-2:#4a5361;--muted:#626c7a;--rule:#dde3ea;--grid:#e9edf2;--accent:#2a78d6;--accent-ink:#1c5cab;--accent-fill:#256abf;--on-accent:#ffffff;--series-2:#eb6834;--show-light:inline;--show-dark:none;}@media (prefers-color-scheme: dark){.fig{--paper:#0f1216;--panel:#171c22;--ink:#e7ecf1;--ink-2:#aab4c0;--muted:#8b96a4;--rule:#29313b;--grid:#1c2229;--accent:#3987e5;--accent-ink:#79b0f0;--accent-fill:#3987e5;--on-accent:#0f1216;--series-2:#d95926;--show-light:none;--show-dark:inline;}}
+<svg xmlns="http://www.w3.org/2000/svg" class="fig" viewBox="0 0 960 464" width="960" height="464" role="img"><title>Waveforms of the presets</title><style>
+.fig{--paper:#fbfcfd;--panel:#f1f4f7;--ink:#0e1116;--ink-2:#4a5361;--muted:#626c7a;--rule:#dde3ea;--grid:#e9edf2;--accent:#2a78d6;--series-2:#eb6834;--show-light:inline;--show-dark:none;}
+@media (prefers-color-scheme: dark){.fig{--paper:#0f1216;--panel:#171c22;--ink:#e7ecf1;--ink-2:#aab4c0;--muted:#8b96a4;--rule:#29313b;--grid:#1c2229;--accent:#3987e5;--series-2:#d95926;--show-light:none;--show-dark:inline;}}
 .fig .bg{fill:var(--paper)}
 .fig .grid{fill:none;stroke:var(--grid);stroke-width:1}
 .fig .axis{fill:none;stroke:var(--rule);stroke-width:1}
