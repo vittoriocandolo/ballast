@@ -169,9 +169,9 @@ The true peak is a 4× oversampled estimate of the peak between samples.
   taps sum to exactly 1. It ships as data with a SHA-256 checksum, so the
   sound cannot drift with SciPy versions.
 - **Evaluation.** The internal signal is computed in blocks of 2¹⁵ samples
-  aligned to the trigger, in parallel on every core, each source only over
-  its own support. No block or thread changes a sample, and a longer render
-  never changes earlier ones.
+  aligned to the trigger, each source only over its own support, and
+  decimated in parallel chunks on every core. No block, chunk or thread
+  changes a sample, and a longer render never changes earlier ones.
 - **Output.** Output gain or peak normalization, then polarity, then one
   conversion to float32, or one quantization to PCM with seeded TPDF dither.
 - **File.** Our own RIFF writer adds a `smpl` chunk, so samplers map the root
@@ -184,8 +184,8 @@ The true peak is a 4× oversampled estimate of the peak between samples.
 | `patch.py` | the schema, declared once on the dataclass fields; parsing, canonical TOML, edits, tuning |
 | `curve.py` | monotone cubic Hermite curves with exact integrals |
 | `noise.py` | seeded continuous-time noise, and the PCM dither |
-| `voice.py` | body, attack and saturator as pure functions of time |
-| `render.py` | rates, frozen decimators, parallel evaluation, output stage, report, export |
+| `voice.py` | body, attack and saturator as pure functions of time, evaluated in blocks |
+| `render.py` | rates, frozen decimators, parallel decimation, output stage, report, export |
 | `wav.py` | the RIFF writer, and the chunk reader behind `extract` |
 | `audition.py` | hits, bed, watcher and playback |
 | `cli.py` | the commands |

@@ -8,10 +8,10 @@ file is exactly the 48 kHz file with the in-between samples filled in.
 Nothing trims, fades, high-passes or removes DC, and the whole filter tail
 is kept.
 
-The internal signal is computed in blocks aligned to the trigger, in
-parallel. Every sample is a pure function of its time, so neither the blocks
-nor the threads change a value, and a longer render never changes earlier
-samples.
+The internal signal is computed in blocks aligned to the trigger and
+decimated in parallel chunks. Every sample is a pure function of its time
+and every output one fixed sum, so neither the blocks nor the chunks change
+a value, and a longer render never changes earlier samples.
 """
 
 from __future__ import annotations
@@ -32,10 +32,10 @@ from scipy.signal import resample_poly, upfirdn
 
 from . import __version__, noise, wav
 from .patch import Output, Patch, describe_tuning
-from .voice import sample_count, saturate, sources, voice
+from .voice import Voice
 
 K = 16
-BLOCK = 2**15
+CHUNK = 2048  # decimator outputs per parallel chunk
 FAMILY = {44100: 44100, 88200: 44100, 48000: 48000, 96000: 48000}
 # One frozen minimum-phase FIR per family, shipped as data so the sound cannot drift with SciPy:
 # flat to 0.001 dB up to 20 kHz, at least 110 dB down from base/2, taps summing to exactly 1.
@@ -44,11 +44,7 @@ DECIMATORS = {
     48000: ("decimator-48000x16.f64", "753e10eadb9b6550d7dfc81847d7a3057b578c8d3bfe07278d0b474d7e29b676"),
 }
 FORMATS = {"float32": None, "pcm24": 24, "pcm16": 16}  # the PCM bit depth of each export format
-POOL = ThreadPoolExecutor(os.cpu_count())  # NumPy releases the GIL in the work that matters
-
-
-class RenderError(RuntimeError):
-    pass
+POOL = ThreadPoolExecutor(os.cpu_count())  # upfirdn releases the GIL
 
 
 def rates(sample_rate: int) -> tuple[int, int, int]:
@@ -63,10 +59,8 @@ def decimator(base: int) -> np.ndarray:
     name, sha256 = DECIMATORS[base]
     raw = resources.files(__package__).joinpath("data", name).read_bytes()
     if hashlib.sha256(raw).hexdigest() != sha256:
-        raise RenderError(f"{name} does not match its checksum")
-    taps = np.frombuffer(raw, dtype="<f8").astype(float)
-    taps.flags.writeable = False
-    return taps
+        raise RuntimeError(f"{name} does not match its checksum")
+    return np.frombuffer(raw, dtype="<f8")  # read-only, like the bytes it views
 
 
 def decimate(taps: np.ndarray, y: np.ndarray, factor: int) -> np.ndarray:
@@ -76,35 +70,22 @@ def decimate(taps: np.ndarray, y: np.ndarray, factor: int) -> np.ndarray:
     given every input its outputs need, starting on the factor's grid, so each
     output is computed by exactly the same operations as in a single call.
     """
-    L = taps.size
-    n_out = (y.size + L - 2) // factor + 1
-    workers = min(os.cpu_count() or 1, max(1, n_out // 4096))
-    if workers == 1:
-        return upfirdn(taps, y, down=factor)
-    edges = [round(i * n_out / workers) for i in range(workers + 1)]
+    n_out = (y.size + taps.size - 2) // factor + 1
 
-    def chunk(m0: int, m1: int) -> np.ndarray:
-        start = max(0, (m0 * factor - (L - 1)) // factor * factor)
-        stop = y.size if m1 == n_out else (m1 - 1) * factor + 1
-        return upfirdn(taps, y[start:stop], down=factor)[m0 - start // factor : m1 - start // factor]
+    def chunk(m0: int) -> np.ndarray:
+        m1 = min(m0 + CHUNK, n_out)
+        start = max(0, m0 * factor - (taps.size - 1)) // factor * factor
+        # Since the filter is longer than the factor, the last chunk's slice reaches the end of y.
+        out = upfirdn(taps, y[start : (m1 - 1) * factor + 1], down=factor)
+        return out[m0 - start // factor : m1 - start // factor]
 
-    return np.concatenate(list(POOL.map(chunk, edges[:-1], edges[1:])))
+    return np.concatenate(list(POOL.map(chunk, range(0, n_out, CHUNK))))
 
 
 def synthesize(p: Patch) -> np.ndarray:
     """The decimated signal at unity gain: everything before the output stage."""
-    v = voice(p)
     base, rate, factor = rates(p.output.sample_rate)
-    count = sample_count(v.t_src, rate)
-    table = noise.table(v.seed, *v.band, rate) if v.uses_noise else None
-    y = np.empty(count)
-
-    def block(n0: int) -> None:
-        n1 = min(n0 + BLOCK, count)
-        y[n0:n1] = saturate(v, sources(v, rate, n0, n1, table))
-
-    list(POOL.map(block, range(0, count, BLOCK)))
-    return decimate(decimator(base), y, factor)
+    return decimate(decimator(base), Voice(p, rate).samples(), factor)
 
 
 def output_stage(out: np.ndarray, o: Output, top: float = 1.0) -> np.ndarray:

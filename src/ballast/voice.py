@@ -10,13 +10,16 @@ changes a sample's value.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 
 import numpy as np
 from scipy.optimize import brentq
 
-from .curve import Curve, amplitude_curve, pitch_curve
+from . import noise
+from .curve import Curve
 from .patch import Patch
+
+# Samples per block. Blocks bound the size of the temporaries; threads would only contend for the GIL.
+BLOCK = 2**15
 
 
 def drive_alpha(db: float) -> float:
@@ -37,57 +40,6 @@ def mix_weights(m: float) -> tuple[float, float]:
     return math.cos(math.pi * m / 2), math.sin(math.pi * m / 2)
 
 
-@dataclass(frozen=True)
-class Voice:
-    """The patch reduced to what synthesis needs; times in seconds."""
-
-    f0: float
-    body_gain: float  # g_b / √(1 + h2²)
-    h2: float
-    phi0: float
-    tail: bool
-    pitch: Curve
-    body_amp: Curve
-    attack_gain: float
-    tone_hz: float
-    tone_weight: float
-    noise_weight: float
-    band: tuple[float, float]
-    seed: int
-    attack_amp: Curve
-    alpha: float
-    t_src: float
-
-    @property
-    def uses_noise(self) -> bool:
-        return self.attack_gain != 0.0 and self.noise_weight != 0.0
-
-
-def voice(p: Patch) -> Voice:
-    b, a = p.body, p.attack
-    body_amp = amplitude_curve([m / 1000 for m, _ in b.amp], [g for _, g in b.amp])
-    attack_amp = amplitude_curve([m / 1000 for m, _ in a.amp], [g for _, g in a.amp])
-    tone, noise_w = mix_weights(a.noise_mix)
-    return Voice(
-        f0=b.tune_hz,
-        body_gain=10.0 ** (b.level_db / 20.0) / math.sqrt(1.0 + b.h2 * b.h2),
-        h2=b.h2,
-        phi0=math.radians(b.phase_deg),
-        tail=b.phase_ref == "tail",
-        pitch=pitch_curve([m / 1000 for m, _ in b.pitch], [r for _, r in b.pitch]),
-        body_amp=body_amp,
-        attack_gain=10.0 ** (a.level_db / 20.0),
-        tone_hz=a.tone_hz,
-        tone_weight=tone,
-        noise_weight=noise_w,
-        band=a.noise_band_hz,
-        seed=p.seed,
-        attack_amp=attack_amp,
-        alpha=drive_alpha(p.drive.db),
-        t_src=max(body_amp.t[-1], attack_amp.t[-1]),
-    )
-
-
 def sample_count(t_src: float, rate: int) -> int:
     """N = ⌊T_src·F⌋ + 1: every internal sample with n / F ≤ T_src, decided in float64."""
     n = math.floor(t_src * rate)
@@ -98,56 +50,78 @@ def sample_count(t_src: float, rate: int) -> int:
     return n + 1
 
 
-def phase_time(v: Voice, t: np.ndarray) -> np.ndarray:
-    """τ(t) = R(t) − R(t_ref) + c, so that φ = φ0 + 2π f0 τ."""
-    if not v.tail:
-        return v.pitch.integral(t)
-    # Tail mode: τ = t exactly from the last pitch knot on, whatever the sweep does before it.
-    t_n = v.pitch.t[-1]
-    return np.where(t >= t_n, t, t_n - v.pitch.remaining(t))
-
-
-def body(v: Voice, t: np.ndarray) -> np.ndarray:
-    phi = v.phi0 + (2 * math.pi * v.f0) * phase_time(v, t)
-    wave = np.sin(phi)
-    if v.h2:
-        # sin φ + h2 sin 2φ = sin φ (1 + 2 h2 cos φ): no extra zero crossings while h2 ≤ ½.
-        wave *= 1.0 + 2.0 * v.h2 * np.cos(phi)
-    return v.body_gain * v.body_amp(t) * wave
-
-
-def attack(v: Voice, t: np.ndarray, noise_samples: np.ndarray | None) -> np.ndarray:
-    carrier = np.zeros_like(t)
-    if v.tone_weight:
-        carrier += v.tone_weight * np.sin((2 * math.pi * v.tone_hz) * t)
-    if v.noise_weight:
-        carrier += v.noise_weight * noise_samples
-    return v.attack_gain * v.attack_amp(t) * carrier
+def _curve(knots, **ends) -> Curve:
+    """The curve through a patch's (ms, value) knots, in seconds."""
+    return Curve([ms / 1000 for ms, _ in knots], [v for _, v in knots], **ends)
 
 
 def _support(t: np.ndarray, curve: Curve) -> slice:
     return slice(np.searchsorted(t, curve.t[0], "left"), np.searchsorted(t, curve.t[-1], "right"))
 
 
-def sources(v: Voice, rate: int, n0: int, n1: int, table: np.ndarray | None) -> np.ndarray:
-    """x[n] = b(n / rate) + a(n / rate) for n0 ≤ n < n1; each source only over its support."""
-    t = np.arange(n0, n1) / rate
-    x = np.zeros(n1 - n0)
-    if v.body_gain:
-        s = _support(t, v.body_amp)
-        x[s] += body(v, t[s])
-    if v.attack_gain:
-        s = _support(t, v.attack_amp)
-        n = np.arange(n0 + s.start, n0 + s.stop) % rate if v.noise_weight else None
-        x[s] += attack(v, t[s], table[n] if n is not None else None)
-    return x
+class Voice:
+    """The patch at internal rate F: y[n] = S_α(b(n / F) + a(n / F))."""
 
+    def __init__(self, p: Patch, rate: int):
+        b, a = p.body, p.attack
+        self.rate = rate
+        self.f0, self.h2, self.phi0, self.tail = b.tune_hz, b.h2, math.radians(b.phase_deg), b.phase_ref == "tail"
+        self.body_gain = 10.0 ** (b.level_db / 20.0) / math.sqrt(1.0 + b.h2 * b.h2)  # g_b / √(1 + h2²)
+        self.pitch = _curve(b.pitch, last=0.0)  # lands smoothly on the tuning
+        # Amplitude shapes have zero end slopes, so they join silence smoothly.
+        self.body_amp = _curve(b.amp, first=0.0, last=0.0)
+        self.attack_amp = _curve(a.amp, first=0.0, last=0.0)
+        self.attack_gain = 10.0 ** (a.level_db / 20.0)
+        self.tone_hz = a.tone_hz
+        self.tone_weight, self.noise_weight = mix_weights(a.noise_mix)
+        uses_noise = self.attack_gain != 0.0 and self.noise_weight != 0.0
+        self.noise = noise.table(p.seed, *a.noise_band_hz, rate) if uses_noise else None
+        self.alpha = drive_alpha(p.drive.db)
+        self.count = sample_count(p.length_ms / 1000, rate)
 
-def saturate(v: Voice, x: np.ndarray) -> np.ndarray:
-    """S_α(x) = tanh(αx) / tanh α, odd by construction; the identity when α = 0."""
-    if not v.alpha:
-        return x
-    norm = np.tanh(np.array([v.alpha]))[0]  # the same tanh as below, so S(1) = 1 exactly
-    with np.errstate(over="ignore"):
-        return np.copysign(np.tanh(v.alpha * np.abs(x)), x) / norm
+    def samples(self) -> np.ndarray:
+        """y[n] for 0 ≤ n < N, computed in blocks aligned to the trigger."""
+        return np.concatenate([self._block(n, min(n + BLOCK, self.count)) for n in range(0, self.count, BLOCK)])
 
+    def _block(self, n0: int, n1: int) -> np.ndarray:
+        """y[n] for n0 ≤ n < n1, each source only over its support."""
+        n = np.arange(n0, n1)
+        t = n / self.rate
+        x = np.zeros(n1 - n0)
+        if self.body_gain:
+            s = _support(t, self.body_amp)
+            x[s] += self._body(t[s])
+        if self.attack_gain:
+            s = _support(t, self.attack_amp)
+            x[s] += self._attack(t[s], n[s])
+        return self._saturate(x)
+
+    def _body(self, t: np.ndarray) -> np.ndarray:
+        # φ = φ0 + 2π f0 τ, where τ(t) = R(t) − R(t_ref) + c integrates the pitch ratio.
+        if self.tail:  # τ = t exactly from the last pitch knot on, whatever the sweep does before it
+            t_n = self.pitch.t[-1]
+            tau = np.where(t >= t_n, t, t_n - self.pitch.remaining(t))
+        else:
+            tau = self.pitch.integral(t)
+        phi = self.phi0 + (2 * math.pi * self.f0) * tau
+        wave = np.sin(phi)
+        if self.h2:
+            # sin φ + h2 sin 2φ = sin φ (1 + 2 h2 cos φ): no extra zero crossings while h2 ≤ ½.
+            wave *= 1.0 + 2.0 * self.h2 * np.cos(phi)
+        return self.body_gain * self.body_amp(t) * wave
+
+    def _attack(self, t: np.ndarray, n: np.ndarray) -> np.ndarray:
+        carrier = np.zeros_like(t)
+        if self.tone_weight:
+            carrier += self.tone_weight * np.sin((2 * math.pi * self.tone_hz) * t)
+        if self.noise_weight:
+            carrier += self.noise_weight * self.noise[n % self.rate]  # the noise repeats every second
+        return self.attack_gain * self.attack_amp(t) * carrier
+
+    def _saturate(self, x: np.ndarray) -> np.ndarray:
+        """S_α(x) = tanh(αx) / tanh α, odd by construction; the identity when α = 0."""
+        if not self.alpha:
+            return x
+        norm = np.tanh(np.array([self.alpha]))[0]  # the same tanh as below, so S(1) = 1 exactly
+        with np.errstate(over="ignore"):
+            return np.copysign(np.tanh(self.alpha * np.abs(x)), x) / norm
