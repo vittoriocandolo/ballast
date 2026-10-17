@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="fig" viewBox="0 0 960 296" role="img" aria-labelledby="pipeline-title" width="960" height="296"><title id="pipeline-title">Signal flow</title><style>.fig{--paper:#fbfcfd;--panel:#f1f4f7;--ink:#0e1116;--ink-2:#4a5361;--muted:#626c7a;--rule:#dde3ea;--grid:#e9edf2;--accent:#2a78d6;--accent-ink:#1c5cab;--accent-fill:#256abf;--on-accent:#ffffff;--series-2:#eb6834;--show-light:inline;--show-dark:none;}@media (prefers-color-scheme: dark){.fig{--paper:#0f1216;--panel:#171c22;--ink:#e7ecf1;--ink-2:#aab4c0;--muted:#8b96a4;--rule:#29313b;--grid:#1c2229;--accent:#3987e5;--accent-ink:#79b0f0;--accent-fill:#3987e5;--on-accent:#0f1216;--series-2:#d95926;--show-light:none;--show-dark:inline;}}
+.fig .bg{fill:var(--paper)}
+.fig .grid{fill:none;stroke:var(--grid);stroke-width:1}
+.fig .axis{fill:none;stroke:var(--rule);stroke-width:1}
+.fig .zero{fill:none;stroke:var(--muted);stroke-width:1;stroke-opacity:.45}
+.fig text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:12px;fill:var(--muted);font-variant-numeric:tabular-nums}
+.fig .label{fill:var(--ink-2)}
+.fig .title{fill:var(--ink);font-size:15px;font-weight:600}
+.fig .name{fill:var(--ink);font-family:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono","Roboto Mono",Menlo,Consolas,monospace;font-size:15px;font-weight:700}
+.fig .math{fill:var(--ink-2);font-family:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono","Roboto Mono",Menlo,Consolas,monospace;font-size:12px}
+.fig .boxtitle{fill:var(--ink);font-size:13px;font-weight:600}
+.fig .peak{fill:var(--accent);fill-opacity:.3}
+.fig .rms{fill:var(--accent)}
+.fig .trace{fill:none;stroke:var(--accent);stroke-width:1.25;stroke-linejoin:round}
+.fig .s1{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.fig .s2{fill:none;stroke:var(--series-2);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.fig .key1{fill:var(--accent)}
+.fig .key2{fill:var(--series-2)}
+.fig .knot{fill:var(--accent);stroke:var(--paper);stroke-width:2}
+.fig .band{fill:var(--accent);fill-opacity:.08}
+.fig .limit{fill:none;stroke:var(--ink-2);stroke-width:1}
+.fig .box{fill:var(--paper);stroke:var(--rule);stroke-width:1}
+.fig .zone{fill:var(--panel);stroke:var(--rule);stroke-width:1}
+.fig .flow{fill:none;stroke:var(--ink-2);stroke-width:1.5}
+.fig .head{fill:var(--ink-2)}
+.fig .light{display:var(--show-light)}
+.fig .dark{display:var(--show-dark)}
+</style><rect class="bg" width="960" height="296" rx="10"/><text class="title" x="28" y="36">Signal flow</text><text class="label" x="28" y="57">From the patch's curves to a WAV file</text><defs><marker id="pipeline-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,1L10,5L0,9Z"/></marker></defs><rect class="zone" x="16" y="76" width="430" height="196" rx="8"/><text class="label" x="32" y="98">16 × the base rate: 705.6 or 768 kHz</text><text class="label" x="795" y="98" text-anchor="middle">at the file's sample rate</text><rect class="box" x="32" y="112" width="172" height="64" rx="6"/><text class="boxtitle" x="44" y="133">Body</text><text class="math" x="44" y="152">sin φ + h₂ sin 2φ</text><text class="label" x="44" y="168">pitch curve to phase</text><rect class="box" x="32" y="192" width="172" height="64" rx="6"/><text class="boxtitle" x="44" y="213">Attack</text><text class="math" x="44" y="232">tone + noise</text><text class="label" x="44" y="248">seeded, band-limited</text><circle class="box" cx="246" cy="174" r="14"/><text class="boxtitle" x="246" y="179" text-anchor="middle">+</text><path class="flow" d="M204,144C222,144 236,144 240,159" marker-end="url(#pipeline-head)"/><path class="flow" d="M204,224C222,224 236,204 240,189" marker-end="url(#pipeline-head)"/><rect class="box" x="282" y="142" width="148" height="64" rx="6"/><text class="boxtitle" x="294" y="163">Drive</text><text class="math" x="294" y="182">tanh(αx) / tanh α</text><text class="label" x="294" y="198">0 dB is exact bypass</text><path class="flow" d="M260,174H280" marker-end="url(#pipeline-head)"/><rect class="box" x="470" y="142" width="148" height="64" rx="6"/><text class="boxtitle" x="482" y="163">Decimator</text><text class="math" x="482" y="182">↓16 or ↓8</text><text class="label" x="482" y="198">frozen FIR, ≥ 110 dB</text><path class="flow" d="M430,174H468" marker-end="url(#pipeline-head)"/><rect class="box" x="646" y="142" width="132" height="64" rx="6"/><text class="boxtitle" x="658" y="163">Output</text><text class="label" x="658" y="182">gain or peak target</text><text class="label" x="658" y="198">polarity</text><path class="flow" d="M618,174H644" marker-end="url(#pipeline-head)"/><rect class="box" x="806" y="142" width="138" height="64" rx="6"/><text class="boxtitle" x="818" y="163">WAV</text><text class="label" x="818" y="182">float32, or PCM</text><text class="label" x="818" y="198">patch text inside</text><path class="flow" d="M778,174H804" marker-end="url(#pipeline-head)"/><text class="label" x="544" y="232" text-anchor="middle">minimum phase, so nothing rings before the kick</text></svg>
