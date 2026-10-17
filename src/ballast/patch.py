@@ -142,7 +142,10 @@ def knots(key, count, max_ms, check, note=""):
         if not counted:
             problems.append(f"{path}: needs {count[0]} to {count[1]} knots, found {len(raw)}")
         pairs = tuple(
-            (_number(f"{path}[{i}].ms", k["ms"], problems, 0.0, max_ms), _number(f"{path}[{i}].{key}", k[key], problems))
+            (
+                _number(f"{path}[{i}].ms", k["ms"], problems, 0.0, max_ms),
+                _number(f"{path}[{i}].{key}", k[key], problems),
+            )
             for i, k in enumerate(raw)
         )
         if not counted or any(None in pair for pair in pairs):
@@ -320,7 +323,7 @@ def dumps(p: Patch) -> str:
             ms = [f"{t!r}," for t, _ in v]
             width = max(map(len, ms))
             curves += [_note(f"{f.name} = [", m["note"])]
-            curves += [f"  {{ ms = {t.ljust(width)} {m['key']} = {x!r} }}," for t, (_, x) in zip(ms, v)]
+            curves += [f"  {{ ms = {t.ljust(width)} {m['key']} = {x!r} }}," for t, (_, x) in zip(ms, v, strict=True)]
             curves += ["]"]
         width = max(len(key) for key, _, _ in rows)
         lines += ["", f"[{name}]", *(_note(f"{key.ljust(width)} = {text}", note) for key, text, note in rows), *curves]

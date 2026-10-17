@@ -90,13 +90,13 @@ class Voice:
         x = np.zeros(n1 - n0)
         if self.body_gain:
             s = _support(t, self.body_amp)
-            x[s] += self._body(t[s])
+            x[s] += self.body(t[s])
         if self.attack_gain:
             s = _support(t, self.attack_amp)
-            x[s] += self._attack(t[s], n[s])
-        return self._saturate(x)
+            x[s] += self.attack(t[s], n[s])
+        return self.saturate(x)
 
-    def _body(self, t: np.ndarray) -> np.ndarray:
+    def body(self, t: np.ndarray) -> np.ndarray:
         # φ = φ0 + 2π f0 τ, where τ(t) = R(t) − R(t_ref) + c integrates the pitch ratio.
         if self.tail:  # τ = t exactly from the last pitch knot on, whatever the sweep does before it
             t_n = self.pitch.t[-1]
@@ -110,7 +110,7 @@ class Voice:
             wave *= 1.0 + 2.0 * self.h2 * np.cos(phi)
         return self.body_gain * self.body_amp(t) * wave
 
-    def _attack(self, t: np.ndarray, n: np.ndarray) -> np.ndarray:
+    def attack(self, t: np.ndarray, n: np.ndarray) -> np.ndarray:
         carrier = np.zeros_like(t)
         if self.tone_weight:
             carrier += self.tone_weight * np.sin((2 * math.pi * self.tone_hz) * t)
@@ -118,7 +118,7 @@ class Voice:
             carrier += self.noise_weight * self.noise[n % self.rate]  # the noise repeats every second
         return self.attack_gain * self.attack_amp(t) * carrier
 
-    def _saturate(self, x: np.ndarray) -> np.ndarray:
+    def saturate(self, x: np.ndarray) -> np.ndarray:
         """S_α(x) = tanh(αx) / tanh α, odd by construction; the identity when α = 0."""
         if not self.alpha:
             return x

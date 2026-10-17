@@ -8,6 +8,14 @@ version = "0.1.0"
 description = "A one-voice kick drum synthesizer, rendered offline to WAV"
 readme = "README.md"
 requires-python = ">=3.11"
+authors = [{ name = "Vittorio Candolo" }]
+keywords = ["audio", "synthesizer", "kick drum", "dsp", "wav"]
+classifiers = [
+    "Environment :: Console",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Sound Synthesis",
+    "Private :: Do Not Upload",
+]
 dependencies = ["numpy>=1.24", "scipy>=1.14"]
 
 [project.optional-dependencies]
@@ -16,8 +24,17 @@ audition = ["sounddevice>=0.4"]
 [project.scripts]
 ballast = "ballast.cli:main"
 
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
 [tool.setuptools.package-data]
 ballast = ["data/*.f64", "data/presets/*.toml"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.ruff]
 line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
