@@ -8,11 +8,12 @@ import math
 import sys
 from importlib import resources
 
-from . import wav
+from . import __version__, wav
 from .patch import CURVES, Patch, PatchError, dumps, edit, loads, parse_tune, read_text, stretch
 from .render import FORMATS, export, render
 
-PRESETS = ("round", "tight", "long", "driven")
+PRESET_DIR = resources.files(__package__).joinpath("data", "presets")
+PRESETS = sorted(f.name.removesuffix(".toml") for f in PRESET_DIR.iterdir() if f.name.endswith(".toml"))
 
 
 class CliError(Exception):
@@ -63,7 +64,7 @@ def _tuned(p: Patch, note: str, head: str) -> Patch:
 
 
 def cmd_init(a) -> None:
-    p = loads(resources.files(__package__).joinpath("data", "presets", f"{a.preset}.toml").read_text(encoding="utf-8"))
+    p = loads(PRESET_DIR.joinpath(f"{a.preset}.toml").read_text(encoding="utf-8"))
     if a.tune is not None:
         p = _tuned(p, a.tune, f"{a.preset}: cannot tune to {a.tune}")
     _emit(dumps(p), a.out)
@@ -140,6 +141,7 @@ def main(argv=None) -> int:
     for stream in (sys.stdout, sys.stderr):  # not the ANSI code page and CRLF of a Windows redirect
         stream.reconfigure(encoding="utf-8", newline="\n")
     ap = argparse.ArgumentParser(prog="ballast", description="A one-voice kick drum synthesizer, rendered to WAV.")
+    ap.add_argument("--version", action="version", version=f"ballast {__version__}")
     sub = ap.add_subparsers(dest="command", required=True)
     output = argparse.ArgumentParser(add_help=False)
     output.add_argument("-o", "--out", metavar="FILE", help="write to FILE instead of standard output")

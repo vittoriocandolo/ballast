@@ -88,7 +88,7 @@ def synthesize(p: Patch) -> np.ndarray:
     return decimate(decimator(base), Voice(p, rate).samples(), factor)
 
 
-def output_stage(out: np.ndarray, o: Output, top: float = 1.0) -> np.ndarray:
+def output_stage(out: np.ndarray, o: Output, top: float) -> np.ndarray:
     """Output gain or peak normalization, then polarity, then one conversion to float32.
 
     `top` is the format's ceiling: a peak target never goes above it.
@@ -101,11 +101,6 @@ def output_stage(out: np.ndarray, o: Output, top: float = 1.0) -> np.ndarray:
     if o.polarity < 0:
         scaled = -scaled
     return scaled.astype(np.float32)
-
-
-def ceiling(bits: int | None) -> float:
-    """The largest sample a format takes: full scale for float, 2 LSB below it for PCM, so dither never clips."""
-    return 1.0 if bits is None else 1.0 - 2.0 ** (2 - bits)
 
 
 def true_peak(audio: np.ndarray) -> float:
@@ -163,9 +158,9 @@ class Report:
 
 
 def render(p: Patch, bits: int | None = None) -> tuple[np.ndarray, Report]:
-    """The float32 audio and its report; `bits` gives the ceiling of the PCM format it will be exported to."""
+    """The float32 audio and its report, for export as float32 or, with `bits`, as PCM of that depth."""
     start = time.perf_counter()
-    top = ceiling(bits)
+    top = 1.0 if bits is None else 1.0 - 2.0 ** (2 - bits)  # PCM keeps 2 LSB of headroom, so dither never clips
     audio = output_stage(synthesize(p), p.output, top)
     peak = float(np.max(np.abs(audio), initial=0.0))
     return audio, Report(
@@ -200,6 +195,7 @@ def export(path, p: Patch, text: str, audio: np.ndarray, bits: int | None = None
         "patch": text,
         "renderer": f"ballast {__version__}",
         "decimator": {"sha256": DECIMATORS[base][1], "internal_rate": rate, "factor": factor},
+        "platform": f"{platform.system()} {platform.machine()}",
         "python": platform.python_version(),
         "numpy": np.__version__,
         "scipy": scipy.__version__,

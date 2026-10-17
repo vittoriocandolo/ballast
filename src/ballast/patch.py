@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import codecs
 import dataclasses
+import datetime
 import math
 import re
 import tomllib
@@ -35,8 +36,21 @@ class PatchError(ValueError):
         super().__init__("\n".join(self.problems))
 
 
+_KINDS = {  # every type TOML parses to
+    bool: "a boolean",
+    int: "an integer",
+    float: "a float",
+    str: "a string",
+    list: "an array",
+    dict: "a table",
+    datetime.datetime: "a date-time",
+    datetime.date: "a date",
+    datetime.time: "a time",
+}
+
+
 def _kind(v) -> str:
-    return {bool: "a boolean", str: "a string", list: "an array", dict: "a table"}.get(type(v), type(v).__name__)
+    return _KINDS.get(type(v), type(v).__name__)
 
 
 def _keys(problems, prefix, table, expected) -> bool:

@@ -1,9 +1,13 @@
 """The command line: every command, its files, and its errors with their exit statuses."""
 
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 from scipy.io import wavfile
 
+from ballast import __version__
 from ballast.cli import main
 
 
@@ -104,8 +108,68 @@ def test_audition_refuses_a_render_over_full_scale(run, tmp_path, read_preset):
     assert status == 1 and err == "over full scale by 12.32 dB: lower output.db to audition it\n"
 
 
-@pytest.mark.parametrize("argv", [("audition", "k.toml", "--with", "bed.wav"), ("audition", "k.toml", "--bpm", "0")])
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("audition", "k.toml", "--with", "bed.wav"),
+        ("audition", "k.toml", "--bpm", "0"),
+        ("audition", "k.toml", "--bpm", "x"),
+    ],
+)
 def test_audition_arguments_are_checked(run, argv):
     with pytest.raises(SystemExit) as caught:
         run(*argv)
     assert caught.value.code == 2
+
+
+def test_version(run):
+    with pytest.raises(SystemExit) as caught:
+        run("--version")
+    assert caught.value.code == 0
+
+
+def test_a_patch_in_another_encoding_is_refused(run, tmp_path, read_preset):
+    (tmp_path / "kick.toml").write_bytes(read_preset("tight").replace("…", "\xe9").encode("latin-1"))
+    assert run("tune", "kick.toml", "F1") == (2, "", "kick.toml: not UTF-8 or UTF-16 text\n")
+
+
+def test_writing_into_a_missing_directory_fails_cleanly(run, tmp_path):
+    assert run("init", "tight", "-o", "missing/kick.toml") == (2, "", "missing/kick.toml: No such file or directory\n")
+    run("init", "tight", "-o", "kick.toml")
+    status, _, err = run("render", "kick.toml", "-o", "missing/kick.wav")
+    assert (status, err) == (2, "missing/kick.wav: No such file or directory\n")
+
+
+def test_stretch_lists_every_problem_it_would_cause(run, tmp_path):
+    run("init", "tight", "-o", "kick.toml")
+    status, out, err = run("stretch", "kick.toml", "body.amp", "100")
+    assert status == 2 and out == ""
+    assert err.splitlines() == [
+        "kick.toml: cannot stretch body.amp by 100",
+        "  body.amp[3].ms: 9975.25 is outside 0 … 8000",
+        "  body.amp[4].ms: 17975.2 is outside 0 … 8000",
+        "  body.amp[5].ms: 23975.2 is outside 0 … 8000",
+    ]
+
+
+def test_a_pcm_render_over_its_ceiling_is_not_written(run, tmp_path, read_preset):
+    (tmp_path / "hot.toml").write_text(read_preset("tight").replace("db          = -6.0", "db          = 0.6"))
+    status, out, err = run("render", "hot.toml", "-o", "hot.wav", "--format", "pcm16")
+    assert status == 1 and "over the 16-bit ceiling of -0.0005 dBFS, which keeps 2 LSB for dither" in out
+    assert err == "not written: lower output.db by at least 0.9221 dB\n" and not (tmp_path / "hot.wav").exists()
+
+
+def test_an_audition_ends_cleanly_when_interrupted(run, tmp_path, monkeypatch):
+    from ballast import audition
+
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(audition, "audition", interrupted)
+    run("init", "tight", "-o", "kick.toml")
+    assert run("audition", "kick.toml", "--bpm", "128") == (0, "", "")
+
+
+def test_python_dash_m_runs_the_command_line():
+    done = subprocess.run([sys.executable, "-m", "ballast", "--version"], capture_output=True, text=True, check=True)
+    assert done.stdout == f"ballast {__version__}\n"

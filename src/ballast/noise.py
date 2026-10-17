@@ -32,13 +32,13 @@ KEY = b"ballast/noise/v1"
 DITHER_KEY = b"ballast/dither/v1"
 
 
-def _stream(key: bytes, seed: int, size: int) -> bytes:
+def _shake(key: bytes, seed: int, size: int) -> bytes:
     return hashlib.shake_256(key + seed.to_bytes(8, "little")).digest(size)
 
 
 def coefficients(seed: int) -> tuple[np.ndarray, np.ndarray]:
     """Amplitudes ρ_k and phases θ_k for f_k = 1 … 20000 Hz."""
-    words = np.frombuffer(_stream(KEY, seed, 16 * COMPONENTS), dtype="<u8").reshape(COMPONENTS, 2) >> np.uint64(11)
+    words = np.frombuffer(_shake(KEY, seed, 16 * COMPONENTS), dtype="<u8").reshape(COMPONENTS, 2) >> np.uint64(11)
     u = (words[:, 0] + np.uint64(1)).astype(float) * 2.0**-53  # (0, 1]
     v = words[:, 1].astype(float) * 2.0**-53  # [0, 1)
     return np.sqrt(-2.0 * np.log(u)), 2.0 * np.pi * v
@@ -66,5 +66,5 @@ def dither(seed: int, count: int) -> np.ndarray:
     moments of the quantization error independent of the signal. The sequence
     is prefix-stable, like the noise.
     """
-    u = np.frombuffer(_stream(DITHER_KEY, seed, 8 * count), dtype="<u4").reshape(count, 2).astype(float) * 2.0**-32
+    u = np.frombuffer(_shake(DITHER_KEY, seed, 8 * count), dtype="<u4").reshape(count, 2).astype(float) * 2.0**-32
     return u[:, 0] - u[:, 1]

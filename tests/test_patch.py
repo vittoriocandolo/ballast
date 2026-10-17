@@ -1,6 +1,7 @@
 """The patch: validation with every problem and its path, canonical TOML, edits and tuning."""
 
 import codecs
+import datetime
 import math
 
 import pytest
@@ -35,6 +36,9 @@ def test_canonical_text_reads_back_to_the_same_patch(tight):
         ("body.phase_deg", 360.0, "body.phase_deg: 360 is outside 0 … 360 (exclusive)"),
         ("body.phase_ref", "end", "body.phase_ref: expected one of 'onset', 'tail', found 'end'"),
         ("drive.db", True, "drive.db: expected a number, found a boolean"),
+        ("drive.db", 10**400, "drive.db: is too large"),
+        ("attack.noise_band_hz", ["low", 900.0], "attack.noise_band_hz[0]: expected a number, found a string"),
+        ("body.pitch", "fast", "body.pitch: expected an array of { ms, ratio } tables, found a string"),
         ("attack.noise_band_hz", [900.0, 700.0], "attack.noise_band_hz: the low edge must be below the high edge"),
         ("attack.noise_band_hz", [700.0], "attack.noise_band_hz: expected [low, high] in Hz"),
         ("output.sample_rate", 44000, f"output.sample_rate: expected one of {RATES}, found 44000"),
@@ -71,6 +75,8 @@ def test_a_peak_target_cannot_exceed_full_scale(raw):
         ("amp", 2, {"gain": -0.5}, "body.amp[2].gain: -0.5 is outside 0 … 1"),
         ("amp", 1, {"ms": 0.005}, "body.amp[1].ms: is 0.005 ms after the previous knot; knots need 0.01 ms (10 µs)"),
         ("amp", 2, {"ms": 0.1}, "body.amp[2].ms: is earlier than the previous knot"),
+        ("amp", 2, {"ms": 0.25}, "body.amp[2].ms: repeats the previous knot time"),
+        ("amp", 5, {"gain": 0.1}, "body.amp[5].gain: an amplitude shape must end at 0"),
         ("amp", 5, {"ms": 8000.5}, "body.amp[5].ms: 8000.5 is outside 0 … 8000"),
     ],
 )
@@ -220,3 +226,36 @@ def test_an_unknown_tuning_is_refused():
 )
 def test_describe_tuning(hz, text):
     assert patch.describe_tuning(hz) == text
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            lambda raw: raw["body"]["amp"].__setitem__(1, [0.2, 1.0]),
+            "body.amp[1]: expected a { ms, gain } table, found an array",
+        ),
+        (lambda raw: raw["body"]["amp"][1].pop("gain"), "body.amp[1].gain: missing"),
+        (lambda raw: raw.__setitem__("drive", 6.0), "drive: expected a table, found a float"),
+        (lambda raw: raw.__setitem__("seed", 1.5), "seed: expected an integer, found a float"),
+        (lambda raw: raw.__setitem__("seed", datetime.date(2026, 1, 1)), "seed: expected an integer, found a date"),
+    ],
+)
+def test_malformed_structure_is_reported_with_its_path(raw, change, message):
+    change(raw)
+    assert problems(raw) == [message]
+
+
+def test_a_ratio_must_be_positive_even_when_the_tuning_is_invalid(raw):
+    raw["body"]["tune_hz"] = "fifty"
+    raw["body"]["pitch"][1]["ratio"] = 0.0
+    assert problems(raw) == ["body.tune_hz: expected a number, found a string", "body.pitch[1].ratio: must be positive"]
+
+
+def test_only_a_table_can_be_a_patch():
+    assert problems([]) == ["expected a table"]
+
+
+def test_the_seed_is_required(raw):
+    del raw["seed"]
+    assert problems(raw) == ["seed: missing"]

@@ -70,7 +70,12 @@ def test_the_attack_mix_keeps_constant_power_and_is_exact_at_both_ends():
         assert tone**2 + noise**2 == pytest.approx(1.0, abs=1e-15)
 
 
-@pytest.mark.parametrize("t_src", [0.0, 1e-6, 0.24, 0.1 + 0.2, 1.45, 8.0])
+# Lengths where t_src × rate rounds across an integer in float64: below it at the 44.1 kHz family's rate
+# (real patch lengths, 21.875 and 35.625 ms), and above it just below a sample (6.5 µs, shorter than a patch).
+EDGES = [0.021875, 0.035625, float(np.nextafter(5 / 768000, 0)), float(np.nextafter(5 / 705600, 0))]
+
+
+@pytest.mark.parametrize("t_src", [0.0, 1e-6, 0.24, 0.1 + 0.2, 1.45, 8.0, *EDGES])
 @pytest.mark.parametrize("rate", [705600, 768000])
 def test_sample_count_covers_every_sample_up_to_the_source_length(t_src, rate):
     n = voice.sample_count(t_src, rate)
@@ -82,3 +87,15 @@ def test_silent_sources_render_nothing(tight):
     v = Voice(silent, RATE)
     assert v.noise is None
     assert not np.any(v.samples())
+
+
+@pytest.mark.parametrize(("mix", "tone", "noise"), [(0.0, True, False), (1.0, False, True)])
+def test_the_attack_is_pure_tone_or_pure_noise_at_the_ends_of_the_mix(tight, mix, tone, noise):
+    v = Voice(patch.edit(tight, "attack.noise_mix", mix), RATE)
+    t = np.arange(0, round(0.006 * RATE)) / RATE
+    attack = v.attack(t, np.arange(t.size))
+    assert (v.noise is not None) == noise
+    if tone:
+        assert np.array_equal(attack, v.attack_gain * v.attack_amp(t) * np.sin((2 * math.pi * v.tone_hz) * t))
+    else:
+        assert np.array_equal(attack, v.attack_gain * v.attack_amp(t) * v.noise[: t.size])
