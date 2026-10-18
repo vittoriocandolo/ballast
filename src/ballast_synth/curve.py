@@ -50,6 +50,7 @@ def _slopes(h: Floats, m: Floats) -> Floats:
 
 
 def _end_slope(h0: float, h1: float, m0: float, m1: float) -> float:
+    """Return an end knot's slope by the shape-preserving three-point rule, from its segment's h0, m0 and the next's."""
     d = ((2 * h0 + h1) * m0 - h0 * m1) / (h0 + h1)
     if np.sign(d) != np.sign(m0):
         return 0.0
@@ -78,6 +79,7 @@ class Curve:
         self.total: float = self._before[-1]  # the integral over the knot span
 
     def _segment(self, x: Floats) -> tuple[NDArray[np.intp], Floats, Floats, Floats, Floats, Floats]:
+        """Return the segment of each x: its index, width, end values and end slopes."""
         i = np.clip(np.searchsorted(self.t, x, side="right") - 1, 0, self.t.size - 2)
         return i, self.h[i], self.v[i], self.v[i + 1], self.d[i], self.d[i + 1]
 

@@ -234,7 +234,7 @@ def _spacing(path: str, curve: Knots, problems: list[str]) -> None:
         elif b < a:
             problems.append(f"{path}[{i}].ms: is earlier than the previous knot")
         elif b - a < MIN_SPACING_MS:
-            problems.append(f"{path}[{i}].ms: is {b - a} ms after the previous knot; knots need 0.01 ms (10 µs)")
+            problems.append(f"{path}[{i}].ms: is {b - a} ms after the previous knot; knots need {MIN_SPACING_MS} ms")
 
 
 def _pitch(path: str, curve: Knots, problems: list[str], section: dict[str, Any]) -> None:
@@ -247,7 +247,7 @@ def _pitch(path: str, curve: Knots, problems: list[str], section: dict[str, Any]
     lo, hi = BODY_HZ
     for i, (_, r) in enumerate(curve):
         if tune is not None and not lo <= tune * r <= hi:
-            problems.append(f"{path}[{i}].ratio: body frequency {tune * r:g} Hz is outside 10 Hz … 20 kHz")
+            problems.append(f"{path}[{i}].ratio: body frequency {tune * r:g} Hz is outside {lo:g} … {hi:g} Hz")
         elif tune is None and r <= 0:
             problems.append(f"{path}[{i}].ratio: must be positive")
 
@@ -336,7 +336,9 @@ class Patch:
         return max(self.body.amp[-1][0], self.attack.amp[-1][0])
 
 
-SECTIONS: dict[str, type[Body | Attack | Drive | Output]] = {
+type Section = Body | Attack | Drive | Output
+
+SECTIONS: dict[str, type[Section]] = {
     "body": Body,
     "attack": Attack,
     "drive": Drive,
@@ -359,7 +361,7 @@ def _schema(data: dict[str, Any]) -> int:
 
 def _section(
     name: str,
-    cls: type[Body | Attack | Drive | Output],
+    cls: type[Section],
     table: dict[str, Any],
     problems: list[str],
     new: dict[str, Any],
@@ -461,6 +463,7 @@ def dumps(p: Patch) -> str:
 
 
 def _note(line: str, note: str) -> str:
+    """Append a comment to a line of canonical TOML, after 28 columns so that the comments line up."""
     return f"{(line + ' ').ljust(28)}# {note}" if note else line
 
 

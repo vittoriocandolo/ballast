@@ -40,13 +40,15 @@ if TYPE_CHECKING:
 
 DOCS = Path(__file__).resolve().parent
 RATE = 48000
-INTERNAL = 768000  # the internal rate of the 48 kHz family
+INTERNAL = render.rates(RATE)[1]  # the internal rate of the 48 kHz family
 PRESETS = ("tight", "driven", "round", "long")  # shortest first
 KILO = 1000
 PASSBAND_HZ = 20000
 STEPS = (3, 5)  # how many steps a round axis takes
+WIDTH = 960  # every figure's width
 LEFT = (64, 96, 380, 200)  # the two panels of a figure in halves
 RIGHT = (548, 96, 380, 200)
+LEGEND_ROW = 20  # from one row of a legend to the next
 
 # Chart hues and the blue ramp are validated data-visualization defaults; the neutrals lean toward the accent.
 # series-* tell series apart; step-* order settings from least to most, darker on paper and lighter at night.
@@ -144,14 +146,13 @@ STYLE = f"""<style>
 KEY_HEIGHTS = {"khalo": 7}  # legend keys are 3 px tall lines, except a halo's
 
 
-def svg(size: tuple[int, int], title: str, subtitle: str, body: str, description: str) -> str:
-    """Wrap a figure's body in an SVG with its own palette, which follows the reader's light or dark theme."""
-    width, height = size
+def svg(height: float, title: str, subtitle: str, body: str, description: str) -> str:
+    """Wrap a figure's body in an SVG, WIDTH wide, with a palette that follows the reader's light or dark theme."""
     head = f'<text class="title" x="28" y="36">{title}</text><text class="label" x="28" y="57">{subtitle}</text>'
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" class="fig" viewBox="0 0 {width} {height}" width="{width}" '
+        f'<svg xmlns="http://www.w3.org/2000/svg" class="fig" viewBox="0 0 {WIDTH} {height}" width="{WIDTH}" '
         f'height="{height}" role="img"><title>{html.escape(description)}</title>{STYLE}'
-        f'<rect class="bg" width="{width}" height="{height}" rx="10"/>{head}{body}</svg>\n'
+        f'<rect class="bg" width="{WIDTH}" height="{height}" rx="10"/>{head}{body}</svg>\n'
     )
 
 
@@ -339,7 +340,7 @@ def legend(at: tuple[float, float], keys: Iterable[tuple[str, str]]) -> str:
     x, y = at
     out = []
     for i, (cls, text) in enumerate(keys):
-        row = y + 20 * i
+        row = y + LEGEND_ROW * i
         if cls.startswith("dot"):
             out.append(f'<circle class="{cls}" cx="{x + 9}" cy="{row - 4}" r="5"/>')
         else:
@@ -364,6 +365,11 @@ def legend_row(at: tuple[float, float], keys: Iterable[tuple[str, str]]) -> str:
 def below(panel: Panel) -> tuple[float, float]:
     """Return where a legend starts under a panel, clear of its axis labels."""
     return panel.x, panel.y + panel.h + 62
+
+
+def fit(panel: Panel, rows: int) -> float:
+    """Return the height of a figure that ends with `rows` rows of legend under `panel`, and a margin below them."""
+    return below(panel)[1] + LEGEND_ROW * (rows - 1) + 28
 
 
 @dataclass
@@ -439,28 +445,28 @@ def waveform(panel: Panel, x: NDArray[np.float32], seconds: float) -> str:
 
 def figure_presets(kicks: dict[str, Kick]) -> str:
     """Draw every preset's waveform, one row each."""
-    width, left, right, top, row, gap, seconds = 960, 214, 28, 84, 62, 24, 1.5
+    left, right, top, row, gap, seconds = 214, 28, 84, 62, 24, 1.5
     body = []
     for i, k in enumerate(kicks.values()):
         y = top + i * (row + gap)
-        panel = Panel((left, y, width - left - right, row), Axis(0, seconds), Axis(-1, 1))
-        body.append(f'<path class="grid" d="M{left},{y}H{width - right}M{left},{y + row}H{width - right}"/>')
-        body.append(f'<path class="zero" d="M{left},{panel.sy(0):.1f}H{width - right}"/>')
+        panel = Panel((left, y, WIDTH - left - right, row), Axis(0, seconds), Axis(-1, 1))
+        body.append(f'<path class="grid" d="M{left},{y}H{WIDTH - right}M{left},{y + row}H{WIDTH - right}"/>')
+        body.append(f'<path class="zero" d="M{left},{panel.sy(0):.1f}H{WIDTH - right}"/>')
         body.append(waveform(panel, k.audio, seconds))
         tune, length, drive = k.p.body.tune_hz, k.report.source_ms, k.p.drive.db
         body.append(f'<text class="name" x="28" y="{y + 17}">{k.name}</text>')
         body.append(f'<text class="label" x="28" y="{y + 38}">{num(tune)} Hz · {note(tune)}</text>')
         body.append(f'<text x="28" y="{y + 57}">{num(length)} ms · drive {num(drive)} dB</text>')
     end = top + 4 * (row + gap) - gap
-    axis = Panel((left, end, width - left - right, 0), Axis(0, seconds), Axis(0, 1))
-    body.extend(
-        f'<text x="{axis.sx(v):.1f}" y="{end + 20}" text-anchor="middle">{num(1000 * v)}</text>'
+    axis = Panel((left, end, WIDTH - left - right, 0), Axis(0, seconds), Axis(0, 1))
+    body += [
+        f'<text x="{axis.sx(v):.1f}" y="{end + 20}" text-anchor="middle">{num(KILO * v)}</text>'
         for v in np.arange(0, seconds + 1e-9, 0.25)
-    )
-    body.append(f'<text class="label" x="{width - right}" y="{end + 40}" text-anchor="end">time, ms</text>')
+    ]
+    body.append(f'<text class="label" x="{WIDTH - right}" y="{end + 40}" text-anchor="end">time, ms</text>')
     subtitle = "Peak (light) and RMS (dark) per column, on a full-scale axis"
     return svg(
-        (width, end + 60),
+        end + 60,
         "Four presets, rendered at 48 kHz",
         subtitle,
         "".join(body),
@@ -511,7 +517,7 @@ def figure_pipeline() -> str:
     body.append(box(850, cy - 32, 98, "WAV", ("label", "float or PCM"), ("label", "patch inside")))
     body.append(arrow(f"M830,{cy}H848"))
     subtitle = "From the patch's curves to a WAV file"
-    return svg((960, top + 220), "Signal flow", subtitle, "".join(body), "Signal flow from patch to WAV")
+    return svg(top + 220, "Signal flow", subtitle, "".join(body), "Signal flow from patch to WAV")
 
 
 PITCH = Axis(30, 500, log=True)  # wide enough for every preset's sweep, so that their figures compare
@@ -555,7 +561,7 @@ def figure_anatomy(k: Kick) -> str:
     body.append(sound.line("trace", *trace(k.audio, sweep, round(sound.w))))
     subtitle = "Three curves through the patch's knots, and the sound they make"
     description = f"The {k.name} preset's pitch, body and attack curves, and its first {num(sweep)} ms"
-    return svg((960, wave_top + 172), f"Anatomy of {k.name}", subtitle, "".join(body), description)
+    return svg(wave_top + 172, f"Anatomy of {k.name}", subtitle, "".join(body), description)
 
 
 def spectrogram(x: NDArray[np.float32], seconds: float, rows: int, columns: int) -> NDArray[np.float64]:
@@ -601,7 +607,7 @@ def figure_spectrum(k: Kick) -> str:
     body += [f'<text x="{bar.x + 24}" y="{bar.sy(v) + 4:.1f}">{num(v)}</text>' for v in (0, -30, -60, -90)]
     subtitle = "Level over time and frequency, to 90 dB below the peak"
     description = f"Spectrogram of the {k.name} preset over its whole length"
-    return svg((960, top + 352), f"Spectrum of {k.name}", subtitle, "".join(body), description)
+    return svg(top + 352, f"Spectrum of {k.name}", subtitle, "".join(body), description)
 
 
 def sine_part(p: patch.Patch, t: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -637,7 +643,7 @@ def figure_body(long: patch.Patch) -> str:
     body.append(legend(below(span), keys))
     subtitle = "Its second harmonic keeps every zero crossing; a tail phase is exactly the free-running sine"
     description = "The body's shape for three values of h2, and the long preset with each phase reference"
-    return svg((960, 96 + 200 + 128), "The body", subtitle, "".join(body), description)
+    return svg(fit(shape, 3), "The body", subtitle, "".join(body), description)
 
 
 def versus(panel: Panel, knots: patch.Knots, curve: Curve, spline: CubicSpline, ticks: tuple[Ticks, Ticks]) -> str:
@@ -675,7 +681,7 @@ def figure_curves(p: patch.Patch) -> str:
     body.append(legend(below(pitch), keys))
     subtitle = "Through the tight preset's knots, Ballast's curves never overshoot; a spline swings far past them"
     description = "The tight preset's pitch curve and body amplitude, drawn by Ballast and by cubic splines"
-    return svg((960, 96 + 200 + 128), "Curves", subtitle, "".join(body), description)
+    return svg(fit(pitch, 3), "Curves", subtitle, "".join(body), description)
 
 
 def measured_band(seed: int, band: tuple[float, float]) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
@@ -716,7 +722,7 @@ def figure_attack(p: patch.Patch) -> str:
     body.append(legend(below(band), keys))
     subtitle = "Tone and noise mix at constant power; the noise fills its band, with half power at the edges"
     description = "The weights of tone and noise against noise_mix, and the tight preset's noise band"
-    return svg((960, 96 + 200 + 128), "The attack", subtitle, "".join(body), description)
+    return svg(fit(mix, 2), "The attack", subtitle, "".join(body), description)
 
 
 DRIVES = (("o1", 6.0), ("o2", 12.0), ("o3", 21.0), ("o4", 48.0))
@@ -750,7 +756,7 @@ def figure_saturator(p: patch.Patch) -> str:
     body.append(legend_row(below(transfer), keys))
     subtitle = "Drive raises the small-signal gain and squares the wave off, while full scale stays at full scale"
     description = "The saturator's transfer curve and a full-scale sine at drives from 0 to 48 dB"
-    return svg((960, 96 + 200 + 90), "The saturator", subtitle, "".join(body), description)
+    return svg(fit(transfer, 1), "The saturator", subtitle, "".join(body), description)
 
 
 CORNERS = (("o1", 10.0), ("o2", 30.0), ("o3", 100.0), ("o4", 1000.0))
@@ -778,7 +784,7 @@ def figure_low_cut() -> str:
     body.append(legend_row(below(magnitude), keys))
     subtitle = "A second-order Butterworth high-pass: half power at the corner, 12 dB per octave below it"
     description = "Magnitude and phase of the low cut at corners of 10, 30, 100 and 1000 Hz"
-    return svg((960, 96 + 200 + 90), "The low cut", subtitle, "".join(body), description)
+    return svg(fit(magnitude, 1), "The low cut", subtitle, "".join(body), description)
 
 
 def response(base: int, n: int = 1 << 20) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
@@ -817,7 +823,7 @@ def figure_decimator() -> str:
     body.append(legend((wide.x + 16, float(wide.sy(-122))), [(key, name) for name, _, _, key in series]))
     subtitle = "Both frozen filters at the internal rate, as their checksummed taps say"
     description = "Magnitude response of the two frozen decimators, with the passband in detail"
-    return svg((960, top + 312), "Decimator response", subtitle, "".join(body), description)
+    return svg(top + 312, "Decimator response", subtitle, "".join(body), description)
 
 
 def figure_rates(p: patch.Patch) -> str:
@@ -846,7 +852,7 @@ def figure_rates(p: patch.Patch) -> str:
     description = (
         "The tight preset's click at 48, 96 and 192 kHz, where every lower-rate sample is also a higher-rate one"
     )
-    return svg((960, 96 + 260 + 128), "Rates", subtitle, "".join(body), description)
+    return svg(fit(panel, 3), "Rates", subtitle, "".join(body), description)
 
 
 def column(x0: float, x1: float, y: float, base: float) -> str:
@@ -857,7 +863,7 @@ def column(x0: float, x1: float, y: float, base: float) -> str:
     return f'<path class="bar" d="{left}{right}"/>'
 
 
-def figure_output(p: patch.Patch) -> str:
+def figure_output_stage(p: patch.Patch) -> str:
     """Draw a true peak between samples, above the highest sample, and the dither's triangular density."""
     hot = patch.edit(
         patch.edit(patch.edit(p, "attack.tone_hz", 15000.0), "attack.noise_mix", 0.0),
@@ -898,7 +904,7 @@ def figure_output(p: patch.Patch) -> str:
     body.append(legend(below(tpdf), [("key1", "the seeded dither"), ("kref", "the triangle it follows")]))
     subtitle = "A waveform can peak between its samples; PCM adds triangular dither of ±1 LSB"
     description = "A true peak above the highest sample, and the triangular density of the dither"
-    return svg((960, 96 + 200 + 128), "The output stage", subtitle, "".join(body), description)
+    return svg(fit(zoom, 3), "The output stage", subtitle, "".join(body), description)
 
 
 def figure_audition(k: Kick) -> str:
@@ -929,7 +935,7 @@ def figure_audition(k: Kick) -> str:
         f"The {k.name} preset on every beat: each hit plays to its end and the tails sum, while a bed loops on the bar"
     )
     description = "A timeline of audition: overlapping hits on the beat, their sum, and a bed looping on the bar"
-    return svg((960, 96 + 304 + 60), "Audition", subtitle, "".join(body), description)
+    return svg(grid.y + grid.h + 60, "Audition", subtitle, "".join(body), description)
 
 
 def figure_design(moves: Sequence[tuple[str, Kick]]) -> str:
@@ -961,7 +967,7 @@ def figure_design(moves: Sequence[tuple[str, Kick]]) -> str:
     )
     subtitle = "Each row is one move made on the tight preset, as the guide describes it"
     description = "Waveforms of the tight preset and of six design moves made on it"
-    return svg((960, end + 56), "Designing a kick", subtitle, "".join(body), description)
+    return svg(end + 56, "Designing a kick", subtitle, "".join(body), description)
 
 
 CHARACTER = {
@@ -1071,7 +1077,7 @@ def main() -> None:
         "low-cut": figure_low_cut(),
         "decimator": figure_decimator(),
         "rates": figure_rates(tight),
-        "output-stage": figure_output(tight),
+        "output-stage": figure_output_stage(tight),
         "audition": figure_audition(kicks["long"]),
         "design": figure_design(moves),
     }

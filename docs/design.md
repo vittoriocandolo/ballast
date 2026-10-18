@@ -231,7 +231,7 @@ Audition reuses the renderer and adds four small parts:
 | `noise.py` | the seeded continuous-time noise, and the PCM dither |
 | `voice.py` | body, attack and saturator as pure functions of time, evaluated in blocks |
 | `render.py` | rates, frozen decimators, parallel decimation, output stage, report, export |
-| `wav.py` | the RIFF writer, and the chunk reader behind `extract` |
+| `wav.py` | the RIFF writer, the chunk reader behind `extract`, and writing any file whole or not at all |
 | `audition.py` | hits, bed, watcher and playback |
 | `cli.py` | the commands |
 | `data/` | the two decimators and the four presets |

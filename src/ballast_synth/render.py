@@ -112,7 +112,7 @@ def synthesize(p: Patch) -> NDArray[np.float64]:
     """
     base, rate, factor = rates(p.output.sample_rate)
     y = Voice(p, rate).samples()
-    if p.output.low_cut_hz:
+    if p.output.low_cut_hz != 0.0:
         y = sosfilt(low_cut(p.output.low_cut_hz, rate), y)
     return decimate(decimator(base), y, factor)
 
@@ -146,6 +146,11 @@ def true_peak(audio: NDArray[np.floating[Any]]) -> float:
 def db(x: float) -> float:
     """Return an amplitude in decibels; silence is -inf."""
     return 20 * math.log10(x) if x > 0 else -math.inf
+
+
+def row(label: str, text: str) -> str:
+    """Format a line as the report prints it: the label, then the text, in the column where every line's text starts."""
+    return f"{label:<9}{text}"
 
 
 @dataclass(frozen=True)
@@ -193,7 +198,7 @@ class Report:
             ("peak", peak),
             ("render", f"{1000 * self.render_s:.0f} ms"),
         )
-        return "\n".join(f"{label:<9}{text}" for label, text in rows)
+        return "\n".join(row(label, text) for label, text in rows)
 
 
 def render(p: Patch, bits: int | None = None) -> tuple[NDArray[np.float32], Report]:

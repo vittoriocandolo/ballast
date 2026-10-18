@@ -89,11 +89,11 @@ def test_a_peak_target_cannot_exceed_full_scale(raw: dict[str, Any]) -> None:
     [
         ("pitch", 0, {"ms": 1.0}, "body.pitch[0].ms: the pitch curve must start at 0 ms"),
         ("pitch", 2, {"ratio": 1.5}, "body.pitch[2].ratio: the pitch curve must end at ratio 1"),
-        ("pitch", 0, {"ratio": 400.0}, "body.pitch[0].ratio: body frequency 22000 Hz is outside 10 Hz … 20 kHz"),
+        ("pitch", 0, {"ratio": 400.0}, "body.pitch[0].ratio: body frequency 22000 Hz is outside 10 … 20000 Hz"),
         ("amp", 0, {"gain": 0.1}, "body.amp[0].gain: an amplitude shape must start at 0"),
         ("amp", 1, {"gain": 0.9}, "body.amp: the highest gain must be exactly 1, found 0.9"),
         ("amp", 2, {"gain": -0.5}, "body.amp[2].gain: -0.5 is outside 0 … 1"),
-        ("amp", 1, {"ms": 0.005}, "body.amp[1].ms: is 0.005 ms after the previous knot; knots need 0.01 ms (10 µs)"),
+        ("amp", 1, {"ms": 0.005}, "body.amp[1].ms: is 0.005 ms after the previous knot; knots need 0.01 ms"),
         ("amp", 2, {"ms": 0.1}, "body.amp[2].ms: is earlier than the previous knot"),
         ("amp", 2, {"ms": 0.25}, "body.amp[2].ms: repeats the previous knot time"),
         ("amp", 5, {"gain": 0.1}, "body.amp[5].gain: an amplitude shape must end at 0"),

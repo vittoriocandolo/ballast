@@ -10,8 +10,7 @@ from typing import Any
 import pytest
 
 from ballast_synth import patch
-
-PRESETS = ("round", "tight", "long", "driven")
+from ballast_synth.cli import PRESETS
 
 
 def preset_text(name: str) -> str:

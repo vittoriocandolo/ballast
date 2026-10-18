@@ -65,6 +65,7 @@ def _curve(knots: Knots, **ends: float) -> Curve:
 
 
 def _support(t: NDArray[np.float64], curve: Curve) -> slice:
+    """Return the slice of the times t within an amplitude shape's knots, outside which its source is silent."""
     return slice(np.searchsorted(t, curve.t[0], "left"), np.searchsorted(t, curve.t[-1], "right"))
 
 
@@ -98,10 +99,10 @@ class Voice:
         n = np.arange(n0, n1)
         t = n / self.rate
         x = np.zeros(n1 - n0)
-        if self.body_gain:
+        if self.body_gain != 0.0:
             s = _support(t, self.body_amp)
             x[s] += self.body(t[s])
-        if self.attack_gain:
+        if self.attack_gain != 0.0:
             s = _support(t, self.attack_amp)
             x[s] += self.attack(t[s], n[s])
         return self.saturate(x)
@@ -116,7 +117,7 @@ class Voice:
             tau = self.pitch.integral(t)
         phi = self.phi0 + (2 * math.pi * self.f0) * tau
         wave = np.sin(phi)
-        if self.h2:
+        if self.h2 != 0.0:
             # sin φ + h2 sin 2φ = sin φ (1 + 2 h2 cos φ): no extra zero crossings while h2 ≤ ½.
             wave *= 1.0 + 2.0 * self.h2 * np.cos(phi)
         return self.body_gain * self.body_amp(t) * wave
@@ -124,7 +125,7 @@ class Voice:
     def attack(self, t: NDArray[np.float64], n: NDArray[np.int_]) -> NDArray[np.float64]:
         """Return the attack at times t, sample indices n: the tone and the noise, under their amplitude shape."""
         carrier = np.zeros_like(t)
-        if self.tone_weight:
+        if self.tone_weight != 0.0:
             carrier += self.tone_weight * np.sin((2 * math.pi * self.tone_hz) * t)
         if self.noise is not None:  # computed whenever the attack has noise
             carrier += self.noise_weight * self.noise[n % self.rate]  # the noise repeats every second
@@ -132,7 +133,7 @@ class Voice:
 
     def saturate(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
         """Apply S_α(x) = tanh(αx) / tanh α, odd by construction; the identity when α = 0."""
-        if not self.alpha:
+        if self.alpha == 0.0:
             return x
         norm: float = np.tanh(np.array([self.alpha]))[0]  # the same tanh as below, so S(1) = 1 exactly
         with np.errstate(over="ignore"):

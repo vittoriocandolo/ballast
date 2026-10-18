@@ -57,13 +57,17 @@ def _listing(head: str, e: ValueError) -> CliError:
     return CliError("\n".join([head, *(f"  {m}" for m in problems)]))
 
 
+def _os_error(path: object, e: OSError) -> CliError:
+    """Make an error that names the file, and what the system said about it."""
+    return CliError(f"{path}: {e.strerror or e}")
+
+
 def _open(path: str) -> tuple[str, Patch]:
     """Read a patch file: its text, and its patch."""
     try:
         text = read_text(path)
     except OSError as e:
-        msg = f"{path}: {e.strerror or e}"
-        raise CliError(msg) from None
+        raise _os_error(path, e) from None
     except UnicodeDecodeError:
         msg = f"{path}: not UTF-8 or UTF-16 text"
         raise CliError(msg) from None
@@ -82,8 +86,7 @@ def _emit(text: str, out: str | None) -> None:
     try:
         wav.save(out, text.encode("utf-8"))
     except OSError as e:
-        msg = f"{out}: {e.strerror or e}"
-        raise CliError(msg) from None
+        raise _os_error(out, e) from None
 
 
 def _tuned(p: Patch, note: str, head: str) -> Patch:
@@ -140,8 +143,7 @@ def cmd_render(a: argparse.Namespace) -> None:
     try:
         export(a.out, p, text, audio, bits)
     except OSError as e:
-        msg = f"{a.out}: {e.strerror or e}"
-        raise CliError(msg) from None
+        raise _os_error(a.out, e) from None
     sys.stdout.write(f"wrote {a.out}\n")
 
 
@@ -187,8 +189,7 @@ def cmd_multisample(a: argparse.Namespace) -> None:
         sfz = [f"// {stem}, from {note_name(low)} to {note_name(high)}: one sample per key, at its root", *regions]
         wav.save(folder / f"{stem}.sfz", ("\n".join(sfz) + "\n").encode("utf-8"))
     except OSError as e:
-        msg = f"{e.filename or folder}: {e.strerror or e}"
-        raise CliError(msg) from None
+        raise _os_error(e.filename or folder, e) from None
     sys.stdout.write(f"wrote {len(kicks)} samples and {folder / stem}.sfz\n")
 
 
@@ -208,8 +209,7 @@ def cmd_extract(a: argparse.Namespace) -> None:
     try:
         found = wav.chunks(a.wav)
     except OSError as e:
-        msg = f"{a.wav}: {e.strerror or e}"
-        raise CliError(msg) from None
+        raise _os_error(a.wav, e) from None
     except ValueError as e:
         msg = f"{a.wav}: {e}"
         raise CliError(msg) from None

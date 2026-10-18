@@ -21,6 +21,7 @@ from ballast_synth.cli import main
 
 BAD_INPUT = 2  # the exit status for input the command cannot use
 REFUSED = 1  # the exit status for a refusal or a failure
+INTERRUPTED = 130  # the exit status a shell expects after Ctrl+C
 
 type Run = Callable[..., tuple[int, str, str]]
 
@@ -264,7 +265,7 @@ def test_ctrl_c_stops_quietly_with_status_130(run: Run, monkeypatch: pytest.Monk
 
     monkeypatch.setattr(cli, "render", interrupted)
     run("init", "tight", "-o", "kick.toml")
-    assert run("render", "kick.toml", "-o", "kick.wav") == (130, "", "")
+    assert run("render", "kick.toml", "-o", "kick.wav") == (INTERRUPTED, "", "")
 
 
 def test_multisample_renders_one_sample_per_key_with_an_sfz_map(run: Run, tmp_path: Path) -> None:

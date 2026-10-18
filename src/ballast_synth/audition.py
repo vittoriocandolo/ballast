@@ -36,7 +36,7 @@ import numpy as np
 from scipy.io import wavfile
 
 from .patch import Patch, PatchError, loads, read_text
-from .render import db, render
+from .render import db, render, row
 
 if TYPE_CHECKING:
     import os
@@ -44,7 +44,8 @@ if TYPE_CHECKING:
     import sounddevice
     from numpy.typing import NDArray
 
-GAP_S = 0.5
+GAP_S = 0.5  # the silence between hits without a tempo
+POLL_S = 0.1  # how often the play loop looks at the device and the watched file
 BAR_TOLERANCE_S = 0.001  # how far a bed may be from a whole number of bars
 LAYOUTS = {1: "mono", 2: "stereo"}  # the channel counts a bed may have
 
@@ -94,7 +95,8 @@ def load_bed(path: str | os.PathLike[str], rate: int, bpm: float) -> Bed:
     if bars < 1 or abs(len(frames) - bars * bar) > BAR_TOLERANCE_S * rate:
         msg = f"{path}: {len(frames) / bar:.3f} bars at {bpm:g} bpm; a bed must be a whole number of bars"
         raise AuditionError(msg)
-    sys.stdout.write(f"{'bed':<9}{path}: {bars} bar{'s' if bars > 1 else ''} at {bpm:g} bpm, {LAYOUTS[channels]}\n")
+    summary = f"{path}: {bars} bar{'s' if bars > 1 else ''} at {bpm:g} bpm, {LAYOUTS[channels]}"
+    sys.stdout.write(row("bed", summary) + "\n")
     return Bed(frames.astype(np.float32), 4 * bars)
 
 
@@ -205,7 +207,7 @@ def audition(
     generation = reported = 0
     with _stream(rate, hits):
         while True:
-            time.sleep(0.1)
+            time.sleep(POLL_S)
             if hits.underflows > reported:
                 reported = hits.underflows
                 sys.stdout.write(
@@ -300,7 +302,7 @@ def _stream(rate: int, hits: Hits) -> sounddevice.OutputStream:
             )
         except (sd.PortAudioError, ValueError):
             continue
-        sys.stdout.write(f"{'device':<9}{sd.query_devices(stream.device)['name']}{note}\n")
+        sys.stdout.write(row("device", f"{sd.query_devices(stream.device)['name']}{note}") + "\n")
         return stream
     msg = f"the output device cannot play {rate} Hz; audition never resamples"
     raise AuditionError(msg)

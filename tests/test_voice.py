@@ -11,20 +11,20 @@ import pytest
 from ballast_synth import patch, voice
 from ballast_synth.voice import Voice
 
-RATE = 768000
+INTERNAL = 768000  # the internal rate of the 48 kHz family
 
 
 def test_blocks_never_change_a_sample(tight: patch.Patch, monkeypatch: pytest.MonkeyPatch) -> None:
     """Synthesize in blocks of three sizes, one longer than the kick, and compare every sample."""
-    whole = Voice(tight, RATE).samples()
+    whole = Voice(tight, INTERNAL).samples()
     for block in (999, 4096, 2**17):
         monkeypatch.setattr(voice, "BLOCK", block)
-        assert np.array_equal(Voice(tight, RATE).samples(), whole)
+        assert np.array_equal(Voice(tight, INTERNAL).samples(), whole)
 
 
 def test_a_longer_render_starts_with_the_same_samples(tight: patch.Patch) -> None:
     """Synthesize a shorter run of the same voice, and compare it with the start of the whole."""
-    v = Voice(tight, RATE)
+    v = Voice(tight, INTERNAL)
     whole = v.samples()
     v.count = 10_000
     assert np.array_equal(v.samples(), whole[:10_000])
@@ -32,8 +32,8 @@ def test_a_longer_render_starts_with_the_same_samples(tight: patch.Patch) -> Non
 
 def test_tail_phase_meets_the_free_running_sine_exactly(tight: patch.Patch) -> None:
     """Compare the body from the last pitch knot on with the sine at tune_hz itself, with phase_ref = "tail"."""
-    v = Voice(patch.edit(patch.edit(tight, "body.phase_ref", "tail"), "body.h2", 0.0), RATE)
-    t = np.arange(round(v.pitch.t[-1] * RATE), round(v.body_amp.t[-1] * RATE)) / RATE
+    v = Voice(patch.edit(patch.edit(tight, "body.phase_ref", "tail"), "body.h2", 0.0), INTERNAL)
+    t = np.arange(round(v.pitch.t[-1] * INTERNAL), round(v.body_amp.t[-1] * INTERNAL)) / INTERNAL
     t = t[t >= v.pitch.t[-1]]
     sine = np.sin(v.phi0 + (2 * math.pi * v.f0) * t)
     assert np.array_equal(v.body(t), v.body_gain * v.body_amp(t) * sine)
@@ -41,7 +41,7 @@ def test_tail_phase_meets_the_free_running_sine_exactly(tight: patch.Patch) -> N
 
 def test_onset_phase_starts_at_phase_deg(tight: patch.Patch) -> None:
     """Start the body at a phase of 90 degrees, under an amplitude shape that starts at 0."""
-    v = Voice(patch.edit(tight, "body.phase_deg", 90.0), RATE)
+    v = Voice(patch.edit(tight, "body.phase_deg", 90.0), INTERNAL)
     assert v.body(np.array([0.0]))[0] == 0.0
     assert v.phi0 == math.pi / 2
 
@@ -49,7 +49,7 @@ def test_onset_phase_starts_at_phase_deg(tight: patch.Patch) -> None:
 @pytest.mark.parametrize("db", [1e-6, 3.0, 21.0, 48.0])
 def test_the_saturator_is_odd_and_keeps_full_scale_exactly(tight: patch.Patch, db: float) -> None:
     """Saturate full scale, its negative and silence exactly, and small signals by the drive's gain."""
-    v = Voice(patch.edit(tight, "drive.db", db), RATE)
+    v = Voice(patch.edit(tight, "drive.db", db), INTERNAL)
     x = np.linspace(-2.0, 2.0, 4001)
     assert v.saturate(np.array([1.0, -1.0, 0.0])).tolist() == [1.0, -1.0, 0.0]
     assert np.array_equal(v.saturate(-x), -v.saturate(x))
@@ -59,7 +59,7 @@ def test_the_saturator_is_odd_and_keeps_full_scale_exactly(tight: patch.Patch, d
 
 def test_drive_at_0_db_is_an_exact_bypass(tight: patch.Patch) -> None:
     """Saturate with no drive, and get back the very same array."""
-    v = Voice(patch.edit(tight, "drive.db", 0.0), RATE)
+    v = Voice(patch.edit(tight, "drive.db", 0.0), INTERNAL)
     x = np.random.default_rng(0).standard_normal(1000)
     assert v.saturate(x) is x
 
@@ -96,7 +96,7 @@ def test_sample_count_covers_every_sample_up_to_the_source_length(t_src: float, 
 def test_silent_sources_render_nothing(tight: patch.Patch) -> None:
     """Silence both sources, and synthesize only zeros, without drawing any noise."""
     silent = patch.edit(patch.edit(tight, "body.level_db", -math.inf), "attack.level_db", -math.inf)
-    v = Voice(silent, RATE)
+    v = Voice(silent, INTERNAL)
     assert v.noise is None
     assert not np.any(v.samples())
 
@@ -110,8 +110,8 @@ def test_the_attack_is_pure_tone_or_pure_noise_at_the_ends_of_the_mix(
     noise: bool,
 ) -> None:
     """Synthesize the attack at each end of the mix, as exactly the tone or exactly the noise."""
-    v = Voice(patch.edit(tight, "attack.noise_mix", mix), RATE)
-    t = np.arange(0, round(0.006 * RATE)) / RATE
+    v = Voice(patch.edit(tight, "attack.noise_mix", mix), INTERNAL)
+    t = np.arange(0, round(0.006 * INTERNAL)) / INTERNAL
     attack = v.attack(t, np.arange(t.size))
     assert (v.noise is not None) == noise
     if tone:
@@ -125,5 +125,5 @@ def test_the_attack_is_pure_tone_or_pure_noise_at_the_ends_of_the_mix(
 def test_a_drive_too_small_to_change_the_gain_is_a_bypass(tight: patch.Patch, db: float) -> None:
     """Drive by less than the gain can show, and synthesize exactly what no drive would."""
     assert voice.drive_alpha(db) == 0.0
-    bypass = Voice(patch.edit(tight, "drive.db", 0.0), RATE).samples()
-    assert np.array_equal(Voice(patch.edit(tight, "drive.db", db), RATE).samples(), bypass)
+    bypass = Voice(patch.edit(tight, "drive.db", 0.0), INTERNAL).samples()
+    assert np.array_equal(Voice(patch.edit(tight, "drive.db", db), INTERNAL).samples(), bypass)

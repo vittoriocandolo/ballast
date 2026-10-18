@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 COMPONENTS = 20000
-KEY = b"ballast/noise/v1"
+NOISE_KEY = b"ballast/noise/v1"
 DITHER_KEY = b"ballast/dither/v1"
 
 
@@ -45,7 +45,7 @@ def _shake(key: bytes, seed: int, size: int) -> bytes:
 
 def coefficients(seed: int) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Draw the amplitudes ρ_k and phases θ_k for f_k = 1 … 20000 Hz."""
-    words = np.frombuffer(_shake(KEY, seed, 16 * COMPONENTS), dtype="<u8").reshape(COMPONENTS, 2) >> np.uint64(11)
+    words = np.frombuffer(_shake(NOISE_KEY, seed, 16 * COMPONENTS), dtype="<u8").reshape(COMPONENTS, 2) >> np.uint64(11)
     u = (words[:, 0] + np.uint64(1)).astype(float) * 2.0**-53  # (0, 1]
     v = words[:, 1].astype(float) * 2.0**-53  # [0, 1)
     return np.sqrt(-2.0 * np.log(u)), 2.0 * np.pi * v
