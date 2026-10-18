@@ -68,6 +68,16 @@ Renders to a mono WAV at the patch's sample rate, prints a report and writes
 the file. `--format` is `float32` (the default), `pcm24` or `pcm16`. See
 [Rendering](#rendering-for-daws-and-samplers).
 
+### `ballast multisample PATCH LOW HIGH -o DIR [--format FORMAT]`
+
+Renders the patch at every semitone from `LOW` to `HIGH`, such as `C1 C2`,
+into the folder `DIR`: one WAV per key, named after the patch and the note,
+with its root key set, and an SFZ map that assigns each sample to its key. A
+sampler then plays the patch as an instrument, at every pitch, with the real
+length and character of each note rather than a transposed copy, which is what
+an 808 bassline wants. Every note must be a valid tuning of the patch and fit
+full scale; otherwise nothing is written and every problem is listed.
+
 ### `ballast audition PATCH [--watch] [--bpm BPM] [--with WAV]`
 
 Plays the patch until you press Ctrl+C. `--watch` renders again on every
@@ -85,6 +95,11 @@ Recovers the exact patch text from a WAV that Ballast rendered.
 | 0 | done |
 | 1 | refused or failed: a render over full scale, or an audition that cannot play |
 | 2 | bad input: an invalid patch, a file that cannot be read or written, or bad arguments |
+| 130 | interrupted with Ctrl+C |
+
+Every file Ballast writes is written whole: to a temporary file beside it,
+then renamed over it. A failed or interrupted write leaves the previous file
+as it was, so retuning a patch in place can never destroy it.
 
 Errors go to standard error and name the file and the problem. An invalid
 patch lists every problem with its field path:
@@ -113,9 +128,12 @@ dither can never clip: in `peak` mode the target comes down by that much
 
 ### Levels and overs
 
-`output.mode = "peak"` scales the kick so its highest sample sits at
-`output.db` dBFS. `output.mode = "gain"` applies `output.db` as a plain gain,
-which keeps relative levels between kicks. A gain-mode render over full scale
+`output.mode = "gain"` applies `output.db` as a plain gain, which keeps
+relative levels between kicks. `output.mode = "peak"` scales the kick so its
+highest sample sits at `output.db` dBFS. `output.mode = "true-peak"` scales it
+so its true peak, the peak between samples, sits at `output.db` dBTP, for files
+that must not exceed a level after conversion; the highest sample still stays
+within the format's ceiling. A gain-mode render over full scale
 is never clipped: `ballast render` refuses it, says by how much to lower
 `output.db`, and exits with status 1. `--allow-over` writes it anyway as a
 float file with overs, for a DAW to bring down.
@@ -170,6 +188,8 @@ patch's sample rate.
   new sample rate is reported, and the last valid sound keeps playing. Edits
   saved while a render runs are rendered next, and the stale render is
   dropped.
+- **Dropouts.** If the device ever runs out of samples, for example while a
+  long render keeps the computer busy, audition says so, with a count.
 - **No resampling.** Audition opens the device at the patch's sample rate or
   says it cannot. On Windows it plays through WASAPI, in exclusive mode when
   the shared mixer runs at another rate. On macOS it asks Core Audio to switch
@@ -196,10 +216,14 @@ patch's sample rate.
   Editing the sweep never shifts the tail, and kicks that share a tuning share
   a tail, so layered and edited kicks stay in phase.
 - **Watch the true peak.** For files that must not exceed a level after
-  conversion, read the dBTP figure in the report rather than the sample peak.
-
-Ballast does not high-pass or remove DC: what you design is what you get. The
-presets carry DC between 45 and 62 dB below their RMS level.
+  conversion, use `output.mode = "true-peak"`, or read the dBTP figure in the
+  report rather than the sample peak.
+- **Cut what you cannot hear.** `output.low_cut_hz = 30.0` high-passes the
+  kick at 30 Hz with a 12 dB/octave Butterworth filter, which removes DC and
+  sub-sonic energy. The presets leave it off: they carry DC between 45 and 62
+  dB below their RMS level, and what you design is what you get.
+- **Play it as an instrument.** `ballast multisample bass.toml E1 E2 -o bass`
+  gives an 808 bassline a sample for every note.
 
 ## Python API
 

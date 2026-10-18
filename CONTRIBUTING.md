@@ -9,7 +9,7 @@ obviously correct is not an improvement.
 Ballast uses [uv](https://docs.astral.sh/uv/):
 
 ```
-uv sync --all-extras    # the package in editable mode, audition, pytest and ruff
+uv sync --all-extras    # the package in editable mode, audition, pytest, ruff and mypy
 ```
 
 ## Check a change
@@ -18,6 +18,7 @@ uv sync --all-extras    # the package in editable mode, audition, pytest and ruf
 uv run pytest
 uv run ruff check
 uv run ruff format --check
+uv run mypy
 ```
 
 CI runs the tests on Linux, macOS and Windows with Python 3.11 to 3.14, and
@@ -49,6 +50,20 @@ uv run python docs/build.py
 
 Commit them with the change that alters them, and keep the documentation in
 `docs/` and the README true to the code.
+
+## Releasing
+
+1. Set the version in `pyproject.toml` and `src/ballast/__init__.py`; a test
+   checks that they agree.
+2. Move the changelog's entries under the new version, with the date.
+3. Tag the commit `vX.Y.Z` and push the tag.
+
+The release workflow then checks that the tag matches the version, runs the
+tests, builds the package and publishes it to PyPI as `ballast-synth`, through
+PyPI's trusted publishing: configure this repository and its `pypi`
+environment as a trusted publisher on PyPI once, and no token is needed. The
+name `ballast` on PyPI belongs to another project; the package you import and
+the command stay `ballast`.
 
 ## Commits and pull requests
 

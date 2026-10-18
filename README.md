@@ -33,7 +33,10 @@ Listen to the presets: [tight](docs/audio/tight.wav) ·
 - **Live audition.** Plays the exact render buffer, renders again on every
   save, and loops your bass line under the hits in tempo, without resampling.
 - **Sampler-ready.** The root key sits in the `smpl` chunk; 16- and 24-bit
-  exports use seeded TPDF dither that never clips.
+  exports use seeded TPDF dither that never clips. `ballast multisample`
+  renders one sample per key with an SFZ map, to play an 808 bassline.
+- **Mastering-aware.** Normalize to a sample peak or to a true peak, and
+  high-pass the kick with an optional low cut.
 
 ## Install
 
@@ -55,6 +58,7 @@ ballast init tight --tune F1 -o kick.toml       # a complete patch to start from
 ballast audition kick.toml --watch --bpm 128    # hear every save of kick.toml, on the beat
 ballast render kick.toml -o kick.wav --format pcm24
 ballast extract kick.wav                        # the patch, back out of the file
+ballast multisample kick.toml C1 C2 -o kick     # one sample per key, with an SFZ map
 ```
 
 `ballast render` prints what it made:
@@ -72,11 +76,13 @@ wrote kick.wav
 | Parameter | Value |
 |---|---|
 | Output | mono WAV: float32, or 24- or 16-bit PCM with TPDF dither |
-| Sample rates | 44.1, 48, 88.2 and 96 kHz |
+| Sample rates | 44.1, 48, 88.2, 96, 176.4 and 192 kHz |
 | Internal rate | 16 × the base rate: 705.6 or 768 kHz |
 | Passband | 0–20 kHz within ±0.00002 dB (specified ±0.001 dB) |
 | Stopband | at least 115.7 dB down from half the base rate (specified 110 dB) |
+| Levels | a gain, or a sample or true peak target; nothing is ever clipped |
 | PCM headroom | peaks stay 2 LSB below full scale, so dither never clips |
+| Low cut | optional 12 dB/octave Butterworth high-pass, 10 Hz – 1 kHz |
 | Tuning | 20 Hz – 1 kHz, by frequency or note name; the sweep spans 10 Hz – 20 kHz |
 | Length | body up to 8 s, attack up to 1 s |
 | Render time | tens of milliseconds per kick on a laptop |

@@ -10,7 +10,7 @@ problem with its field path, and never clamps or repairs.
 This is the `tight` preset, drawn above:
 
 ```toml
-schema = 1
+schema = 2
 seed = 1
 
 [body]
@@ -50,8 +50,9 @@ db = 6.0                    # small-signal gain; 0 = bypass
 
 [output]
 sample_rate = 48000
-mode        = "gain"        # "gain" | "peak"
-db          = -6.0          # gain in dB, or peak target in dBFS
+low_cut_hz  = 0.0           # high-pass, 12 dB/oct; 0 = off
+mode        = "gain"        # "gain" | "peak" | "true-peak"
+db          = -6.0          # gain in dB, or peak target
 polarity    = 1
 ```
 
@@ -64,7 +65,7 @@ as Windows PowerShell writes.
 
 | Field | Type | Range | Meaning |
 |---|---|---|---|
-| `schema` | integer | 1 | The patch format. It is checked first: another schema may share nothing else with this one. |
+| `schema` | integer | 1 or 2 | The patch format, checked first: another schema may share nothing else with this one. Schema 2 is current; see [Versions](#versions). |
 | `seed` | integer | 0 – 2⁶³ − 1 | Draws the attack's noise and the PCM dither. The same seed gives the same noise at every sample rate. |
 
 ### `[body]`: the tonal body
@@ -99,9 +100,10 @@ as Windows PowerShell writes.
 
 | Field | Type | Range | Meaning |
 |---|---|---|---|
-| `sample_rate` | integer | 44100, 48000, 88200 or 96000 | The file's sample rate. |
-| `mode` | `"gain"` or `"peak"` | | Apply `db` as a gain, or scale so the highest sample sits at `db` dBFS. |
-| `db` | number | gain −60 – +24 dB; peak target −60 – 0 dBFS | The gain, or the peak target. |
+| `sample_rate` | integer | 44100, 48000, 88200, 96000, 176400 or 192000 | The file's sample rate. |
+| `low_cut_hz` | number | 10 – 1000 Hz, or 0 | The corner of a 12 dB/octave Butterworth high-pass after the drive; 0 turns it off. |
+| `mode` | `"gain"`, `"peak"` or `"true-peak"` | | Apply `db` as a gain, or scale so the highest sample sits at `db` dBFS, or the true peak at `db` dBTP. |
+| `db` | number | gain −60 – +24 dB; peak target −60 – 0 | The gain, or the peak target. In both peak modes the highest sample also stays within the format's ceiling. |
 | `polarity` | integer | 1 or −1 | −1 inverts the output. |
 
 ## Curves
@@ -131,7 +133,7 @@ The parser reports every problem at once, each with its path:
 body.tune_hz: 5000 is outside 20 … 1000
 body.amp[2].ms: is earlier than the previous knot
 attack.noise_mix: expected a number, found a string
-output.sample_rate: expected one of 44100, 48000, 88200, 96000, found 44000
+output.sample_rate: expected one of 44100, 48000, 88200, 96000, 176400, 192000, found 44000
 ```
 
 Unknown fields are refused as well as missing ones, so a typo never passes
@@ -149,6 +151,10 @@ and writing it again gives the same text.
 
 ## Versions
 
-This is schema 1. A patch states its schema, so a later renderer can read it
-as it was meant, and a renderer refuses a schema it does not know rather than
-guess.
+A patch states its schema, so a later renderer can read it as it was meant,
+and a renderer refuses a schema it does not know rather than guess.
+
+- **Schema 2**, the current one, adds `output.low_cut_hz`.
+- **Schema 1** has no low cut. Ballast still reads it, and renders it exactly
+  as it always did; `tune` and `stretch` write it back as schema 2 with
+  `low_cut_hz = 0.0`, which sounds the same.

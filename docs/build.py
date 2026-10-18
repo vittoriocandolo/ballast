@@ -262,9 +262,9 @@ def figure_pipeline() -> str:
     body = [
         '<defs><marker id="pipeline-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" '
         'orient="auto-start-reverse"><path class="head" d="M0,1L10,5L0,9Z"/></marker></defs>',
-        f'<rect class="zone" x="16" y="{top}" width="430" height="196" rx="8"/>',
+        f'<rect class="zone" x="16" y="{top}" width="520" height="196" rx="8"/>',
         f'<text class="label" x="32" y="{top + 22}">16 × the base rate: 705.6 or 768 kHz</text>',
-        f'<text class="label" x="795" y="{top + 22}" text-anchor="middle">at the file\'s sample rate</text>',
+        f'<text class="label" x="834" y="{top + 22}" text-anchor="middle">at the file\'s sample rate</text>',
     ]
 
     def box(x, y, w, title, *lines, h=64):
@@ -277,22 +277,22 @@ def figure_pipeline() -> str:
     def arrow(d):
         return f'<path class="flow" d="{d}" marker-end="url(#pipeline-head)"/>'
 
-    body.append(box(32, top + 36, 172, "Body", ("math", "sin φ + h₂ sin 2φ"), ("label", "pitch curve to phase")))
-    body.append(box(32, top + 116, 172, "Attack", ("math", "tone + noise"), ("label", "seeded, band-limited")))
-    body.append(f'<circle class="box" cx="246" cy="{cy}" r="14"/><text class="boxtitle" x="246" y="{cy + 5}" '
+    body.append(box(32, top + 36, 150, "Body", ("math", "sin φ + h₂ sin 2φ"), ("label", "pitch curve to phase")))
+    body.append(box(32, top + 116, 150, "Attack", ("math", "tone + noise"), ("label", "seeded, band-limited")))
+    body.append(f'<circle class="box" cx="214" cy="{cy}" r="14"/><text class="boxtitle" x="214" y="{cy + 5}" '
                 f'text-anchor="middle">+</text>')  # fmt: skip
-    body.append(arrow(f"M204,{top + 68}C222,{top + 68} 236,{cy - 30} 240,{cy - 15}"))
-    body.append(arrow(f"M204,{top + 148}C222,{top + 148} 236,{cy + 30} 240,{cy + 15}"))
-    body.append(box(282, cy - 32, 148, "Drive", ("math", "tanh(αx) / tanh α"), ("label", "0 dB is exact bypass")))
-    body.append(arrow(f"M260,{cy}H280"))
-    body.append(box(470, cy - 32, 148, "Decimator", ("math", "↓16 or ↓8"), ("label", "frozen FIR, ≥ 110 dB")))
-    body.append(arrow(f"M430,{cy}H468"))
-    body.append(box(646, cy - 32, 132, "Output", ("label", "gain or peak target"), ("label", "polarity")))
-    body.append(arrow(f"M618,{cy}H644"))
-    body.append(box(806, cy - 32, 138, "WAV", ("label", "float32, or PCM"), ("label", "patch text inside")))
-    body.append(arrow(f"M778,{cy}H804"))
-    caption = "minimum phase, so nothing rings before the kick"
-    body.append(f'<text class="label" x="544" y="{cy + 58}" text-anchor="middle">{caption}</text>')
+    body.append(arrow(f"M182,{top + 68}C192,{top + 68} 204,{cy - 30} 208,{cy - 15}"))
+    body.append(arrow(f"M182,{top + 148}C192,{top + 148} 204,{cy + 30} 208,{cy + 15}"))
+    body.append(box(246, cy - 32, 136, "Drive", ("math", "tanh(αx)/tanh α"), ("label", "0 dB: bypass")))
+    body.append(arrow(f"M228,{cy}H244"))
+    body.append(box(402, cy - 32, 118, "Low cut", ("label", "12 dB/octave"), ("label", "0 Hz: off")))
+    body.append(arrow(f"M382,{cy}H400"))
+    body.append(box(566, cy - 32, 128, "Decimator", ("math", "↓16, ↓8 or ↓4"), ("label", "minimum phase")))
+    body.append(arrow(f"M520,{cy}H564"))
+    body.append(box(720, cy - 32, 110, "Output", ("label", "gain or peak"), ("label", "polarity")))
+    body.append(arrow(f"M694,{cy}H718"))
+    body.append(box(850, cy - 32, 98, "WAV", ("label", "float or PCM"), ("label", "patch inside")))
+    body.append(arrow(f"M830,{cy}H848"))
     subtitle = "From the patch's curves to a WAV file"
     return svg(960, top + 220, "Signal flow", subtitle, "".join(body), "Signal flow from patch to WAV")
 

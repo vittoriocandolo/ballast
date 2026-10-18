@@ -17,12 +17,15 @@ The first public release.
 - Frozen minimum-phase decimators for the 44.1 and 48 kHz families, verified
   by checksum: flat to ±0.00002 dB up to 20 kHz and at least 115.7 dB down
   from half the base rate.
-- Patches in TOML (schema 1), with every field required, every problem
-  reported with its field path, and a canonical form.
-- Exports at 44.1, 48, 88.2 and 96 kHz, as float32 or as 24- or 16-bit PCM
-  with seeded TPDF dither, with the root key in a `smpl` chunk and the patch
-  and its provenance in a `blst` chunk.
+- Patches in TOML, with every field required, every problem reported with its
+  field path, and a canonical form. Schema 2 adds an optional 12 dB/octave low
+  cut; schema 1 patches still read and render as before.
+- Exports at 44.1, 48, 88.2, 96, 176.4 and 192 kHz, as float32 or as 24- or
+  16-bit PCM with seeded TPDF dither, normalized to a gain, a sample peak or a
+  true peak, with the root key in a `smpl` chunk and the patch and its
+  provenance in a `blst` chunk. Every file is written whole or not at all.
 - The `ballast` command: `init` from four presets, `tune`, `stretch`,
-  `render`, `audition` with live re-rendering, tempo and a bed, and `extract`.
+  `render`, `multisample` for one sample per key with an SFZ map, `audition`
+  with live re-rendering, tempo, a bed and dropout warnings, and `extract`.
 - Documentation, figures and example sounds generated from the code, and a
   test suite that checks the documented properties on every platform.

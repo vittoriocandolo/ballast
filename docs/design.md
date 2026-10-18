@@ -3,11 +3,11 @@
 Ballast computes one kick as a pure function of time, at 16 times the sample
 rate, and band-limits it once.
 
-    x(t) = b(t) + a(t),    y(t) = S_α(x(t)),    out[m] = p · g · Σ_k h[k] · y((mK − k) / F)
+    x(t) = b(t) + a(t),    y = L(S_α(x)),    out[m] = p · g · Σ_k h[k] · y[mK − k]
 
-Here b is the body, a the attack, S_α the saturator, h the frozen decimator of
-the sample rate's family, F the internal rate, K the decimation factor, g the
-output gain and p the polarity.
+Here b is the body, a the attack, S_α the saturator and L the optional low
+cut, all at the internal rate F; h is the frozen decimator of the sample
+rate's family, K the decimation factor, g the output gain and p the polarity.
 
 ![Signal flow: body and attack are summed into the drive at 16 times the base rate, then decimated, scaled and written to WAV](figures/pipeline.svg)
 
@@ -15,6 +15,7 @@ output gain and p the polarity.
 - [Curves](#curves)
 - [The attack](#the-attack)
 - [The saturator](#the-saturator)
+- [The low cut](#the-low-cut)
 - [Rates and the decimator](#rates-and-the-decimator)
 - [The output stage](#the-output-stage)
 - [Evaluation](#evaluation)
@@ -97,14 +98,30 @@ small-signal gain is `drive.db`. α solves that equation numerically; at 0 dB,
 S is the identity, an exact bypass. It is computed as sign(x) · tanh(α|x|) /
 tanh α, so it is odd by construction.
 
+## The low cut
+
+`output.low_cut_hz` adds a second-order Butterworth high-pass, 12 dB per
+octave with its half-power point at the corner, after the saturator. Ballast
+derives its coefficients in closed form, by the bilinear transform with the
+corner prewarped, rather than calling a filter design routine, so they cannot
+drift with SciPy versions. It filters the internal signal in one causal pass:
+every rate of a family shares the result, and a longer render still never
+changes earlier samples. At 0 the filter is not there at all.
+
+A high-pass shifts the phase of low frequencies, so with `phase_ref = "tail"`
+the tail is the free-running sine before the low cut, and the same sine
+shifted by the filter's constant phase at f₀ after it.
+
 ## Rates and the decimator
 
 | Sample rate | Internal rate F | Factor K | Decimator |
 |---|---|---|---|
 | 44.1 kHz | 705.6 kHz | 16 | 44.1 kHz family, 2593 taps |
 | 88.2 kHz | 705.6 kHz | 8 | 44.1 kHz family, 2593 taps |
+| 176.4 kHz | 705.6 kHz | 4 | 44.1 kHz family, 2593 taps |
 | 48 kHz | 768 kHz | 16 | 48 kHz family, 1447 taps |
 | 96 kHz | 768 kHz | 8 | 48 kHz family, 1447 taps |
+| 192 kHz | 768 kHz | 4 | 48 kHz family, 1447 taps |
 
 Each family has one minimum-phase FIR, frozen and shipped as data with a
 SHA-256 checksum that Ballast verifies before use, so the filter cannot drift
@@ -115,9 +132,11 @@ before it.
 
 ![Magnitude response of both decimators: flat to 20 kHz, at least 110 dB down from half the base rate, with the passband ripple in detail](figures/decimator.svg)
 
-A 96 kHz render uses the same internal signal and filter as the 48 kHz one
-with half the factor, so it is the 48 kHz file with the in-between samples
-filled in, bit for bit; 88.2 kHz relates to 44.1 kHz the same way.
+A 96 or 192 kHz render uses the same internal signal and filter as the 48 kHz
+one with a half or a quarter of the factor, so it is the 48 kHz file with the
+in-between samples filled in, bit for bit; 88.2 and 176.4 kHz relate to
+44.1 kHz the same way. The higher rates therefore carry the same audio band,
+up to 20 kHz, with no new content above it.
 
 The file keeps the whole filter tail: a render is N internal samples, with N
 the number of n such that n / F ≤ T, and out has ⌊(N + L − 2) / K⌋ + 1
@@ -127,15 +146,18 @@ samples for L taps.
 
 In `gain` mode the output is multiplied by 10^(db/20). In `peak` mode it is
 scaled so its highest sample reaches the target, capped at the format's
-ceiling. Then the polarity applies, and the result is converted once to
-float32.
+ceiling. In `true-peak` mode it is scaled so its true peak, estimated with 4×
+oversampling, reaches the target, or its highest sample reaches the ceiling,
+whichever comes first; the estimate is linear, so one scale does it. Then the
+polarity applies, and the result is converted once to float32.
 
 PCM exports have a ceiling 2 LSB below full scale. They add TPDF dither of
 ±1 LSB, the difference of two 32-bit uniforms from SHAKE-256 keyed by
 `ballast/dither/v1` and the seed, and round. A render within the ceiling stays
 within range after dither, and exact zeros stay zero.
 
-Nothing trims, fades, high-passes or removes DC.
+Nothing trims or fades, and only the low cut, when it is on, high-passes or
+removes DC.
 
 ## Evaluation
 
@@ -174,6 +196,9 @@ Audition reuses the renderer and adds three small parts:
   order of their start, so the block size never changes the mix.
 - **Watcher** polls the patch file every 0.1 s and reads it again when its
   size or modification time changes.
+- **The stream callback** fills each block from Hits and counts the device's
+  underflows; the play loop reports them, since the audio thread must never
+  print.
 - **The play loop** renders each new version and polls once more: if the file
   changed during the render, the result is dropped and the newer version
   rendered next. Only a valid render that fits full scale replaces the buffer,
