@@ -70,3 +70,10 @@ is `ballast_synth`; the command stays `ballast`.
 Write commit subjects in the imperative, such as "Add a 24-bit export", with a
 body that explains why. Keep a pull request to one change, with its tests and
 documentation.
+
+## License
+
+Ballast is licensed under the GNU GPL version 3 or later, with the additional
+permission in [NOTICE](NOTICE) for the files it writes. By contributing, you
+agree to license your contribution under the same terms, so that the sounds
+people make with Ballast stay theirs.

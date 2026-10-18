@@ -103,4 +103,10 @@ set up, test and propose a change.
 
 ## License
 
-[MIT](LICENSE)
+Ballast is free software, under the [GNU General Public License](LICENSE),
+version 3 or later.
+
+The sounds you make with it are yours. An additional permission in
+[NOTICE](NOTICE) lets you use the sounds Ballast renders, the patches and SFZ
+maps it writes, and its presets under any terms you choose, in a track or in a
+sample pack you sell.
