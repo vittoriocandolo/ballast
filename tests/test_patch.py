@@ -239,6 +239,8 @@ def test_describe_tuning(hz, text):
         ),
         (lambda raw: raw["body"]["amp"][1].pop("gain"), "body.amp[1].gain: missing"),
         (lambda raw: raw.__setitem__("drive", 6.0), "drive: expected a table, found a float"),
+        (lambda raw: raw.__setitem__("body", None), "body: expected a table, found NoneType"),  # from Python, not TOML
+        (lambda raw: raw.__setitem__("schema", None), "schema: expected an integer, found NoneType"),
         (lambda raw: raw.__setitem__("seed", 1.5), "seed: expected an integer, found a float"),
         (lambda raw: raw.__setitem__("seed", datetime.date(2026, 1, 1)), "seed: expected an integer, found a date"),
     ],

@@ -271,9 +271,9 @@ def from_dict(data) -> Patch:
     if not isinstance(data, dict):
         raise PatchError(["expected a table"])
     # The schema comes first: a newer schema may share nothing else with this one.
-    schema = data.get("schema")
-    if schema is None:
+    if "schema" not in data:
         raise PatchError(["schema: missing"])
+    schema = data["schema"]
     if isinstance(schema, bool) or not isinstance(schema, int):
         raise PatchError([f"schema: expected an integer, found {_kind(schema)}"])
     if schema not in (1, SCHEMA):
@@ -289,9 +289,9 @@ def from_dict(data) -> Patch:
             problems.append(f"seed: {seed} is outside 0 … 2**63 - 1")
     sections: dict[str, dict] = {}
     for name, cls in SECTIONS.items():
-        table = data.get(name)
-        if table is None:
+        if name not in data:  # reported as missing above
             continue
+        table = data[name]
         if not isinstance(table, dict):
             problems.append(f"{name}: expected a table, found {_kind(table)}")
             continue
