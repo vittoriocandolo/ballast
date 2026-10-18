@@ -8,8 +8,10 @@ skip chunks they do not know.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
+import os
 import struct
 
 import numpy as np
@@ -31,6 +33,25 @@ def root_note(hz: float) -> tuple[int, int]:
     p = midi_pitch(hz)
     note = math.floor(p + 0.005)
     return note, round(max(0.0, p - note) * 2**32)
+
+
+def save(path, data: bytes) -> None:
+    """Write `data` to `path` whole or not at all: to a temporary file beside it, then renamed over it.
+
+    A failed or interrupted write leaves the file as it was.
+    """
+    target = os.path.realpath(path)  # through a symbolic link, to the file it names
+    temporary = f"{target}.{os.getpid()}.tmp"
+    try:
+        with open(temporary, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, target)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(temporary)
+        raise
 
 
 def _chunk(cid: bytes, data: bytes) -> bytes:
@@ -56,8 +77,7 @@ def write(path, samples: np.ndarray, rate: int, bits: int | None, root: tuple[in
     chunks += _chunk(b"smpl", struct.pack("<9I", 0, 0, round(1e9 / rate), *root, 0, 0, 0, 0))
     chunks += _chunk(PRIVATE, json.dumps(meta, ensure_ascii=False, indent=1).encode("utf-8"))
     chunks += _chunk(b"data", data)
-    with open(path, "wb") as f:
-        f.write(b"RIFF" + struct.pack("<I", 4 + len(chunks)) + b"WAVE" + chunks)
+    save(path, b"RIFF" + struct.pack("<I", 4 + len(chunks)) + b"WAVE" + chunks)
 
 
 def chunks(path) -> dict[bytes, bytes]:
@@ -67,7 +87,8 @@ def chunks(path) -> dict[bytes, bytes]:
     if len(data) < 12 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
         raise ValueError("not a RIFF WAVE file")
     end = min(8 + struct.unpack_from("<I", data, 4)[0], len(data))
-    found, pos = {}, 12
+    found: dict[bytes, bytes] = {}
+    pos = 12
     while pos + 8 <= end:
         cid, size = data[pos : pos + 4], struct.unpack_from("<I", data, pos + 4)[0]
         found.setdefault(cid, data[pos + 8 : pos + 8 + size])

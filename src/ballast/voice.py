@@ -23,10 +23,10 @@ BLOCK = 2**15
 
 
 def drive_alpha(db: float) -> float:
-    """α with α / tanh α = 10^(db/20): the saturator's small-signal gain. 0 dB is bypass."""
-    if db == 0.0:
-        return 0.0
+    """α with α / tanh α = 10^(db/20): the saturator's small-signal gain. A gain of 1 is bypass."""
     g = 10.0 ** (db / 20.0)
+    if g == 1.0:  # 0 dB, or so little drive that the gain rounds to 1
+        return 0.0
     # x / tanh x lies between x and x + 1, so [g - 1, g] brackets the root.
     return brentq(lambda a: a / math.tanh(a) - g, g - 1.0, g, xtol=1e-300, rtol=4 * np.finfo(float).eps, maxiter=500)
 
@@ -115,6 +115,7 @@ class Voice:
         if self.tone_weight:
             carrier += self.tone_weight * np.sin((2 * math.pi * self.tone_hz) * t)
         if self.noise_weight:
+            assert self.noise is not None  # computed whenever the attack has noise
             carrier += self.noise_weight * self.noise[n % self.rate]  # the noise repeats every second
         return self.attack_gain * self.attack_amp(t) * carrier
 

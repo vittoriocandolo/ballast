@@ -26,6 +26,7 @@ import sys
 import time
 import warnings
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from scipy.io import wavfile
@@ -88,14 +89,18 @@ class Hits:
     """The output: the hits from sample 0 on, and the bed looping under them, mixed block by block."""
 
     def __init__(self, buffer: np.ndarray, rate: int, bpm: float | None = None, bed: Bed | None = None):
+        if bed is not None and bpm is None:
+            raise ValueError("a bed needs a tempo")
         self.buffer = buffer  # what the next hit plays; the main thread replaces it while the stream runs
         self.rate, self.bpm, self.bed = rate, bpm, bed
         self.channels = 1 if bed is None else bed.frames.shape[1]
         self.sounding: list[tuple[int, np.ndarray]] = []  # (start sample, frames × channels) still playing
         self.clock = 0  # the next output sample
         self.next_hit = self.hits = self.loops = 0
+        self.underflows = 0  # how often the device ran out of samples
 
     def loop_start(self, k: int) -> int:
+        assert self.bed is not None and self.bpm is not None
         return beat(k * self.bed.beats, self.rate, self.bpm)
 
     def wait(self) -> float:
@@ -130,7 +135,8 @@ class Watcher:
     """A file's text, read again whenever its size or modification time changes."""
 
     def __init__(self, path, text: str):
-        self.path, self.text, self.stamp = path, text, None
+        self.path, self.text = path, text
+        self.stamp: tuple[int, int] | None = None
 
     def poll(self) -> str | None:
         """The file's new text, or None while its content stays the same."""
@@ -156,7 +162,12 @@ def audition(path, text: str, p: Patch, *, watch: bool = False, bpm: float | Non
     if report.over:
         raise AuditionError(f"over full scale by {report.over_db:.2f} dB: lower output.db to audition it")
     rate = report.sample_rate
-    hits = Hits(audio, rate, bpm, load_bed(bed, rate, bpm) if bed else None)
+    loop = None
+    if bed:
+        if bpm is None:
+            raise AuditionError("a bed needs a tempo, so the hits land on its beats")
+        loop = load_bed(bed, rate, bpm)
+    hits = Hits(audio, rate, bpm, loop)
 
     def play(audio: np.ndarray) -> None:
         hits.buffer = audio
@@ -168,20 +179,23 @@ def audition(path, text: str, p: Patch, *, watch: bool = False, bpm: float | Non
 
     play(audio)
     watcher = Watcher(path, text)
-    generation = 0
-    with _stream(rate, hits.channels, hits.fill):
+    generation = reported = 0
+    with _stream(rate, hits):
         while True:
             time.sleep(0.1)
+            if hits.underflows > reported:
+                reported = hits.underflows
+                print(f"warning: playback dropped out {reported} time(s) so far; the device ran out of samples")
             edit = watcher.poll() if watch else None
             while edit is not None:  # render edits until the file holds still
                 generation += 1
-                message, audio = _rerender(edit, rate, hits)
+                message, update = _rerender(edit, rate, hits)
                 edit = watcher.poll()
                 if edit is not None:
-                    message, audio = "dropped: a newer edit is rendering", None
+                    message, update = "dropped: a newer edit is rendering", None
                 print(f"[{generation}] {message}")
-                if audio is not None:
-                    play(audio)
+                if update is not None:
+                    play(update)
 
 
 def _rerender(text: str, rate: int, hits: Hits) -> tuple[str, np.ndarray | None]:
@@ -202,13 +216,13 @@ def _rerender(text: str, rate: int, hits: Hits) -> tuple[str, np.ndarray | None]
     return message, audio
 
 
-def _stream(rate: int, channels: int, fill):
-    """An output stream at exactly `rate`, at the device's high latency so that renders do not starve it."""
+def _stream(rate: int, hits: Hits):
+    """An output stream for `hits` at exactly `rate`, at the device's high latency so that renders do not starve it."""
     try:
         import sounddevice as sd
     except (ImportError, OSError) as e:
         raise AuditionError(f"audition needs the sounddevice package and PortAudio ({e})") from None
-    choices = [({}, "")]  # stream settings, and what to say about them
+    choices: list[tuple[dict[str, Any], str]] = [({}, "")]  # stream settings, and what to say about them
     if sys.platform == "win32":
         # WASAPI refuses a rate it cannot play: shared mode plays the mixer's rate, exclusive mode
         # any rate the device itself supports, while it silences other applications.
@@ -221,13 +235,15 @@ def _stream(rate: int, channels: int, fill):
         switch = sd.CoreAudioSettings(change_device_parameters=True, fail_if_conversion_required=True)
         choices = [({"extra_settings": switch}, "")]
 
-    def callback(outdata, frames, _time, _status):
-        outdata[:] = fill(frames)
+    def callback(outdata, frames, _time, status):  # on the audio thread: count, never print
+        outdata[:] = hits.fill(frames)
+        if status.output_underflow:
+            hits.underflows += 1
 
     for settings, note in choices:
         try:
             stream = sd.OutputStream(
-                samplerate=rate, channels=channels, dtype="float32", latency="high", callback=callback, **settings
+                samplerate=rate, channels=hits.channels, dtype="float32", latency="high", callback=callback, **settings
             )
         except (sd.PortAudioError, ValueError):
             continue

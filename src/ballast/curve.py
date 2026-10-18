@@ -29,7 +29,8 @@ def _slopes(h: np.ndarray, m: np.ndarray) -> np.ndarray:
     ml, mr, hl, hr = m[:-1], m[1:], h[:-1], h[1:]
     agree = (np.sign(ml) == np.sign(mr)) & (ml != 0) & (mr != 0)
     w1, w2 = 2 * hr + hl, hr + 2 * hl
-    with np.errstate(divide="ignore", invalid="ignore"):
+    # Zero secants divide by zero, and tiny ones overflow, where the mean is unused or rounds to 0.
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
         mean = (w1 + w2) / (w1 / ml + w2 / mr)
     d = np.empty(h.size + 1)
     d[1:-1] = np.where(agree, mean, 0.0)

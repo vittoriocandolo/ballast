@@ -1,13 +1,17 @@
 """The command line: every command, its files, and its errors with their exit statuses."""
 
+import io
+import json
+import struct
 import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
 from scipy.io import wavfile
 
-from ballast import __version__
+from ballast import __version__, patch, wav
 from ballast.cli import main
 
 
@@ -173,3 +177,76 @@ def test_an_audition_ends_cleanly_when_interrupted(run, tmp_path, monkeypatch):
 def test_python_dash_m_runs_the_command_line():
     done = subprocess.run([sys.executable, "-m", "ballast", "--version"], capture_output=True, text=True, check=True)
     assert done.stdout == f"ballast {__version__}\n"
+
+
+def test_extract_reports_a_damaged_or_foreign_patch_chunk(run, tmp_path):
+    run("init", "tight", "-o", "kick.toml")
+    run("render", "kick.toml", "-o", "kick.wav")
+    data = (tmp_path / "kick.wav").read_bytes()
+    start = data.index(b"blst")
+    (tmp_path / "cut.wav").write_bytes(data[: start + 48])
+    assert run("extract", "cut.wav") == (2, "", "cut.wav: the embedded patch is damaged\n")
+    body = b'{"renderer": "something else"}'
+    chunk = b"blst" + len(body).to_bytes(4, "little") + body
+    (tmp_path / "other.wav").write_bytes(b"RIFF" + (4 + len(chunk)).to_bytes(4, "little") + b"WAVE" + chunk)
+    assert run("extract", "other.wav") == (2, "", "other.wav: no embedded patch\n")
+    body = b'{"patch": 5}'
+    chunk = b"blst" + len(body).to_bytes(4, "little") + body
+    (tmp_path / "odd.wav").write_bytes(b"RIFF" + (4 + len(chunk)).to_bytes(4, "little") + b"WAVE" + chunk)
+    assert run("extract", "odd.wav") == (2, "", "odd.wav: the embedded patch is damaged\n")
+
+
+def test_ctrl_c_stops_quietly_with_status_130(run, monkeypatch):
+    from ballast import cli
+
+    def interrupted(*args):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "render", interrupted)
+    run("init", "tight", "-o", "kick.toml")
+    assert run("render", "kick.toml", "-o", "kick.wav") == (130, "", "")
+
+
+def test_multisample_renders_one_sample_per_key_with_an_sfz_map(run, tmp_path):
+    run("init", "long", "-o", "bass.toml")
+    status, out, err = run("multisample", "bass.toml", "E1", "F#1", "-o", "set", "--format", "pcm24")
+    assert (status, err) == (0, "")
+    assert out.splitlines()[-1] == f"wrote 3 samples and {Path('set') / 'bass'}.sfz"
+    for note, key in (("E1", 28), ("F1", 29), ("F#1", 30)):
+        found = wav.chunks(tmp_path / "set" / f"bass-{note}.wav")
+        assert struct.unpack("<9I", found[b"smpl"])[3:5] == (key, wav.root_note(patch.note_hz(key))[1])
+        assert patch.loads(json.loads(found[wav.PRIVATE])["patch"]).body.tune_hz == patch.note_hz(key)
+    assert (tmp_path / "set" / "bass.sfz").read_text().splitlines()[1:] == [
+        "<region> sample=bass-E1.wav key=28",
+        "<region> sample=bass-F1.wav key=29",
+        "<region> sample=bass-F#1.wav key=30",
+    ]
+
+
+def test_multisample_writes_nothing_unless_every_note_works(run, tmp_path, read_preset):
+    run("init", "long", "-o", "bass.toml")
+    status, _, err = run("multisample", "bass.toml", "D0", "E0", "-o", "set")
+    assert status == 2 and err.splitlines()[1:] == [
+        "  D0: body.tune_hz: 18.354 is outside 20 … 1000",
+        "  D#0: body.tune_hz: 19.445 is outside 20 … 1000",
+    ]
+    (tmp_path / "hot.toml").write_text(read_preset("tight").replace("db          = -6.0", "db          = 0.0"))
+    status, _, err = run("multisample", "hot.toml", "A1", "B1", "-o", "set")
+    assert status == 1 and err.startswith("not written: lower output.db; these notes are over the ceiling")
+    assert run("multisample", "bass.toml", "G1", "E1", "-o", "set")[0] == 2
+    assert not (tmp_path / "set").exists()
+
+
+def test_multisample_reports_a_folder_it_cannot_make(run, tmp_path):
+    run("init", "long", "-o", "bass.toml")
+    (tmp_path / "set").write_text("a file, not a folder")
+    status, out, err = run("multisample", "bass.toml", "E1", "F1", "-o", "set")
+    assert (status, out) == (2, "") and err.startswith("set: ")
+
+
+def test_any_standard_output_will_do(capsys, monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    out = io.StringIO()  # not a TextIOWrapper, as when another program embeds Ballast
+    monkeypatch.setattr(sys, "stdout", out)
+    assert main(["init", "tight"]) == 0
+    assert out.getvalue().startswith("schema = 2\n")

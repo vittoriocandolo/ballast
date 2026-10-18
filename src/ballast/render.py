@@ -1,17 +1,18 @@
 """Rendering: rates, the frozen decimators, the output stage and the exported file.
 
-    out[m] = p · g_out · Σ_{k<L} h[k] y[mK − k],    y[n] = y(n / F) for 0 ≤ n < N, else 0
+    out[m] = p · g_out · Σ_{k<L} h[k] y[mK − k],    y = L(y(n / F)) for 0 ≤ n < N, else 0
 
 The internal rate is F = K × base, with base 44.1 or 48 kHz. The 88.2 and
-96 kHz exports reuse their family's F and filter with factor K/2, so a 96 kHz
-file is exactly the 48 kHz file with the in-between samples filled in.
-Nothing trims, fades, high-passes or removes DC, and the whole filter tail
-is kept.
+96 kHz exports reuse their family's F and filter with factor K/2, and 176.4
+and 192 kHz with K/4, so a 96 kHz file is exactly the 48 kHz file with the
+in-between samples filled in. Nothing trims or fades, only the optional low
+cut L high-passes, and the whole filter tail is kept.
 
 The internal signal is computed in blocks aligned to the trigger and
-decimated in parallel chunks. Every sample is a pure function of its time
-and every output one fixed sum, so neither the blocks nor the chunks change
-a value, and a longer render never changes earlier samples.
+decimated in parallel chunks. Every sample is a pure function of its time,
+the low cut one causal pass, and every output one fixed sum, so neither the
+blocks nor the chunks change a value, and a longer render never changes
+earlier samples.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from importlib import resources
 
 import numpy as np
 import scipy
-from scipy.signal import resample_poly, upfirdn
+from scipy.signal import resample_poly, sosfilt, upfirdn
 
 from . import __version__, noise, wav
 from .patch import Output, Patch, describe_tuning
@@ -36,7 +37,7 @@ from .voice import Voice
 
 K = 16
 CHUNK = 2048  # decimator outputs per parallel chunk
-FAMILY = {44100: 44100, 88200: 44100, 48000: 48000, 96000: 48000}
+FAMILY = {44100: 44100, 88200: 44100, 176400: 44100, 48000: 48000, 96000: 48000, 192000: 48000}
 # One frozen minimum-phase FIR per family, shipped as data so the sound cannot drift with SciPy:
 # flat to 0.001 dB up to 20 kHz, at least 110 dB down from base/2, taps summing to exactly 1.
 DECIMATORS = {
@@ -82,22 +83,44 @@ def decimate(taps: np.ndarray, y: np.ndarray, factor: int) -> np.ndarray:
     return np.concatenate(list(POOL.map(chunk, range(0, n_out, CHUNK))))
 
 
+def low_cut(hz: float, rate: int) -> np.ndarray:
+    """A second-order Butterworth high-pass at `hz`, by the bilinear transform, as one section for sosfilt.
+
+    The coefficients are computed here in closed form, so they cannot drift with SciPy's filter design.
+    """
+    k = math.tan(math.pi * hz / rate)
+    norm = 1 + math.sqrt(2) * k + k * k
+    return np.array(
+        [[1 / norm, -2 / norm, 1 / norm, 1.0, 2 * (k * k - 1) / norm, (1 - math.sqrt(2) * k + k * k) / norm]]
+    )
+
+
 def synthesize(p: Patch) -> np.ndarray:
-    """The decimated signal at unity gain: everything before the output stage."""
+    """The decimated signal at unity gain: everything before the output stage.
+
+    The low cut filters the internal signal, so every rate of a family still shares it.
+    """
     base, rate, factor = rates(p.output.sample_rate)
-    return decimate(decimator(base), Voice(p, rate).samples(), factor)
+    y = Voice(p, rate).samples()
+    if p.output.low_cut_hz:
+        y = sosfilt(low_cut(p.output.low_cut_hz, rate), y)
+    return decimate(decimator(base), y, factor)
 
 
 def output_stage(out: np.ndarray, o: Output, top: float) -> np.ndarray:
-    """Output gain or peak normalization, then polarity, then one conversion to float32.
+    """Output gain or normalization to a sample or true peak, then polarity, then one conversion to float32.
 
-    `top` is the format's ceiling: a peak target never goes above it.
+    `top` is the format's ceiling: in either peak mode, the highest sample never goes above it.
     """
+    peak = float(np.max(np.abs(out), initial=0.0))
     if o.mode == "gain":
         scaled = out * 10.0 ** (o.db / 20.0)
-    else:
-        peak = float(np.max(np.abs(out), initial=0.0))
-        scaled = out * (min(10.0 ** (o.db / 20.0), top) / peak) if peak > 0 else out.copy()
+    elif peak == 0:
+        scaled = out.copy()
+    elif o.mode == "peak":
+        scaled = out * (min(10.0 ** (o.db / 20.0), top) / peak)
+    else:  # true-peak: the estimate is linear, so scaling the signal scales it alike
+        scaled = out * min(10.0 ** (o.db / 20.0) / true_peak(out), top / peak)
     if o.polarity < 0:
         scaled = -scaled
     return scaled.astype(np.float32)

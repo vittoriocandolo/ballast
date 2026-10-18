@@ -9,7 +9,7 @@ import pytest
 from ballast import patch
 from ballast.patch import PatchError
 
-RATES = "44100, 48000, 88200, 96000"
+RATES = "44100, 48000, 88200, 96000, 176400, 192000"
 
 
 def problems(data) -> list[str]:
@@ -31,7 +31,9 @@ def test_canonical_text_reads_back_to_the_same_patch(tight):
     [
         ("body.tune_hz", 19.0, "body.tune_hz: 19 is outside 20 … 1000"),
         ("body.tune_hz", "50", "body.tune_hz: expected a number, found a string"),
-        ("body.level_db", math.inf, "body.level_db: must be finite (or -inf for silence)"),
+        ("body.level_db", math.inf, "body.level_db: must be finite (or -inf)"),
+        ("body.level_db", 30.0, "body.level_db: 30 is outside -60 … 24 (or -inf)"),
+        ("output.low_cut_hz", 5.0, "output.low_cut_hz: 5 is outside 10 … 1000 (or 0)"),
         ("body.h2", 0.6, "body.h2: 0.6 is outside 0 … 0.5"),
         ("body.phase_deg", 360.0, "body.phase_deg: 360 is outside 0 … 360 (exclusive)"),
         ("body.phase_ref", "end", "body.phase_ref: expected one of 'onset', 'tail', found 'end'"),
@@ -121,7 +123,7 @@ def test_every_problem_is_reported_at_once_with_its_path(raw):
     [
         (None, "schema: missing"),
         ("1", "schema: expected an integer, found a string"),
-        (2, "schema: unsupported version 2; this renderer reads schema 1"),
+        (3, "schema: unsupported version 3; this renderer reads schemas 1 and 2"),
     ],
 )
 def test_the_schema_is_checked_first(raw, schema, message):
@@ -259,3 +261,41 @@ def test_only_a_table_can_be_a_patch():
 def test_the_seed_is_required(raw):
     del raw["seed"]
     assert problems(raw) == ["seed: missing"]
+
+
+def test_a_missing_field_does_not_hide_the_problems_of_the_others(raw):
+    del raw["body"]["h2"]
+    raw["body"]["tune_hz"] = 5000.0
+    assert problems(raw) == ["body.h2: missing", "body.tune_hz: 5000 is outside 20 … 1000"]
+
+
+def test_every_malformed_knot_is_reported(raw):
+    del raw["body"]["amp"][1]["gain"]
+    raw["body"]["amp"][3] = 1.0
+    assert problems(raw) == ["body.amp[1].gain: missing", "body.amp[3]: expected a { ms, gain } table, found a float"]
+
+
+def test_schema_1_patches_still_read_and_have_no_low_cut(raw):
+    raw["schema"] = 1
+    del raw["output"]["low_cut_hz"]
+    old = patch.from_dict(raw)
+    assert old.output.low_cut_hz == 0.0
+    assert patch.dumps(old).startswith("schema = 2\n")  # rewritten as the current schema, sounding the same
+    raw["output"]["low_cut_hz"] = 30.0
+    assert problems(raw) == ["output.low_cut_hz: unknown field"]
+
+
+def test_schema_2_requires_the_low_cut(raw):
+    del raw["output"]["low_cut_hz"]
+    assert problems(raw) == ["output.low_cut_hz: missing"]
+
+
+def test_a_true_peak_target_cannot_exceed_full_scale(raw):
+    raw["output"].update(mode="true-peak", db=0.1)
+    assert problems(raw) == ["output.db: 0.1 is outside -60 … 0"]
+
+
+def test_notes_by_number():
+    assert [patch.note_name(n) for n in (0, 24, 61, 69)] == ["C-1", "C1", "C#4", "A4"]
+    assert [patch.note_number(s) for s in ("C1", "c#1", "Db1", "B-1", "H1")] == [24, 25, 25, 11, None]
+    assert patch.note_hz(69) == 440.0 and patch.note_hz(24) == 32.703

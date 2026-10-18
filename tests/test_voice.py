@@ -99,3 +99,10 @@ def test_the_attack_is_pure_tone_or_pure_noise_at_the_ends_of_the_mix(tight, mix
         assert np.array_equal(attack, v.attack_gain * v.attack_amp(t) * np.sin((2 * math.pi * v.tone_hz) * t))
     else:
         assert np.array_equal(attack, v.attack_gain * v.attack_amp(t) * v.noise[: t.size])
+
+
+@pytest.mark.parametrize("db", [5e-324, 1e-300, 1e-16])
+def test_a_drive_too_small_to_change_the_gain_is_a_bypass(tight, db):
+    assert voice.drive_alpha(db) == 0.0
+    bypass = Voice(patch.edit(tight, "drive.db", 0.0), RATE).samples()
+    assert np.array_equal(Voice(patch.edit(tight, "drive.db", db), RATE).samples(), bypass)

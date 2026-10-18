@@ -1,5 +1,7 @@
 """Monotone cubic Hermite curves: through their knots, monotone between them, with exact integrals."""
 
+import warnings
+
 import numpy as np
 import pytest
 from scipy.interpolate import PchipInterpolator
@@ -61,3 +63,10 @@ def test_two_knots_make_a_straight_line():
     c = Curve([0.0, 2.0], [1.0, 3.0])
     assert np.allclose(c(np.linspace(0, 2, 9)), np.linspace(1, 3, 9))
     assert c.total == 4.0
+
+
+def test_tiny_values_raise_no_warnings():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        c = Curve([0.0, 0.001, 0.002, 0.003, 0.004], [0.0, 1e-310, 1.0, 1e-310, 0.0], first=0.0, last=0.0)
+        assert np.all(np.isfinite(c.d)) and np.all(np.isfinite(c(np.linspace(0, 0.004, 101))))

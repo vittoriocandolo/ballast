@@ -1,6 +1,7 @@
 """The WAV files: float32 or PCM that other readers agree on, the root note, and the embedded patch."""
 
 import json
+import os
 import struct
 
 import numpy as np
@@ -67,3 +68,19 @@ def test_chunks_refuses_what_is_not_riff_wave(tmp_path):
     (tmp_path / "x.wav").write_bytes(b"not a wave file")
     with pytest.raises(ValueError, match="not a RIFF WAVE file"):
         wav.chunks(tmp_path / "x.wav")
+
+
+def test_save_replaces_a_file_whole_or_not_at_all(tmp_path, monkeypatch):
+    path = tmp_path / "kick.toml"
+    path.write_bytes(b"the old patch")
+    wav.save(path, b"the new patch")
+    assert path.read_bytes() == b"the new patch"
+
+    def interrupted(src, dst):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(os, "replace", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        wav.save(path, b"a patch that never lands")
+    assert path.read_bytes() == b"the new patch"
+    assert [p.name for p in tmp_path.iterdir()] == ["kick.toml"]  # and no temporary file is left

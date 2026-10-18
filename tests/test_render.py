@@ -4,7 +4,7 @@ import math
 
 import numpy as np
 import pytest
-from scipy.signal import upfirdn
+from scipy.signal import sosfreqz, upfirdn
 
 from ballast import patch, render
 
@@ -50,11 +50,12 @@ def test_decimation_is_causal():
     assert np.array_equal(part[:n], whole[:n])
 
 
-@pytest.mark.parametrize(("base", "high"), [(44100, 88200), (48000, 96000)])
-def test_a_high_rate_render_fills_in_between_the_base_rate_samples(tight, base, high):
-    low, _ = render.render(with_output(tight, sample_rate=base))
-    double, _ = render.render(with_output(tight, sample_rate=high))
-    assert np.array_equal(double[::2][: low.size], low)
+@pytest.mark.parametrize(("base", "high"), [(44100, 88200), (44100, 176400), (48000, 96000), (48000, 192000)])
+@pytest.mark.parametrize("low_cut", [0.0, 30.0])
+def test_a_high_rate_render_fills_in_between_the_base_rate_samples(tight, base, high, low_cut):
+    low, _ = render.render(with_output(tight, sample_rate=base, low_cut_hz=low_cut))
+    more, _ = render.render(with_output(tight, sample_rate=high, low_cut_hz=low_cut))
+    assert np.array_equal(more[:: high // base][: low.size], low)
 
 
 @pytest.mark.parametrize("db", [0.0, -0.3, -12.0])
@@ -104,7 +105,36 @@ def test_the_report(tight):
     assert report.true_peak >= report.peak
 
 
-def test_silence_renders_and_says_so(tight):
+@pytest.mark.parametrize("mode", ["gain", "peak", "true-peak"])
+def test_silence_renders_and_says_so(tight, mode):
     silent = patch.edit(patch.edit(tight, "body.level_db", -math.inf), "attack.level_db", -math.inf)
-    audio, report = render.render(silent)
+    audio, report = render.render(with_output(silent, mode=mode, db=-1.0))
     assert not np.any(audio) and "silent" in str(report)
+
+
+@pytest.mark.parametrize(("db", "bits"), [(-1.0, None), (-0.1, None), (0.0, 16), (0.0, 24)])
+def test_true_peak_mode_reaches_its_target_within_the_pcm_ceiling(tight, db, bits):
+    audio, report = render.render(with_output(tight, mode="true-peak", db=db), bits)
+    assert report.true_peak <= 10 ** (db / 20) * (1 + 1e-6)
+    assert report.peak <= report.ceiling
+    hit_target = abs(20 * math.log10(report.true_peak) - db) < 1e-4
+    hit_ceiling = report.peak == pytest.approx(report.ceiling, rel=2**-24)
+    assert hit_target or hit_ceiling  # one of the two limits binds
+
+
+@pytest.mark.parametrize("hz", [10.0, 30.0, 1000.0])
+def test_the_low_cut_is_a_12_db_per_octave_butterworth_high_pass(hz):
+    rate = 768000
+    f, h = sosfreqz(render.low_cut(hz, rate), worN=[hz / 10, hz, hz * 10, 20000.0], fs=rate)
+    gain = 20 * np.log10(np.abs(h))
+    assert gain[1] == pytest.approx(-3.0103, abs=1e-3)  # half power at the corner
+    assert gain[0] == pytest.approx(-40.0, abs=0.1)  # a decade below: 40 dB down
+    assert abs(gain[2]) < 0.001 and abs(gain[3]) < 0.001  # flat from a decade above
+
+
+def test_the_low_cut_removes_dc_and_off_changes_nothing(tight):
+    plain, _ = render.render(tight)
+    cut, _ = render.render(with_output(tight, low_cut_hz=40.0))
+    assert abs(np.mean(cut)) < abs(np.mean(plain)) / 20
+    zero = patch.edit(tight, "output.low_cut_hz", 0.0)
+    assert np.array_equal(render.render(zero)[0], plain)

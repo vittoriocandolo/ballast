@@ -118,9 +118,11 @@ class FakeOutputStream:
             raise PortAudioError("Invalid sample rate")
         self.device, self.channels, self.callback = 0, channels, callback
 
+    status = types.SimpleNamespace(output_underflow=False)
+
     def __enter__(self):
         self.block = np.zeros((256, self.channels), np.float32)
-        self.callback(self.block, 256, None, None)
+        self.callback(self.block, 256, None, FakeOutputStream.status)
         FakeOutputStream.played = self.block
         return self
 
@@ -144,6 +146,7 @@ def device(monkeypatch):
         CoreAudioSettings=lambda **flags: ("coreaudio", flags),
     )
     FakeOutputStream.opened.clear()
+    monkeypatch.setattr(FakeOutputStream, "status", types.SimpleNamespace(output_underflow=False))
     monkeypatch.setitem(sys.modules, "sounddevice", sd)
     monkeypatch.setattr(sys, "platform", "linux")
     return sd
@@ -207,7 +210,7 @@ def test_audition_refuses_a_rate_the_device_cannot_play(tight, device):
 
 def test_windows_falls_back_to_exclusive_wasapi_for_a_rate_the_mixer_does_not_run_at(device, monkeypatch, capsys):
     monkeypatch.setattr(sys, "platform", "win32")
-    audition._stream(96000, 1, lambda frames: None)
+    audition._stream(96000, Hits(np.zeros(1, np.float32), 96000))
     shared, exclusive = FakeOutputStream.opened  # shared mode refused the rate
     assert shared["device"] == 3 and "extra_settings" not in shared
     assert exclusive["device"] == 3 and exclusive["extra_settings"] == ("wasapi", True)
@@ -216,7 +219,7 @@ def test_windows_falls_back_to_exclusive_wasapi_for_a_rate_the_mixer_does_not_ru
 
 def test_macos_asks_core_audio_to_switch_the_device_rate_or_fail(device, monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
-    audition._stream(96000, 1, lambda frames: None)
+    audition._stream(96000, Hits(np.zeros(1, np.float32), 96000))
     flags = FakeOutputStream.opened[-1]["extra_settings"][1]
     assert flags == {"change_device_parameters": True, "fail_if_conversion_required": True}
 
@@ -224,7 +227,7 @@ def test_macos_asks_core_audio_to_switch_the_device_rate_or_fail(device, monkeyp
 def test_audition_without_sounddevice_says_what_it_needs(monkeypatch):
     monkeypatch.setitem(sys.modules, "sounddevice", None)  # import fails
     with pytest.raises(AuditionError, match="audition needs the sounddevice package and PortAudio"):
-        audition._stream(48000, 1, lambda frames: None)
+        audition._stream(48000, Hits(np.zeros(1, np.float32), 48000))
 
 
 def test_a_failed_render_keeps_the_last_buffer_playing(tight_text, monkeypatch):
@@ -248,7 +251,7 @@ def test_load_bed_refuses_what_is_not_a_wav(tmp_path):
 def test_windows_without_wasapi_uses_the_default_device(device, monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     device.query_hostapis = lambda: [{"name": "MME", "default_output_device": 0}]
-    audition._stream(48000, 1, lambda frames: None)
+    audition._stream(48000, Hits(np.zeros(1, np.float32), 48000))
     assert FakeOutputStream.opened == [{"samplerate": 48000}]
 
 
@@ -268,3 +271,24 @@ def test_a_bed_that_would_clip_under_the_hits_gets_a_warning(
     assert ("warning: the hits over the bed peak at +3.0 dBFS, which the device will clip" in out) == warned
     played = FakeOutputStream.played
     assert played.shape == (256, 2) and played[0, 0] == np.float32(level)  # the bed, from sample 0
+
+
+def test_dropouts_are_reported_from_the_play_loop(tight, device, monkeypatch, capsys):
+    monkeypatch.setattr(FakeOutputStream, "status", types.SimpleNamespace(output_underflow=True))
+    ticks = iter([None])
+
+    def sleep(_):
+        if next(ticks, KeyboardInterrupt) is KeyboardInterrupt:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(audition.time, "sleep", sleep)
+    with pytest.raises(KeyboardInterrupt):
+        audition.audition("kick.toml", "", tight)
+    assert "warning: playback dropped out 1 time(s) so far; the device ran out of samples" in capsys.readouterr().out
+
+
+def test_a_bed_needs_a_tempo(tmp_path, tight, device):
+    with pytest.raises(ValueError, match="a bed needs a tempo"):
+        Hits(np.zeros(1, np.float32), RATE, None, Bed(np.zeros((10, 1), np.float32), 4))
+    with pytest.raises(AuditionError, match="a bed needs a tempo"):
+        audition.audition("kick.toml", "", tight, bed=str(tmp_path / "bed.wav"))

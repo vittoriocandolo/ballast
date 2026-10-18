@@ -20,12 +20,13 @@ from dataclasses import dataclass, field, fields
 from decimal import Decimal
 from pathlib import Path
 
-SCHEMA = 1
-SAMPLE_RATES = (44100, 48000, 88200, 96000)
+SCHEMA = 2  # schema 1 had no output.low_cut_hz; its patches still render as they did
+SAMPLE_RATES = (44100, 48000, 88200, 96000, 176400, 192000)
 MAX_BODY_MS = 8000.0
 MAX_ATTACK_MS = 1000.0
 MIN_SPACING_MS = Decimal("0.01")  # 10 µs, compared on the decimal values as written
 MAX_SEED = 2**63 - 1
+PEAK_MODES = ("peak", "true-peak")  # the modes whose `db` is a target at or below full scale
 
 
 class PatchError(ValueError):
@@ -61,8 +62,11 @@ def _keys(problems, prefix, table, expected) -> bool:
     return not missing
 
 
-def _number(path, v, problems, lo=None, hi=None, *, below=False, silence=False):
-    """A finite float in lo … hi, or below hi; with `silence`, -inf as well. None if invalid."""
+def _number(path, v, problems, lo=None, hi=None, *, below=False, off=None):
+    """A finite float in lo … hi, or below hi; or `off`, a value outside them that turns the field off.
+
+    None if invalid.
+    """
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         problems.append(f"{path}: expected a number, found {_kind(v)}")
         return None
@@ -71,13 +75,14 @@ def _number(path, v, problems, lo=None, hi=None, *, below=False, silence=False):
     except OverflowError:
         problems.append(f"{path}: is too large")
         return None
-    if silence and x == -math.inf:
+    if x == off:
         return x
+    or_off = "" if off is None else f" (or {off:g})"
     if not math.isfinite(x):
-        problems.append(f"{path}: must be finite" + (" (or -inf for silence)" if silence else ""))
+        problems.append(f"{path}: must be finite{or_off}")
         return None
     if lo is not None and (x < lo or (x >= hi if below else x > hi)):
-        problems.append(f"{path}: {x:g} is outside {lo:g} … {hi:g}" + (" (exclusive)" if below else ""))
+        problems.append(f"{path}: {x:g} is outside {lo:g} … {hi:g}" + (" (exclusive)" if below else "") + or_off)
         return None
     return x
 
@@ -101,11 +106,11 @@ def _rule(parse, note="", key=None):
     return field(metadata={"parse": parse, "note": note, "key": key})
 
 
-def number(lo, hi, note="", *, below=False, silence=False):
-    """A number in lo … hi; `hi` may be a function of the fields before it."""
+def number(lo, hi, note="", *, below=False, off=None):
+    """A number in lo … hi, or `off`; `hi` may be a function of the fields before it."""
 
     def parse(path, v, problems, section):
-        return _number(path, v, problems, lo, hi(section) if callable(hi) else hi, below=below, silence=silence)
+        return _number(path, v, problems, lo, hi(section) if callable(hi) else hi, below=below, off=off)
 
     return _rule(parse, note)
 
@@ -146,12 +151,15 @@ def knots(key, count, max_ms, check, note=""):
         if not isinstance(raw, list):
             problems.append(f"{path}: expected an array of {{ ms, {key} }} tables, found {_kind(raw)}")
             return None
+        malformed = False
         for i, knot in enumerate(raw):
             if not isinstance(knot, dict):
                 problems.append(f"{path}[{i}]: expected a {{ ms, {key} }} table, found {_kind(knot)}")
-                return None
-            if not _keys(problems, f"{path}[{i}].", knot, ("ms", key)):
-                return None
+                malformed = True
+            elif not _keys(problems, f"{path}[{i}].", knot, ("ms", key)):
+                malformed = True
+        if malformed:
+            return None
         counted = count[0] <= len(raw) <= count[1]
         if not counted:
             problems.append(f"{path}: needs {count[0]} to {count[1]} knots, found {len(raw)}")
@@ -209,7 +217,7 @@ def _shape(path, pairs, problems, section):
 @dataclass(frozen=True)
 class Body:
     tune_hz: float = number(20.0, 1000.0)
-    level_db: float = number(-60.0, 24.0, silence=True)
+    level_db: float = number(-60.0, 24.0, off=-math.inf)
     h2: float = number(0.0, 0.5, "second harmonic, 0 … 0.5")
     phase_deg: float = number(0.0, 360.0, below=True)
     phase_ref: str = choice(("onset", "tail"), '"onset" | "tail"')
@@ -219,7 +227,7 @@ class Body:
 
 @dataclass(frozen=True)
 class Attack:
-    level_db: float = number(-60.0, 24.0, silence=True)
+    level_db: float = number(-60.0, 24.0, off=-math.inf)
     tone_hz: float = number(20.0, 20000.0)
     noise_mix: float = number(0.0, 1.0, "0 = tone … 1 = noise")
     noise_band_hz: tuple = band(20.0, 20000.0)
@@ -234,8 +242,9 @@ class Drive:
 @dataclass(frozen=True)
 class Output:
     sample_rate: int = choice(SAMPLE_RATES)
-    mode: str = choice(("gain", "peak"), '"gain" | "peak"')
-    db: float = number(-60.0, lambda o: 0.0 if o["mode"] == "peak" else 24.0, "gain in dB, or peak target in dBFS")
+    low_cut_hz: float = number(10.0, 1000.0, "high-pass, 12 dB/oct; 0 = off", off=0.0)
+    mode: str = choice(("gain", "peak", "true-peak"), '"gain" | "peak" | "true-peak"')
+    db: float = number(-60.0, lambda o: 0.0 if o["mode"] in PEAK_MODES else 24.0, "gain in dB, or peak target")
     polarity: int = choice((1, -1))
 
 
@@ -267,8 +276,9 @@ def from_dict(data) -> Patch:
         raise PatchError(["schema: missing"])
     if isinstance(schema, bool) or not isinstance(schema, int):
         raise PatchError([f"schema: expected an integer, found {_kind(schema)}"])
-    if schema != SCHEMA:
-        raise PatchError([f"schema: unsupported version {schema}; this renderer reads schema {SCHEMA}"])
+    if schema not in (1, SCHEMA):
+        raise PatchError([f"schema: unsupported version {schema}; this renderer reads schemas 1 and {SCHEMA}"])
+    added = {"output": {"low_cut_hz": 0.0}} if schema == 1 else {}  # schema 1 had no low cut
     problems: list[str] = []
     _keys(problems, "", data, ("schema", "seed", *SECTIONS))
     seed = data.get("seed")
@@ -277,7 +287,7 @@ def from_dict(data) -> Patch:
             problems.append(f"seed: expected an integer, found {_kind(seed)}")
         elif not 0 <= seed <= MAX_SEED:
             problems.append(f"seed: {seed} is outside 0 … 2**63 - 1")
-    sections = {}
+    sections: dict[str, dict] = {}
     for name, cls in SECTIONS.items():
         table = data.get(name)
         if table is None:
@@ -285,19 +295,21 @@ def from_dict(data) -> Patch:
         if not isinstance(table, dict):
             problems.append(f"{name}: expected a table, found {_kind(table)}")
             continue
-        rules = {f.name: f.metadata["parse"] for f in fields(cls)}
-        if _keys(problems, f"{name}.", table, rules):
-            values = sections[name] = {}
-            for key, parse in rules.items():
-                values[key] = parse(f"{name}.{key}", table[key], problems, values)
+        new = added.get(name, {})
+        rules = {f.name: f.metadata["parse"] for f in fields(cls) if f.name not in new}
+        _keys(problems, f"{name}.", table, rules)
+        values = sections[name] = {}
+        for key, parse in rules.items():  # a missing field does not hide the problems of the others
+            values[key] = parse(f"{name}.{key}", table[key], problems, values) if key in table else None
+        values.update(new)
     if problems:
         raise PatchError(problems)
-    return Patch(seed, **{name: SECTIONS[name](**values) for name, values in sections.items()})
+    return Patch(data["seed"], **{name: SECTIONS[name](**values) for name, values in sections.items()})
 
 
 def to_dict(p: Patch) -> dict:
     """The plain data that TOML parses to, so that from_dict(to_dict(p)) == p."""
-    data = {"schema": SCHEMA, "seed": p.seed}
+    data: dict = {"schema": SCHEMA, "seed": p.seed}
     for name, cls in SECTIONS.items():
         section = getattr(p, name)
         data[name] = {f.name: _plain(getattr(section, f.name), f.metadata["key"]) for f in fields(cls)}
@@ -384,20 +396,37 @@ def midi_pitch(hz: float) -> float:
     return 69.0 + 12.0 * math.log2(hz / 440.0)
 
 
+def note_name(n: int) -> str:
+    """The name of MIDI note n, such as 'F#1'."""
+    return f"{_NOTES[n % 12]}{n // 12 - 1}"
+
+
+def note_number(text: str) -> int | None:
+    """The MIDI number of a note name such as F1, C#2 or Db2, or None."""
+    m = re.fullmatch(r"([A-Ga-g])([#b]?)(-?\d+)", text.strip())
+    if m is None:
+        return None
+    return _NOTES.index(m[1].upper()) + {"#": 1, "b": -1, "": 0}[m[2]] + 12 * (int(m[3]) + 1)
+
+
+def note_hz(n: int) -> float:
+    """The equal-tempered frequency of MIDI note n, A4 = 440 Hz, rounded to 3 decimals as a patch writes it."""
+    return round(440.0 * 2.0 ** ((n - 69) / 12), 3)
+
+
 def describe_tuning(hz: float) -> str:
     """For example 'G1 +35.3 cents'."""
     p = midi_pitch(hz)
     n = round(p)
     cents = round(100 * (p - n), 1) + 0.0  # + 0.0 turns -0.0 into 0.0
-    return f"{_NOTES[n % 12]}{n // 12 - 1} {cents:+.1f} cents"
+    return f"{note_name(n)} {cents:+.1f} cents"
 
 
 def parse_tune(text: str) -> float:
     """A note name such as F1, C#2 or Db2 (Hz rounded to 3 decimals), or a frequency in Hz."""
-    m = re.fullmatch(r"([A-Ga-g])([#b]?)(-?\d+)", text.strip())
-    if m:
-        midi = _NOTES.index(m[1].upper()) + {"#": 1, "b": -1, "": 0}[m[2]] + 12 * (int(m[3]) + 1)
-        return round(440.0 * 2.0 ** ((midi - 69) / 12), 3)
+    n = note_number(text)
+    if n is not None:
+        return note_hz(n)
     try:
         return float(text)
     except ValueError:

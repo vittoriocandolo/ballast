@@ -1,4 +1,4 @@
-schema = 1
+schema = 2
 seed = 1
 
 [body]
@@ -38,6 +38,7 @@ db = 21.0                   # small-signal gain; 0 = bypass
 
 [output]
 sample_rate = 48000
-mode        = "gain"        # "gain" | "peak"
-db          = -9.0          # gain in dB, or peak target in dBFS
+low_cut_hz  = 0.0           # high-pass, 12 dB/oct; 0 = off
+mode        = "gain"        # "gain" | "peak" | "true-peak"
+db          = -9.0          # gain in dB, or peak target
 polarity    = 1
