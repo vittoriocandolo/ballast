@@ -3,7 +3,7 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ballast"
+name = "ballast-synth"  # "ballast" is taken on PyPI; the package and the command are still ballast
 version = "0.1.0"
 description = "A kick drum synthesizer that renders a text patch to an alias-free, sampler-ready WAV"
 readme = "README.md"
@@ -33,7 +33,14 @@ audition = ["sounddevice>=0.4"]
 ballast = "ballast.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["mypy>=1.10", "pytest>=8", "ruff>=0.6"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ballast"]
+
+[tool.mypy]
+files = ["src"]
+ignore_missing_imports = true  # SciPy and sounddevice ship no type information
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

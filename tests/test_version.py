@@ -6,4 +6,4 @@ import ballast
 
 
 def test_the_version_is_declared_once():
-    assert ballast.__version__ == version("ballast")
+    assert ballast.__version__ == version("ballast-synth")
