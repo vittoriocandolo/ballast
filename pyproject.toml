@@ -3,7 +3,7 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ballast-synth"  # "ballast" is taken on PyPI; the command is still ballast
+name = "ballast-synth"  # the command is still ballast
 version = "0.1.0"
 description = "A kick drum synthesizer that renders a text patch to an alias-free, sampler-ready WAV"
 readme = "README.md"
@@ -11,7 +11,7 @@ license = "GPL-3.0-or-later"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.11"
 authors = [{ name = "Vittorio Candolo" }]
-keywords = ["audio", "synthesizer", "kick drum", "drum synthesis", "dsp", "wav", "sampler"]
+keywords = ["audio", "synthesizer", "drum", "kick"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -37,7 +37,7 @@ dev = ["mypy>=1.10", "pytest>=8", "ruff>=0.6"]
 
 [tool.mypy]
 files = ["src"]
-ignore_missing_imports = true  # SciPy and sounddevice ship no type information
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

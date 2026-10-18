@@ -1,15 +1,13 @@
 # Contributing
 
-Thank you for helping with Ballast. Its priorities, in order, are: correct,
-simple, minimal, elegant. A change that makes the code shorter but less
-obviously correct is not an improvement.
+Thank you for helping with Ballast.
 
 ## Set up
 
 Ballast uses [uv](https://docs.astral.sh/uv/):
 
 ```
-uv sync --all-extras    # the package in editable mode, audition, pytest, ruff and mypy
+uv sync --all-extras
 ```
 
 ## Check a change
@@ -21,8 +19,7 @@ uv run ruff format --check
 uv run mypy
 ```
 
-CI runs the tests on Linux, macOS and Windows with Python 3.11 to 3.14, and
-once with the oldest NumPy and SciPy that Ballast supports.
+CI runs the tests with the oldest NumPy and SciPy supported versions.
 
 ## Rules
 
@@ -53,17 +50,15 @@ Commit them with the change that alters them, and keep the documentation in
 
 ## Releasing
 
-1. Set the version in `pyproject.toml` and `src/ballast_synth/__init__.py`; a test
-   checks that they agree.
+1. Set the version in `pyproject.toml` and `src/ballast_synth/__init__.py`;
 2. Move the changelog's entries under the new version, with the date.
 3. Tag the commit `vX.Y.Z` and push the tag.
 
 The release workflow then checks that the tag matches the version, runs the
 tests, builds the package and publishes it to PyPI as `ballast-synth`, through
 PyPI's trusted publishing: configure this repository and its `pypi`
-environment as a trusted publisher on PyPI once, and no token is needed. The
-name `ballast` on PyPI belongs to another project, so the package you import
-is `ballast_synth`; the command stays `ballast`.
+environment as a trusted publisher on PyPI once, and no token is needed.
+The package is `ballast_synth`; the command stays `ballast`.
 
 ## Commits and pull requests
 
