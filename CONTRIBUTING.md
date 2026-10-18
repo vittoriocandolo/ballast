@@ -36,6 +36,8 @@ versions.
 
 ## Rules
 
+- **Correct, simple, minimal, elegant, in that order.** A change that makes
+  the code shorter but less obviously correct is not an improvement.
 - **Renders stay bit for bit the same.** A change to any rendered sample
   changes the sound of existing patches. It needs a reason, a changelog entry
   and a new version.
@@ -66,7 +68,8 @@ the documentation leads somewhere, and that every figure and sound is shown.
 
 ## Releasing
 
-1. Set the version in `pyproject.toml` and `src/ballast_synth/__init__.py`.
+1. Set the version in `pyproject.toml` and `src/ballast_synth/__init__.py`;
+   a test checks that they agree.
 2. Move the changelog's entries under the new version, with the date.
 3. Tag the commit `vX.Y.Z` and push the tag.
 
