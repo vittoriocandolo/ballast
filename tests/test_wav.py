@@ -1,8 +1,13 @@
+# Copyright (C) 2026 Vittorio Candolo
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The WAV files: float32 or PCM that other readers agree on, the root note, and the embedded patch."""
 
 import json
 import os
 import struct
+from pathlib import Path
+from typing import NoReturn
 
 import numpy as np
 import pytest
@@ -10,44 +15,58 @@ from scipy.io import wavfile
 
 from ballast_synth import patch, render, wav
 
+RATE = 48000
+CD_RATE = 44100
+ROOT = (36, 0)  # C2, exactly
+
 # SciPy skips the smpl and blst chunks, as RIFF readers should, and says so.
 pytestmark = pytest.mark.filterwarnings("ignore::scipy.io.wavfile.WavFileWarning")
 
 
-def test_float_samples_read_back_exactly(tmp_path):
+def test_float_samples_read_back_exactly(tmp_path: Path) -> None:
+    """Write float32 samples, and read the same rate and samples back with SciPy."""
     samples = np.linspace(-1, 1, 1001, dtype=np.float32)
-    wav.write(tmp_path / "f.wav", samples, 48000, None, (36, 0), {})
+    wav.write(tmp_path / "f.wav", samples, wav.Format(RATE), ROOT, {})
     rate, data = wavfile.read(tmp_path / "f.wav")
-    assert rate == 48000 and data.dtype == np.float32 and np.array_equal(data, samples)
+    assert rate == RATE
+    assert data.dtype == np.float32
+    assert np.array_equal(data, samples)
 
 
 @pytest.mark.parametrize("bits", [16, 24])
-def test_pcm_samples_read_back_exactly(tmp_path, bits):
+def test_pcm_samples_read_back_exactly(tmp_path: Path, bits: int) -> None:
+    """Write PCM samples up to both ends of the range, and read them back with SciPy."""
     top = 2 ** (bits - 1)
     q = np.array([-top, -top + 1, -1, 0, 1, 1234, top - 1], dtype=np.int32)
-    wav.write(tmp_path / "p.wav", q, 44100, bits, (36, 0), {})
+    wav.write(tmp_path / "p.wav", q, wav.Format(CD_RATE, bits), ROOT, {})
     rate, data = wavfile.read(tmp_path / "p.wav")
-    expected = q if bits == 16 else q << 8  # SciPy left-justifies 24-bit samples in int32
-    assert rate == 44100 and np.array_equal(data.astype(np.int64), expected)
+    assert rate == CD_RATE
+    # SciPy left-justifies samples in its integer type: 24-bit ones in int32.
+    assert np.array_equal(data.astype(np.int64), q << (8 * data.dtype.itemsize - bits))
 
 
-def test_pcm_out_of_range_is_refused(tmp_path):
+def test_pcm_out_of_range_is_refused(tmp_path: Path) -> None:
+    """Refuse a sample one step beyond the 16-bit range."""
     with pytest.raises(ValueError, match="out of range"):
-        wav.write(tmp_path / "p.wav", np.array([2**15], dtype=np.int32), 48000, 16, (36, 0), {})
+        wav.write(tmp_path / "p.wav", np.array([2**15], dtype=np.int32), wav.Format(RATE, 16), ROOT, {})
 
 
-def test_an_exported_render_carries_its_patch_and_root_note(tmp_path, tight_text):
+def test_an_exported_render_carries_its_patch_and_root_note(tmp_path: Path, tight_text: str) -> None:
+    """Export a render as 24-bit PCM, and read back its patch text, provenance, root note and samples."""
+    bits = 24
     text = tight_text.replace("seed = 1", "seed = 1  # my favourite kick")  # the text is kept as written
     p = patch.loads(text)
-    audio, _ = render.render(p, 24)
-    render.export(tmp_path / "kick.wav", p, text, audio, 24)
+    audio, _ = render.render(p, bits)
+    render.export(tmp_path / "kick.wav", p, text, audio, bits)
     found = wav.chunks(tmp_path / "kick.wav")
     meta = json.loads(found[wav.PRIVATE])
     assert meta["patch"] == text
-    assert meta["pcm"]["bits"] == 24 and meta["decimator"]["sha256"] == render.DECIMATORS[48000][1]
+    assert meta["pcm"]["bits"] == bits
+    assert meta["decimator"]["sha256"] == render.DECIMATORS[RATE][1]
     assert struct.unpack("<9I", found[b"smpl"])[3:5] == wav.root_note(55.0)
     rate, data = wavfile.read(tmp_path / "kick.wav")
-    assert rate == 48000 and np.array_equal(data >> 8, render.quantize(audio, 24, p.seed))
+    assert rate == RATE
+    assert np.array_equal(data >> 8, render.quantize(audio, bits, p.seed))
 
 
 @pytest.mark.parametrize(
@@ -59,28 +78,32 @@ def test_an_exported_render_carries_its_patch_and_root_note(tmp_path, tight_text
         (440.0 * 2 ** (50 / 1200), (69, 2**31)),
     ],
 )
-def test_root_note(hz, note):
+def test_root_note(hz: float, note: tuple[int, int]) -> None:
+    """Find the unity note and the upward fraction that the smpl chunk holds for a frequency."""
     unity, fraction = wav.root_note(hz)
-    assert unity == note[0] and fraction == pytest.approx(note[1], abs=2**12)
+    assert unity == note[0]
+    assert fraction == pytest.approx(note[1], abs=2**12)
 
 
-def test_chunks_refuses_what_is_not_riff_wave(tmp_path):
+def test_chunks_refuses_what_is_not_riff_wave(tmp_path: Path) -> None:
+    """Refuse to read the chunks of a file that is not a RIFF WAVE file."""
     (tmp_path / "x.wav").write_bytes(b"not a wave file")
     with pytest.raises(ValueError, match="not a RIFF WAVE file"):
         wav.chunks(tmp_path / "x.wav")
 
 
-def test_save_replaces_a_file_whole_or_not_at_all(tmp_path, monkeypatch):
+def test_save_replaces_a_file_whole_or_not_at_all(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace a file, then interrupt the next replacement, which leaves the file and no temporary behind."""
     path = tmp_path / "kick.toml"
     path.write_bytes(b"the old patch")
     wav.save(path, b"the new patch")
     assert path.read_bytes() == b"the new patch"
 
-    def interrupted(src, dst):
+    def interrupted(_src: object, _dst: object) -> NoReturn:
         raise KeyboardInterrupt
 
     monkeypatch.setattr(os, "replace", interrupted)
     with pytest.raises(KeyboardInterrupt):
         wav.save(path, b"a patch that never lands")
     assert path.read_bytes() == b"the new patch"
-    assert [p.name for p in tmp_path.iterdir()] == ["kick.toml"]  # and no temporary file is left
+    assert [p.name for p in tmp_path.iterdir()] == ["kick.toml"]

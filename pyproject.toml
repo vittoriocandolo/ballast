@@ -33,17 +33,49 @@ audition = ["sounddevice>=0.4"]
 ballast = "ballast_synth.cli:main"
 
 [dependency-groups]
-dev = ["mypy>=1.10", "pytest>=8", "ruff>=0.6"]
+dev = ["mypy>=2.4", "pytest>=9", "ruff>=0.17", "typos>=1.51", "zizmor>=1.31"]
 
 [tool.mypy]
-files = ["src"]
+files = ["src", "tests", "docs"]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+enable_error_code = [
+    "deprecated",
+    "exhaustive-match",
+    "ignore-without-code",
+    "mutable-override",
+    "possibly-undefined",
+    "redundant-expr",
+    "redundant-self",
+    "truthy-bool",
+    "truthy-iterable",
+    "unimported-reveal",
+    "unused-awaitable",
+]
+
+[[tool.mypy.overrides]]
+module = ["scipy.*", "sounddevice"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+strict = true
+filterwarnings = ["error"]
 
 [tool.ruff]
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP"]
+select = ["ALL"]
+ignore = [
+    "D203",  # contradicts D211: no blank line before a class docstring
+    "D213",  # contradicts D212: a multi-line docstring's summary starts on its first line
+]
+allowed-confusables = ["×", "−", "–", "α", "γ", "ρ"]  # math notation
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]  # pytest checks with assert, and rewrites it so that it also runs under python -O
+
+[tool.typos.default.extend-words]
+writeable = "writeable"

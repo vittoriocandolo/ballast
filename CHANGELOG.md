@@ -29,3 +29,5 @@ The first public release.
   with live re-rendering, tempo, a bed and dropout warnings, and `extract`.
 - Documentation, figures and example sounds generated from the code, and a
   test suite that checks the documented properties on every platform.
+- Type annotations throughout, with a `py.typed` marker so that type checkers
+  use them.

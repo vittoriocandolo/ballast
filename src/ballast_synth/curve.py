@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Vittorio Candolo
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Monotone cubic Hermite curves with exact integrals.
 
 A curve passes through its knots with slopes from the PCHIP rule:
@@ -19,11 +22,18 @@ linearly there. Times are in seconds.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 
+if TYPE_CHECKING:
+    from numpy.typing import ArrayLike, NDArray
 
-def _slopes(h: np.ndarray, m: np.ndarray) -> np.ndarray:
-    """Knot slopes from the PCHIP rule, given the knot spacings h and the secants m."""
+    Floats = NDArray[np.float64]
+
+
+def _slopes(h: Floats, m: Floats) -> Floats:
+    """Compute the knot slopes by the PCHIP rule, from the knot spacings h and the secants m."""
     if h.size == 1:
         return np.array([m[0], m[0]])
     ml, mr, hl, hr = m[:-1], m[1:], h[:-1], h[1:]
@@ -51,7 +61,8 @@ def _end_slope(h0: float, h1: float, m0: float, m1: float) -> float:
 class Curve:
     """PCHIP curve through knots (t, v); `first` and `last` fix the end slopes."""
 
-    def __init__(self, t, v, *, first: float | None = None, last: float | None = None):
+    def __init__(self, t: ArrayLike, v: ArrayLike, *, first: float | None = None, last: float | None = None) -> None:
+        """Fit the curve to its knots, and integrate it from end to end."""
         self.t = np.array(t, dtype=float)
         self.v = np.array(v, dtype=float)
         self.h = h = np.diff(self.t)
@@ -60,49 +71,49 @@ class Curve:
             d[0] = first
         if last is not None:
             d[-1] = last
-        v = self.v
-        full = h * (v[:-1] + v[1:]) / 2 + h * h * (d[:-1] - d[1:]) / 12
+        full = h * (self.v[:-1] + self.v[1:]) / 2 + h * h * (d[:-1] - d[1:]) / 12
         # Integral from the first knot to knot i, and from knot i to the last knot.
         self._before = np.concatenate(([0.0], np.cumsum(full)))
         self._after = np.concatenate((np.cumsum(full[::-1])[::-1], [0.0]))
-        self.total = self._before[-1]  # the integral over the knot span
+        self.total: float = self._before[-1]  # the integral over the knot span
 
-    def _segment(self, x: np.ndarray):
+    def _segment(self, x: Floats) -> tuple[NDArray[np.intp], Floats, Floats, Floats, Floats, Floats]:
         i = np.clip(np.searchsorted(self.t, x, side="right") - 1, 0, self.t.size - 2)
         return i, self.h[i], self.v[i], self.v[i + 1], self.d[i], self.d[i + 1]
 
-    def __call__(self, x) -> np.ndarray:
-        x = np.asarray(x, dtype=float)
-        i, h, va, vb, da, db = self._segment(x)
-        s = (x - self.t[i]) / h
+    def __call__(self, x: ArrayLike) -> Floats:
+        """Evaluate the curve at x."""
+        at = np.asarray(x, dtype=float)
+        i, h, va, vb, da, db = self._segment(at)
+        s = (at - self.t[i]) / h
         p = s * s * (3 - 2 * s)
         y = va * (1 - p) + vb * p + h * s * (1 - s) * (da * (1 - s) - db * s)
         y = np.clip(y, np.minimum(va, vb), np.maximum(va, vb))
-        y = np.where(x < self.t[0], self.v[0], y)
-        return np.where(x > self.t[-1], self.v[-1], y)
+        y = np.where(at < self.t[0], float(self.v[0]), y)
+        return np.where(at > self.t[-1], float(self.v[-1]), y)
 
-    def integral(self, x) -> np.ndarray:
-        """Integral from the first knot to x."""
-        x = np.asarray(x, dtype=float)
-        i, h, va, vb, da, db = self._segment(x)
-        s = (x - self.t[i]) / h
+    def integral(self, x: ArrayLike) -> Floats:
+        """Integrate from the first knot to x."""
+        at = np.asarray(x, dtype=float)
+        i, h, va, vb, da, db = self._segment(at)
+        s = (at - self.t[i]) / h
         y = self._before[i] + h * _partial(s, va, vb, h * da, h * db)
-        y = np.where(x < self.t[0], self.v[0] * (x - self.t[0]), y)
-        return np.where(x > self.t[-1], self.total + self.v[-1] * (x - self.t[-1]), y)
+        y = np.where(at < self.t[0], self.v[0] * (at - self.t[0]), y)
+        return np.where(at > self.t[-1], self.total + self.v[-1] * (at - self.t[-1]), y)
 
-    def remaining(self, x) -> np.ndarray:
-        """Integral from x to the last knot."""
-        x = np.asarray(x, dtype=float)
-        i, h, va, vb, da, db = self._segment(x)
-        s = (self.t[i + 1] - x) / h
+    def remaining(self, x: ArrayLike) -> Floats:
+        """Integrate from x to the last knot."""
+        at = np.asarray(x, dtype=float)
+        i, h, va, vb, da, db = self._segment(at)
+        s = (self.t[i + 1] - at) / h
         # The segment read backwards is the same Hermite form with the knots swapped.
         y = self._after[i + 1] + h * _partial(s, vb, va, -h * db, -h * da)
-        y = np.where(x < self.t[0], self.total + self.v[0] * (self.t[0] - x), y)
-        return np.where(x > self.t[-1], self.v[-1] * (self.t[-1] - x), y)
+        y = np.where(at < self.t[0], self.total + self.v[0] * (self.t[0] - at), y)
+        return np.where(at > self.t[-1], self.v[-1] * (self.t[-1] - at), y)
 
 
-def _partial(s, va, vb, ma, mb):
-    """Integral over [0, s] of the unit Hermite segment with scaled slopes ma, mb."""
+def _partial(s: Floats, va: Floats, vb: Floats, ma: Floats, mb: Floats) -> Floats:
+    """Integrate the unit Hermite segment with scaled slopes ma, mb over [0, s]."""
     s2 = s * s
     p = s2 * s * (1 - s / 2)  # antiderivative of s²(3 - 2s)
     a = s2 * (6 - 8 * s + 3 * s2) / 12  # antiderivative of s(1 - s)²

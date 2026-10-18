@@ -17,7 +17,13 @@ uv run pytest
 uv run ruff check
 uv run ruff format --check
 uv run mypy
+uv run typos
+uv run zizmor --persona auditor .
 ```
+
+Ruff runs every stable rule, mypy checks all the code strictly, as Python
+3.11 would run it, pytest turns any warning into an error, typos checks the
+spelling of code and documentation, and zizmor audits the GitHub workflows.
 
 CI runs the tests with the oldest NumPy and SciPy supported versions.
 
@@ -35,6 +41,8 @@ CI runs the tests with the oldest NumPy and SciPy supported versions.
   problem.
 - **NumPy and SciPy are the only dependencies,** and `sounddevice` only for
   audition.
+- **Every check stays on.** Fix what a linter finds instead of silencing it.
+  The one exception is `assert` in tests, which is how pytest checks.
 
 ## Documentation
 

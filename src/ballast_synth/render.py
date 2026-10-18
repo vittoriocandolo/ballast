@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Vittorio Candolo
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Rendering: rates, the frozen decimators, the output stage and the exported file.
 
     out[m] = p · g_out · Σ_{k<L} h[k] y[mK − k],    y = L(y(n / F)) for 0 ≤ n < N, else 0
@@ -26,6 +29,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from importlib import resources
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import scipy
@@ -34,6 +38,9 @@ from scipy.signal import resample_poly, sosfilt, upfirdn
 from . import __version__, noise, wav
 from .patch import Output, Patch, describe_tuning
 from .voice import Voice
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 K = 16
 CHUNK = 2048  # decimator outputs per parallel chunk
@@ -49,23 +56,24 @@ POOL = ThreadPoolExecutor(os.cpu_count())  # upfirdn releases the GIL
 
 
 def rates(sample_rate: int) -> tuple[int, int, int]:
-    """(family base rate, internal rate F, decimation factor) for an export rate."""
+    """Return the family's base rate, the internal rate F and the decimation factor for an export rate."""
     base = FAMILY[sample_rate]
     return base, base * K, K * base // sample_rate
 
 
 @functools.cache
-def decimator(base: int) -> np.ndarray:
-    """The family's frozen taps, refused unless they match their checksum."""
+def decimator(base: int) -> NDArray[np.float64]:
+    """Load the family's frozen taps, refused unless they match their checksum."""
     name, sha256 = DECIMATORS[base]
-    raw = resources.files(__package__).joinpath("data", name).read_bytes()
+    raw = resources.files("ballast_synth").joinpath("data", name).read_bytes()
     if hashlib.sha256(raw).hexdigest() != sha256:
-        raise RuntimeError(f"{name} does not match its checksum")
+        msg = f"{name} does not match its checksum"
+        raise RuntimeError(msg)
     return np.frombuffer(raw, dtype="<f8")  # read-only, like the bytes it views
 
 
-def decimate(taps: np.ndarray, y: np.ndarray, factor: int) -> np.ndarray:
-    """upfirdn(taps, y, down=factor), computed in parallel chunks that match it bit for bit.
+def decimate(taps: NDArray[np.float64], y: NDArray[np.float64], factor: int) -> NDArray[np.float64]:
+    """Compute upfirdn(taps, y, down=factor) in parallel chunks that match it bit for bit.
 
     Each output of upfirdn is one sequential sum over its own inputs. A chunk is
     given every input its outputs need, starting on the factor's grid, so each
@@ -73,30 +81,30 @@ def decimate(taps: np.ndarray, y: np.ndarray, factor: int) -> np.ndarray:
     """
     n_out = (y.size + taps.size - 2) // factor + 1
 
-    def chunk(m0: int) -> np.ndarray:
+    def chunk(m0: int) -> NDArray[np.float64]:
         m1 = min(m0 + CHUNK, n_out)
         start = max(0, m0 * factor - (taps.size - 1)) // factor * factor
         # Since the filter is longer than the factor, the last chunk's slice reaches the end of y.
-        out = upfirdn(taps, y[start : (m1 - 1) * factor + 1], down=factor)
+        out: NDArray[np.float64] = upfirdn(taps, y[start : (m1 - 1) * factor + 1], down=factor)
         return out[m0 - start // factor : m1 - start // factor]
 
     return np.concatenate(list(POOL.map(chunk, range(0, n_out, CHUNK))))
 
 
-def low_cut(hz: float, rate: int) -> np.ndarray:
-    """A second-order Butterworth high-pass at `hz`, by the bilinear transform, as one section for sosfilt.
+def low_cut(hz: float, rate: int) -> NDArray[np.float64]:
+    """Design a second-order Butterworth high-pass at `hz` by the bilinear transform, as one section for sosfilt.
 
     The coefficients are computed here in closed form, so they cannot drift with SciPy's filter design.
     """
     k = math.tan(math.pi * hz / rate)
     norm = 1 + math.sqrt(2) * k + k * k
     return np.array(
-        [[1 / norm, -2 / norm, 1 / norm, 1.0, 2 * (k * k - 1) / norm, (1 - math.sqrt(2) * k + k * k) / norm]]
+        [[1 / norm, -2 / norm, 1 / norm, 1.0, 2 * (k * k - 1) / norm, (1 - math.sqrt(2) * k + k * k) / norm]],
     )
 
 
-def synthesize(p: Patch) -> np.ndarray:
-    """The decimated signal at unity gain: everything before the output stage.
+def synthesize(p: Patch) -> NDArray[np.float64]:
+    """Compute the decimated signal at unity gain: everything before the output stage.
 
     The low cut filters the internal signal, so every rate of a family still shares it.
     """
@@ -107,37 +115,41 @@ def synthesize(p: Patch) -> np.ndarray:
     return decimate(decimator(base), y, factor)
 
 
-def output_stage(out: np.ndarray, o: Output, top: float) -> np.ndarray:
-    """Output gain or normalization to a sample or true peak, then polarity, then one conversion to float32.
+def output_stage(out: NDArray[np.float64], o: Output, top: float) -> NDArray[np.float32]:
+    """Scale by the output gain, or to a sample or true peak target, apply the polarity, and convert once to float32.
 
     `top` is the format's ceiling: in either peak mode, the highest sample never goes above it.
     """
     peak = float(np.max(np.abs(out), initial=0.0))
+    target: float = 10.0 ** (o.db / 20.0)
     if o.mode == "gain":
-        scaled = out * 10.0 ** (o.db / 20.0)
+        scaled = out * target
     elif peak == 0:
         scaled = out.copy()
     elif o.mode == "peak":
-        scaled = out * (min(10.0 ** (o.db / 20.0), top) / peak)
+        scaled = out * (min(target, top) / peak)
     else:  # true-peak: the estimate is linear, so scaling the signal scales it alike
-        scaled = out * min(10.0 ** (o.db / 20.0) / true_peak(out), top / peak)
+        scaled = out * min(target / true_peak(out), top / peak)
     if o.polarity < 0:
         scaled = -scaled
     return scaled.astype(np.float32)
 
 
-def true_peak(audio: np.ndarray) -> float:
-    """A 4× oversampled estimate of the peak between samples."""
+def true_peak(audio: NDArray[np.floating[Any]]) -> float:
+    """Estimate the peak between samples, by 4× oversampling."""
     x = np.concatenate((audio.astype(float), np.zeros(32)))
     return max(float(np.max(np.abs(resample_poly(x, 4, 1)))), float(np.max(np.abs(audio), initial=0.0)))
 
 
 def db(x: float) -> float:
+    """Return an amplitude in decibels; silence is -inf."""
     return 20 * math.log10(x) if x > 0 else -math.inf
 
 
 @dataclass(frozen=True)
 class Report:
+    """What a render made, as `ballast render` reports it."""
+
     tune_hz: float
     source_ms: float
     samples: int
@@ -155,6 +167,7 @@ class Report:
         return db(self.peak / self.ceiling)
 
     def __str__(self) -> str:
+        """Format the report as `ballast render` prints it."""
         if self.peak == 0:
             peak = "silent"
         elif self.bits is None and self.over:
@@ -180,8 +193,8 @@ class Report:
         return "\n".join(f"{label:<9}{text}" for label, text in rows)
 
 
-def render(p: Patch, bits: int | None = None) -> tuple[np.ndarray, Report]:
-    """The float32 audio and its report, for export as float32 or, with `bits`, as PCM of that depth."""
+def render(p: Patch, bits: int | None = None) -> tuple[NDArray[np.float32], Report]:
+    """Render the float32 audio and its report, for export as float32 or, with `bits`, as PCM of that depth."""
     start = time.perf_counter()
     top = 1.0 if bits is None else 1.0 - 2.0 ** (2 - bits)  # PCM keeps 2 LSB of headroom, so dither never clips
     audio = output_stage(synthesize(p), p.output, top)
@@ -200,7 +213,7 @@ def render(p: Patch, bits: int | None = None) -> tuple[np.ndarray, Report]:
     )
 
 
-def quantize(audio: np.ndarray, bits: int, seed: int) -> np.ndarray:
+def quantize(audio: NDArray[np.float32], bits: int, seed: int) -> NDArray[np.int32]:
     """Round to `bits`-bit PCM with the seed's TPDF dither of ±1 LSB.
 
     Exact zeros stay zero, so the silent first sample and any digital silence
@@ -211,10 +224,16 @@ def quantize(audio: np.ndarray, bits: int, seed: int) -> np.ndarray:
     return np.round(np.where(x != 0.0, x + noise.dither(seed, x.size), 0.0)).astype(np.int32)
 
 
-def export(path, p: Patch, text: str, audio: np.ndarray, bits: int | None = None) -> None:
+def export(
+    path: str | os.PathLike[str],
+    p: Patch,
+    text: str,
+    audio: NDArray[np.float32],
+    bits: int | None = None,
+) -> None:
     """Write the WAV, as float32 or dithered PCM, with its root note, the patch text and provenance."""
     base, rate, factor = rates(p.output.sample_rate)
-    meta = {
+    meta: dict[str, object] = {
         "patch": text,
         "renderer": f"ballast {__version__}",
         "decimator": {"sha256": DECIMATORS[base][1], "internal_rate": rate, "factor": factor},
@@ -223,6 +242,7 @@ def export(path, p: Patch, text: str, audio: np.ndarray, bits: int | None = None
         "numpy": np.__version__,
         "scipy": scipy.__version__,
     }
+    samples: NDArray[np.float32] | NDArray[np.int32] = audio
     if bits is not None:
         meta["pcm"] = {
             "bits": bits,
@@ -230,5 +250,5 @@ def export(path, p: Patch, text: str, audio: np.ndarray, bits: int | None = None
             "dither_key": noise.DITHER_KEY.decode(),
             "seed": p.seed,
         }
-        audio = quantize(audio, bits, p.seed)
-    wav.write(path, audio, p.output.sample_rate, bits, wav.root_note(p.body.tune_hz), meta)
+        samples = quantize(audio, bits, p.seed)
+    wav.write(path, samples, wav.Format(p.output.sample_rate, bits), wav.root_note(p.body.tune_hz), meta)

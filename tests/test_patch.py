@@ -1,8 +1,14 @@
+# Copyright (C) 2026 Vittorio Candolo
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The patch: validation with every problem and its path, canonical TOML, edits and tuning."""
 
 import codecs
-import datetime
+import datetime as dt
 import math
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -12,17 +18,20 @@ from ballast_synth.patch import PatchError
 RATES = "44100, 48000, 88200, 96000, 176400, 192000"
 
 
-def problems(data) -> list[str]:
+def problems(data: object) -> list[str]:
+    """Return every problem from_dict reports for data, which must be invalid."""
     with pytest.raises(PatchError) as caught:
         patch.from_dict(data)
     return caught.value.problems
 
 
-def test_presets_are_valid_and_canonical(preset):
+def test_presets_are_valid_and_canonical(preset: str) -> None:
+    """Parse each preset, and write it back as the same text."""
     assert patch.dumps(patch.loads(preset)) == preset
 
 
-def test_canonical_text_reads_back_to_the_same_patch(tight):
+def test_canonical_text_reads_back_to_the_same_patch(tight: patch.Patch) -> None:
+    """Write a patch as canonical TOML, and parse the same patch back."""
     assert patch.loads(patch.dumps(tight)) == tight
 
 
@@ -48,22 +57,31 @@ def test_canonical_text_reads_back_to_the_same_patch(tight):
         ("output.polarity", True, "output.polarity: expected one of 1, -1, found True"),
     ],
 )
-def test_values_outside_the_domain_are_rejected_not_clamped(raw, path, value, message):
+def test_values_outside_the_domain_are_rejected_not_clamped(
+    raw: dict[str, Any],
+    path: str,
+    value: object,
+    message: str,
+) -> None:
+    """Set one field outside its domain, or to the wrong type, and get exactly one problem."""
     section, key = path.split(".")
     raw[section][key] = value
     assert problems(raw) == [message]
 
 
-def test_level_accepts_minus_infinity_as_silence(raw):
+def test_level_accepts_minus_infinity_as_silence(raw: dict[str, Any]) -> None:
+    """Accept -inf as a level, outside the range of finite levels."""
     raw["body"]["level_db"] = -math.inf
     assert patch.from_dict(raw).body.level_db == -math.inf
 
 
-def test_a_peak_target_cannot_exceed_full_scale(raw):
-    raw["output"].update(mode="peak", db=0.5)
+def test_a_peak_target_cannot_exceed_full_scale(raw: dict[str, Any]) -> None:
+    """Refuse a peak target above 0 dBFS, which is a valid gain."""
+    target = 0.5
+    raw["output"].update(mode="peak", db=target)
     assert problems(raw) == ["output.db: 0.5 is outside -60 … 0"]
     raw["output"]["mode"] = "gain"
-    assert patch.from_dict(raw).output.db == 0.5
+    assert patch.from_dict(raw).output.db == target
 
 
 @pytest.mark.parametrize(
@@ -82,28 +100,34 @@ def test_a_peak_target_cannot_exceed_full_scale(raw):
         ("amp", 5, {"ms": 8000.5}, "body.amp[5].ms: 8000.5 is outside 0 … 8000"),
     ],
 )
-def test_curve_rules(raw, curve, index, change, message):
+def test_curve_rules(raw: dict[str, Any], curve: str, index: int, change: dict[str, float], message: str) -> None:
+    """Break one rule of a curve with one knot, and get exactly that problem."""
     raw["body"][curve][index].update(change)
     assert problems(raw) == [message]
 
 
-def test_knot_spacing_is_compared_on_the_decimal_values_as_written(raw):
-    raw["body"]["amp"][1]["ms"] = 0.01  # 0.01 - 0.0 is exactly the minimum, whatever binary floats say
-    assert patch.from_dict(raw).body.amp[1][0] == 0.01
+def test_knot_spacing_is_compared_on_the_decimal_values_as_written(raw: dict[str, Any]) -> None:
+    """Space two knots exactly 0.01 ms apart as written, which binary floats would put a hair short."""
+    spacing = float(patch.MIN_SPACING_MS)
+    raw["body"]["amp"][1]["ms"] = spacing  # 0.01 - 0.0 is exactly the minimum
+    assert patch.from_dict(raw).body.amp[1][0] == spacing
 
 
-def test_a_curve_needs_enough_knots(raw):
+def test_a_curve_needs_enough_knots(raw: dict[str, Any]) -> None:
+    """Leave an amplitude shape two knots, one too few."""
     del raw["attack"]["amp"][1:3]
     assert problems(raw) == ["attack.amp: needs 3 to 32 knots, found 2"]
 
 
-def test_missing_and_unknown_fields_are_both_reported(raw):
+def test_missing_and_unknown_fields_are_both_reported(raw: dict[str, Any]) -> None:
+    """Misspell a field, which reports the unknown name and the missing one."""
     del raw["body"]["h2"]
     raw["body"]["h3"] = 0.1
     assert problems(raw) == ["body.h3: unknown field", "body.h2: missing"]
 
 
-def test_every_problem_is_reported_at_once_with_its_path(raw):
+def test_every_problem_is_reported_at_once_with_its_path(raw: dict[str, Any]) -> None:
+    """Break five things in four sections, and get all five problems in one error."""
     raw["seed"] = -1
     raw["body"]["tune_hz"] = 5000.0
     raw["attack"]["noise_mix"] = 2.0
@@ -126,7 +150,8 @@ def test_every_problem_is_reported_at_once_with_its_path(raw):
         (3, "schema: unsupported version 3; this renderer reads schemas 1 and 2"),
     ],
 )
-def test_the_schema_is_checked_first(raw, schema, message):
+def test_the_schema_is_checked_first(raw: dict[str, Any], schema: object, message: str) -> None:
+    """Break the schema and another field, and get only the schema's problem."""
     raw["schema"] = schema
     if schema is None:
         del raw["schema"]
@@ -134,7 +159,8 @@ def test_the_schema_is_checked_first(raw, schema, message):
     assert problems(raw) == [message]
 
 
-def test_toml_syntax_errors_are_patch_errors():
+def test_toml_syntax_errors_are_patch_errors() -> None:
+    """Parse broken TOML, and get a patch error that says it is TOML."""
     with pytest.raises(PatchError) as caught:
         patch.loads("schema = 1\n[body\n")
     assert caught.value.problems[0].startswith("TOML: ")
@@ -143,32 +169,41 @@ def test_toml_syntax_errors_are_patch_errors():
 @pytest.mark.parametrize(
     "encode",
     [
-        lambda s: s.encode("utf-8"),
-        lambda s: codecs.BOM_UTF8 + s.encode("utf-8"),
-        lambda s: codecs.BOM_UTF16_LE + s.encode("utf-16-le"),  # what Windows PowerShell's `>` writes
-        lambda s: codecs.BOM_UTF16_BE + s.encode("utf-16-be"),
+        pytest.param(lambda s: s.encode("utf-8"), id="utf-8"),
+        pytest.param(lambda s: codecs.BOM_UTF8 + s.encode("utf-8"), id="utf-8-bom"),
+        pytest.param(lambda s: codecs.BOM_UTF16_LE + s.encode("utf-16-le"), id="utf-16-le-bom"),  # Windows PowerShell
+        pytest.param(lambda s: codecs.BOM_UTF16_BE + s.encode("utf-16-be"), id="utf-16-be-bom"),
     ],
 )
-def test_read_text_accepts_utf8_and_utf16_with_a_bom(tmp_path, tight_text, encode):
+def test_read_text_accepts_utf8_and_utf16_with_a_bom(
+    tmp_path: Path,
+    tight_text: str,
+    encode: Callable[[str], bytes],
+) -> None:
+    """Read a patch saved in each encoding a text editor or a shell may use."""
     path = tmp_path / "kick.toml"
     path.write_bytes(encode(tight_text))
     assert patch.read_text(path) == tight_text
 
 
-def test_read_text_refuses_other_encodings(tmp_path, tight_text):
+def test_read_text_refuses_other_encodings(tmp_path: Path, tight_text: str) -> None:
+    """Refuse a patch in Latin-1, rather than guess at its characters."""
     path = tmp_path / "kick.toml"
     path.write_bytes(tight_text.replace("…", "\xe9").encode("latin-1"))
     with pytest.raises(UnicodeDecodeError):
         patch.read_text(path)
 
 
-def test_edit_validates_like_any_patch(tight):
-    assert patch.edit(tight, "body.tune_hz", 43.654).body.tune_hz == 43.654
+def test_edit_validates_like_any_patch(tight: patch.Patch) -> None:
+    """Edit a field to a valid value and to an invalid one."""
+    hz = 43.654
+    assert patch.edit(tight, "body.tune_hz", hz).body.tune_hz == hz
     with pytest.raises(PatchError, match=r"body\.tune_hz: 2000 is outside 20 … 1000"):
         patch.edit(tight, "body.tune_hz", 2000.0)
 
 
-def test_stretch_keeps_the_rise_of_an_amplitude_shape(tight):
+def test_stretch_keeps_the_rise_of_an_amplitude_shape(tight: patch.Patch) -> None:
+    """Stretch an amplitude shape, which moves only the knots after its peak."""
     before = tight.body.amp
     after = patch.stretch(tight, "body.amp", 2.0).body.amp
     peak = next(ms for ms, gain in before if gain == 1.0)
@@ -176,12 +211,14 @@ def test_stretch_keeps_the_rise_of_an_amplitude_shape(tight):
     assert [ms for ms, _ in after] == [ms if ms <= peak else round(peak + 2.0 * (ms - peak), 3) for ms, _ in before]
 
 
-def test_stretch_scales_the_pitch_curve_from_its_start(tight):
+def test_stretch_scales_the_pitch_curve_from_its_start(tight: patch.Patch) -> None:
+    """Stretch the pitch curve, which moves every knot."""
     after = patch.stretch(tight, "body.pitch", 0.5).body.pitch
     assert [ms for ms, _ in after] == [round(0.5 * ms, 3) for ms, _ in tight.body.pitch]
 
 
-def test_stretch_after_an_explicit_time(tight):
+def test_stretch_after_an_explicit_time(tight: patch.Patch) -> None:
+    """Stretch from 0 ms, which moves the knots of the rise too."""
     after = patch.stretch(tight, "attack.amp", 3.0, anchor_ms=0.0).attack.amp
     assert [ms for ms, _ in after] == [round(3.0 * ms, 3) for ms, _ in tight.attack.amp]
 
@@ -195,7 +232,8 @@ def test_stretch_after_an_explicit_time(tight):
         ("body.amp", 100.0, r"body\.amp\[3\]\.ms: 9975\.25 is outside 0 … 8000"),
     ],
 )
-def test_stretch_refuses_what_it_cannot_do(tight, curve, factor, error):
+def test_stretch_refuses_what_it_cannot_do(tight: patch.Patch, curve: str, factor: float, error: str) -> None:
+    """Refuse an unknown curve, a factor that is not positive, and a stretch past the longest shape."""
     with pytest.raises(ValueError, match=error):
         patch.stretch(tight, curve, factor)
 
@@ -213,11 +251,13 @@ def test_stretch_refuses_what_it_cannot_do(tight, curve, factor, error):
         (" 43.654 ", 43.654),
     ],
 )
-def test_tunings_are_note_names_or_frequencies(text, hz):
+def test_tunings_are_note_names_or_frequencies(text: str, hz: float) -> None:
+    """Parse note names, in either case and with sharps or flats, and plain frequencies."""
     assert patch.parse_tune(text) == hz
 
 
-def test_an_unknown_tuning_is_refused():
+def test_an_unknown_tuning_is_refused() -> None:
+    """Refuse a note name from another notation."""
     with pytest.raises(ValueError, match="not a note name or frequency: 'H2'"):
         patch.parse_tune("H2")
 
@@ -226,7 +266,8 @@ def test_an_unknown_tuning_is_refused():
     ("hz", "text"),
     [(440.0, "A4 +0.0 cents"), (43.654, "F1 +0.0 cents"), (50.0, "G1 +35.0 cents"), (60.0, "B1 -49.4 cents")],
 )
-def test_describe_tuning(hz, text):
+def test_describe_tuning(hz: float, text: str) -> None:
+    """Describe frequencies by their nearest note and their offset in cents."""
     assert patch.describe_tuning(hz) == text
 
 
@@ -242,42 +283,53 @@ def test_describe_tuning(hz, text):
         (lambda raw: raw.__setitem__("body", None), "body: expected a table, found NoneType"),  # from Python, not TOML
         (lambda raw: raw.__setitem__("schema", None), "schema: expected an integer, found NoneType"),
         (lambda raw: raw.__setitem__("seed", 1.5), "seed: expected an integer, found a float"),
-        (lambda raw: raw.__setitem__("seed", datetime.date(2026, 1, 1)), "seed: expected an integer, found a date"),
+        (lambda raw: raw.__setitem__("seed", dt.date(2026, 1, 1)), "seed: expected an integer, found a date"),
     ],
 )
-def test_malformed_structure_is_reported_with_its_path(raw, change, message):
+def test_malformed_structure_is_reported_with_its_path(
+    raw: dict[str, Any],
+    change: Callable[[dict[str, Any]], object],
+    message: str,
+) -> None:
+    """Put the wrong kind of value where a table, a knot or an integer belongs."""
     change(raw)
     assert problems(raw) == [message]
 
 
-def test_a_ratio_must_be_positive_even_when_the_tuning_is_invalid(raw):
+def test_a_ratio_must_be_positive_even_when_the_tuning_is_invalid(raw: dict[str, Any]) -> None:
+    """Check the pitch ratios on their own when the tuning they scale is itself invalid."""
     raw["body"]["tune_hz"] = "fifty"
     raw["body"]["pitch"][1]["ratio"] = 0.0
     assert problems(raw) == ["body.tune_hz: expected a number, found a string", "body.pitch[1].ratio: must be positive"]
 
 
-def test_only_a_table_can_be_a_patch():
+def test_only_a_table_can_be_a_patch() -> None:
+    """Refuse an array as a patch."""
     assert problems([]) == ["expected a table"]
 
 
-def test_the_seed_is_required(raw):
+def test_the_seed_is_required(raw: dict[str, Any]) -> None:
+    """Leave out the seed, which has no default."""
     del raw["seed"]
     assert problems(raw) == ["seed: missing"]
 
 
-def test_a_missing_field_does_not_hide_the_problems_of_the_others(raw):
+def test_a_missing_field_does_not_hide_the_problems_of_the_others(raw: dict[str, Any]) -> None:
+    """Leave out one field and break another of the same section, and get both problems."""
     del raw["body"]["h2"]
     raw["body"]["tune_hz"] = 5000.0
     assert problems(raw) == ["body.h2: missing", "body.tune_hz: 5000 is outside 20 … 1000"]
 
 
-def test_every_malformed_knot_is_reported(raw):
+def test_every_malformed_knot_is_reported(raw: dict[str, Any]) -> None:
+    """Break two knots of one curve in two ways, and get both problems."""
     del raw["body"]["amp"][1]["gain"]
     raw["body"]["amp"][3] = 1.0
     assert problems(raw) == ["body.amp[1].gain: missing", "body.amp[3]: expected a { ms, gain } table, found a float"]
 
 
-def test_schema_1_patches_still_read_and_have_no_low_cut(raw):
+def test_schema_1_patches_still_read_and_have_no_low_cut(raw: dict[str, Any]) -> None:
+    """Read a schema 1 patch without a low cut, write it as schema 2, and refuse a low cut in schema 1."""
     raw["schema"] = 1
     del raw["output"]["low_cut_hz"]
     old = patch.from_dict(raw)
@@ -287,17 +339,20 @@ def test_schema_1_patches_still_read_and_have_no_low_cut(raw):
     assert problems(raw) == ["output.low_cut_hz: unknown field"]
 
 
-def test_schema_2_requires_the_low_cut(raw):
+def test_schema_2_requires_the_low_cut(raw: dict[str, Any]) -> None:
+    """Leave out the low cut of a schema 2 patch, where it has no default."""
     del raw["output"]["low_cut_hz"]
     assert problems(raw) == ["output.low_cut_hz: missing"]
 
 
-def test_a_true_peak_target_cannot_exceed_full_scale(raw):
+def test_a_true_peak_target_cannot_exceed_full_scale(raw: dict[str, Any]) -> None:
+    """Refuse a true-peak target above 0 dBTP."""
     raw["output"].update(mode="true-peak", db=0.1)
     assert problems(raw) == ["output.db: 0.1 is outside -60 … 0"]
 
 
-def test_notes_by_number():
+def test_notes_by_number() -> None:
+    """Name MIDI notes, number note names, and tune notes to equal temperament."""
     assert [patch.note_name(n) for n in (0, 24, 61, 69)] == ["C-1", "C1", "C#4", "A4"]
     assert [patch.note_number(s) for s in ("C1", "c#1", "Db1", "B-1", "H1")] == [24, 25, 25, 11, None]
-    assert patch.note_hz(69) == 440.0 and patch.note_hz(24) == 32.703
+    assert [patch.note_hz(69), patch.note_hz(24)] == [440.0, 32.703]

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Vittorio Candolo
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Command line: ballast init | tune | stretch | render | multisample | audition | extract."""
 
 from __future__ import annotations
@@ -9,8 +12,10 @@ import math
 import sys
 from importlib import resources
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import __version__, wav
+from .audition import AuditionError, Watcher, audition
 from .patch import (
     CURVES,
     Patch,
@@ -25,38 +30,48 @@ from .patch import (
     read_text,
     stretch,
 )
-from .render import FORMATS, db, export, render
+from .render import FORMATS, Report, db, export, render
 
-PRESET_DIR = resources.files(__package__).joinpath("data", "presets")
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    import numpy as np
+    from numpy.typing import NDArray
+
+PRESET_DIR = resources.files("ballast_synth").joinpath("data", "presets")
 PRESETS = sorted(f.name.removesuffix(".toml") for f in PRESET_DIR.iterdir() if f.name.endswith(".toml"))
 
 
 class CliError(Exception):
     """A message for stderr, and the exit status: 2 for bad input, 1 for a refusal or a failure."""
 
-    def __init__(self, message: str, status: int = 2):
+    def __init__(self, message: str, status: int = 2) -> None:
+        """Keep the message, and the status to exit with."""
         super().__init__(message)
         self.status = status
 
 
 def _listing(head: str, e: ValueError) -> CliError:
-    """`head`, then every problem of a PatchError, or the message of another ValueError, indented."""
+    """Make an error of `head`, then every problem of a PatchError, or the message of another ValueError, indented."""
     problems = e.problems if isinstance(e, PatchError) else [str(e)]
     return CliError("\n".join([head, *(f"  {m}" for m in problems)]))
 
 
 def _open(path: str) -> tuple[str, Patch]:
-    """A patch file's text, and its patch."""
+    """Read a patch file: its text, and its patch."""
     try:
         text = read_text(path)
     except OSError as e:
-        raise CliError(f"{path}: {e.strerror or e}") from None
+        msg = f"{path}: {e.strerror or e}"
+        raise CliError(msg) from None
     except UnicodeDecodeError:
-        raise CliError(f"{path}: not UTF-8 or UTF-16 text") from None
+        msg = f"{path}: not UTF-8 or UTF-16 text"
+        raise CliError(msg) from None
     try:
         return text, loads(text)
     except PatchError as e:
-        raise _listing(f"{path}: invalid patch", e) from None
+        msg = f"{path}: invalid patch"
+        raise _listing(msg, e) from None
 
 
 def _emit(text: str, out: str | None) -> None:
@@ -67,67 +82,73 @@ def _emit(text: str, out: str | None) -> None:
     try:
         wav.save(out, text.encode("utf-8"))
     except OSError as e:
-        raise CliError(f"{out}: {e.strerror or e}") from None
+        msg = f"{out}: {e.strerror or e}"
+        raise CliError(msg) from None
 
 
 def _tuned(p: Patch, note: str, head: str) -> Patch:
+    """Retune a patch to a note name or frequency, or explain under `head` why it cannot be."""
     try:
         return edit(p, "body.tune_hz", parse_tune(note))
     except ValueError as e:
         raise _listing(head, e) from None
 
 
-def cmd_init(a) -> None:
+def cmd_init(a: argparse.Namespace) -> None:
+    """Start a patch from a preset, tuned if asked."""
     p = loads(PRESET_DIR.joinpath(f"{a.preset}.toml").read_text(encoding="utf-8"))
     if a.tune is not None:
         p = _tuned(p, a.tune, f"{a.preset}: cannot tune to {a.tune}")
     _emit(dumps(p), a.out)
 
 
-def cmd_tune(a) -> None:
+def cmd_tune(a: argparse.Namespace) -> None:
+    """Retune a patch to a note or frequency."""
     _, p = _open(a.patch)
     _emit(dumps(_tuned(p, a.note, f"{a.patch}: cannot tune to {a.note}")), a.out)
 
 
-def cmd_stretch(a) -> None:
+def cmd_stretch(a: argparse.Namespace) -> None:
+    """Rescale the knot times of one curve."""
     _, p = _open(a.patch)
     try:
         p = stretch(p, a.curve, a.factor, a.after)
     except ValueError as e:
-        raise _listing(f"{a.patch}: cannot stretch {a.curve} by {a.factor:g}", e) from None
+        msg = f"{a.patch}: cannot stretch {a.curve} by {a.factor:g}"
+        raise _listing(msg, e) from None
     _emit(dumps(p), a.out)
 
 
-def cmd_render(a) -> None:
+def cmd_render(a: argparse.Namespace) -> None:
+    """Render a patch to WAV, unless it goes over the format's ceiling."""
     bits = FORMATS[a.format]
     if a.allow_over and bits is not None:
-        raise CliError("--allow-over writes float32 only: PCM cannot hold samples beyond full scale")
+        msg = "--allow-over writes float32 only: PCM cannot hold samples beyond full scale"
+        raise CliError(msg)
     text, p = _open(a.patch)
     audio, report = render(p, bits)
-    print(report)
+    sys.stdout.write(f"{report}\n")
     if report.over and bits is not None:
-        raise CliError(f"not written: lower output.db by at least {report.over_db:.4f} dB", 1)
+        msg = f"not written: lower output.db by at least {report.over_db:.4f} dB"
+        raise CliError(msg, 1)
     if report.over and not a.allow_over:
-        raise CliError(
+        msg = (
             f"not written: lower output.db by at least {report.over_db:.2f} dB, "
-            "or pass --allow-over to write a float file with overs",
-            1,
+            "or pass --allow-over to write a float file with overs"
         )
+        raise CliError(msg, 1)
     try:
         export(a.out, p, text, audio, bits)
     except OSError as e:
-        raise CliError(f"{a.out}: {e.strerror or e}") from None
-    print(f"wrote {a.out}")
+        msg = f"{a.out}: {e.strerror or e}"
+        raise CliError(msg) from None
+    sys.stdout.write(f"wrote {a.out}\n")
 
 
-def cmd_multisample(a) -> None:
-    low, high = note_number(a.low), note_number(a.high)
-    if low is None or high is None or low > high:
-        raise CliError(f"expected two note names, the lower first, such as C1 C2; found {a.low} {a.high}")
-    bits = FORMATS[a.format]
-    _, p = _open(a.patch)
+def _kicks(path: str, p: Patch, notes: range, bits: int | None) -> list[tuple[int, Patch, NDArray[np.float32], Report]]:
+    """Render the patch tuned to every note, refusing all of them if one cannot be tuned or goes over the ceiling."""
     kicks, problems = [], []
-    for n in range(low, high + 1):  # every note renders before any file is written
+    for n in notes:
         try:
             tuned = edit(p, "body.tune_hz", note_hz(n))
         except PatchError as e:
@@ -135,9 +156,23 @@ def cmd_multisample(a) -> None:
             continue
         kicks.append((n, tuned, *render(tuned, bits)))
     if problems:
-        raise CliError("\n".join([f"{a.patch}: cannot tune to every note", *(f"  {m}" for m in problems)]))
+        msg = "\n".join([f"{path}: cannot tune to every note", *(f"  {m}" for m in problems)])
+        raise CliError(msg)
     if over := [f"  {note_name(n)}: by {report.over_db:.4f} dB" for n, _, _, report in kicks if report.over]:
-        raise CliError("\n".join(["not written: lower output.db; these notes are over the ceiling", *over]), 1)
+        msg = "\n".join(["not written: lower output.db; these notes are over the ceiling", *over])
+        raise CliError(msg, 1)
+    return kicks
+
+
+def cmd_multisample(a: argparse.Namespace) -> None:
+    """Render one sample per key, with an SFZ map, writing nothing unless every note works."""
+    low, high = note_number(a.low), note_number(a.high)
+    if low is None or high is None or low > high:
+        msg = f"expected two note names, the lower first, such as C1 C2; found {a.low} {a.high}"
+        raise CliError(msg)
+    bits = FORMATS[a.format]
+    _, p = _open(a.patch)
+    kicks = _kicks(a.patch, p, range(low, high + 1), bits)  # every note renders before any file is written
     stem, folder = Path(a.patch).stem, Path(a.out)
     regions = []
     try:
@@ -145,56 +180,63 @@ def cmd_multisample(a) -> None:
         for n, tuned, audio, report in kicks:
             name = f"{stem}-{note_name(n)}.wav"
             export(folder / name, tuned, dumps(tuned), audio, bits)
-            print(f"{note_name(n):<4} {report.tune_hz:9.3f} Hz   peak {db(report.peak):6.2f} dBFS   {name}")
+            sys.stdout.write(
+                f"{note_name(n):<4} {report.tune_hz:9.3f} Hz   peak {db(report.peak):6.2f} dBFS   {name}\n",
+            )
             regions.append(f"<region> sample={name} key={n}")
         sfz = [f"// {stem}, from {note_name(low)} to {note_name(high)}: one sample per key, at its root", *regions]
         wav.save(folder / f"{stem}.sfz", ("\n".join(sfz) + "\n").encode("utf-8"))
     except OSError as e:
-        raise CliError(f"{e.filename or folder}: {e.strerror or e}") from None
-    print(f"wrote {len(kicks)} samples and {folder / stem}.sfz")
+        msg = f"{e.filename or folder}: {e.strerror or e}"
+        raise CliError(msg) from None
+    sys.stdout.write(f"wrote {len(kicks)} samples and {folder / stem}.sfz\n")
 
 
-def cmd_audition(a) -> None:
-    from .audition import AuditionError, audition
-
+def cmd_audition(a: argparse.Namespace) -> None:
+    """Play a patch in a loop, rendering it again on every edit when watching."""
     text, p = _open(a.patch)
     try:
-        audition(a.patch, text, p, watch=a.watch, bpm=a.bpm, bed=a.bed)
+        audition(p, watch=Watcher(a.patch, text) if a.watch else None, bpm=a.bpm, bed=a.bed)
     except AuditionError as e:
         raise CliError(str(e), 1) from None
     except KeyboardInterrupt:  # how an audition ends
         pass
 
 
-def cmd_extract(a) -> None:
+def cmd_extract(a: argparse.Namespace) -> None:
+    """Recover the patch embedded in a rendered WAV, as it was written."""
     try:
         found = wav.chunks(a.wav)
     except OSError as e:
-        raise CliError(f"{a.wav}: {e.strerror or e}") from None
+        msg = f"{a.wav}: {e.strerror or e}"
+        raise CliError(msg) from None
     except ValueError as e:
-        raise CliError(f"{a.wav}: {e}") from None
+        msg = f"{a.wav}: {e}"
+        raise CliError(msg) from None
     try:
         text = json.loads(found[wav.PRIVATE])["patch"]
-        if not isinstance(text, str):
-            raise TypeError
     except KeyError:
-        raise CliError(f"{a.wav}: no embedded patch") from None
+        msg = f"{a.wav}: no embedded patch"
+        raise CliError(msg) from None
     except (ValueError, TypeError):  # truncated or garbled, or not the table Ballast writes
-        raise CliError(f"{a.wav}: the embedded patch is damaged") from None
+        text = None
+    if not isinstance(text, str):
+        msg = f"{a.wav}: the embedded patch is damaged"
+        raise CliError(msg)
     _emit(text, a.out)
 
 
 def bpm(text: str) -> float:
+    """Parse a tempo in beats per minute: a positive number."""
     value = float(text)
     if not (math.isfinite(value) and value > 0):
-        raise argparse.ArgumentTypeError("must be a positive number")
+        msg = "must be a positive number"
+        raise argparse.ArgumentTypeError(msg)
     return value
 
 
-def main(argv=None) -> int:
-    for stream in (sys.stdout, sys.stderr):  # not the ANSI code page and CRLF of a Windows redirect
-        if isinstance(stream, io.TextIOWrapper):
-            stream.reconfigure(encoding="utf-8", newline="\n")
+def _parser() -> argparse.ArgumentParser:
+    """Build the parser of every command and its arguments."""
     ap = argparse.ArgumentParser(prog="ballast", description="A one-voice kick drum synthesizer, rendered to WAV.")
     ap.add_argument("--version", action="version", version=f"ballast {__version__}")
     sub = ap.add_subparsers(dest="command", required=True)
@@ -259,14 +301,22 @@ def main(argv=None) -> int:
     p = sub.add_parser("extract", parents=[output], help="recover the patch embedded in a rendered WAV")
     p.add_argument("wav")
     p.set_defaults(run=cmd_extract)
+    return ap
 
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command line, and return the exit status."""
+    for stream in (sys.stdout, sys.stderr):  # not the ANSI code page and CRLF of a Windows redirect
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding="utf-8", newline="\n")
+    ap = _parser()
     args = ap.parse_args(argv)
     if args.command == "audition" and args.bed and args.bpm is None:
         ap.error("--with needs --bpm, so the hits land on the bed's beats")
     try:
         args.run(args)
     except CliError as e:
-        print(e, file=sys.stderr)
+        sys.stderr.write(f"{e}\n")
         return e.status
     except KeyboardInterrupt:  # Ctrl+C: stop quietly, with the status a shell expects
         return 130
