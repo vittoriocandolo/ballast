@@ -20,7 +20,7 @@ import zlib
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 from scipy.signal import fftconvolve
@@ -191,18 +191,18 @@ class Panel:
         self.xs, self.ys = xs, ys
 
     @staticmethod
-    def _unit(v: ArrayLike, axis: Axis) -> NDArray[np.float64]:
+    def _unit(v: ArrayLike, axis: Axis) -> NDArray[np.floating[Any]]:
         a, b, log = axis
-        u = np.asarray(v, dtype=float)
+        u: NDArray[np.float64] = np.asarray(v, dtype=float)
         if log:
             return (np.log10(u) - math.log10(a)) / (math.log10(b) - math.log10(a))
         return (u - a) / (b - a)
 
-    def sx(self, v: ArrayLike) -> NDArray[np.float64]:
+    def sx(self, v: ArrayLike) -> NDArray[np.floating[Any]]:
         """Place data x across the panel."""
         return self.x + self._unit(v, self.xs) * self.w
 
-    def sy(self, v: ArrayLike) -> NDArray[np.float64]:
+    def sy(self, v: ArrayLike) -> NDArray[np.floating[Any]]:
         """Place data y up the panel."""
         return self.y + (1 - self._unit(v, self.ys)) * self.h
 
@@ -451,7 +451,7 @@ def figure_spectrum(k: Kick) -> str:
     return svg((960, top + 352), f"Spectrum of {k.name}", subtitle, "".join(body), description)
 
 
-def response(base: int, n: int = 1 << 20) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+def response(base: int, n: int = 1 << 20) -> tuple[NDArray[np.floating[Any]], NDArray[np.floating[Any]]]:
     """Compute a decimator's magnitude response in dB, at n / 2 + 1 frequencies up to half the internal rate."""
     taps = render.decimator(base)
     f = np.fft.rfftfreq(n, 1 / (base * render.K))
