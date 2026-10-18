@@ -50,7 +50,10 @@ def _slopes(h: Floats, m: Floats) -> Floats:
 
 
 def _end_slope(h0: float, h1: float, m0: float, m1: float) -> float:
-    """Return an end knot's slope by the shape-preserving three-point rule, from its segment's h0, m0 and the next's."""
+    """Return an end knot's slope by the shape-preserving three-point rule.
+
+    h0 and m0 are the width and the secant of the knot's segment, h1 and m1 those of the next one.
+    """
     d = ((2 * h0 + h1) * m0 - h0 * m1) / (h0 + h1)
     if np.sign(d) != np.sign(m0):
         return 0.0
@@ -60,7 +63,7 @@ def _end_slope(h0: float, h1: float, m0: float, m1: float) -> float:
 
 
 class Curve:
-    """PCHIP curve through knots (t, v); `first` and `last` fix the end slopes."""
+    """PCHIP curve through knots (t, v), with spacings h and slopes d; `first` and `last` fix the end slopes."""
 
     def __init__(self, t: ArrayLike, v: ArrayLike, *, first: float | None = None, last: float | None = None) -> None:
         """Fit the curve to its knots, and integrate it from end to end."""

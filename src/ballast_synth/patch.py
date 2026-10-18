@@ -150,9 +150,9 @@ def number(
 ) -> float:
     """Declare a number in lo … hi, or `off`; `hi` may be a function of the fields before it."""
 
-    def parse(path: str, v: object, problems: list[str], section: dict[str, Any]) -> float | None:
+    def parse(path: str, raw: object, problems: list[str], section: dict[str, Any]) -> float | None:
         top = hi(section) if callable(hi) else hi
-        return _number(path, v, problems, _Bounds(lo, top, below=below), off=off)
+        return _number(path, raw, problems, _Bounds(lo, top, below=below), off=off)
 
     return _rule(parse, note)
 
@@ -160,10 +160,10 @@ def number(
 def choice[T](allowed: tuple[T, ...], note: str = "") -> T:
     """Declare one of `allowed`, and of its type: neither true nor 48000.0 passes for an integer."""
 
-    def parse(path: str, v: object, problems: list[str], _section: dict[str, Any]) -> T | None:
-        if type(v) is type(allowed[0]) and v in allowed:
-            return v
-        problems.append(f"{path}: expected one of {', '.join(map(repr, allowed))}, found {v!r}")
+    def parse(path: str, raw: object, problems: list[str], _section: dict[str, Any]) -> T | None:
+        if type(raw) is type(allowed[0]) and raw in allowed:
+            return raw
+        problems.append(f"{path}: expected one of {', '.join(map(repr, allowed))}, found {raw!r}")
         return None
 
     return _rule(parse, note)
@@ -172,8 +172,8 @@ def choice[T](allowed: tuple[T, ...], note: str = "") -> T:
 def band(lo: float, hi: float, note: str = "") -> tuple[float, float]:
     """Declare a [low, high] pair of frequencies."""
 
-    def parse(path: str, v: object, problems: list[str], _section: dict[str, Any]) -> tuple[float, float] | None:
-        match v:
+    def parse(path: str, raw: object, problems: list[str], _section: dict[str, Any]) -> tuple[float, float] | None:
+        match raw:
             case [first, second]:
                 low = _number(f"{path}[0]", first, problems, _Bounds(lo, hi))
                 high = _number(f"{path}[1]", second, problems, _Bounds(lo, hi))
@@ -448,14 +448,16 @@ def dumps(p: Patch) -> str:
         rows: list[tuple[str, str, str]] = []
         curves: list[str] = []
         for f in fields(cls):
-            m, v = f.metadata, getattr(section, f.name)
-            if m["key"] is None:
-                rows.append((f.name, _toml(v), m["note"]))
+            meta, value = f.metadata, getattr(section, f.name)
+            if meta["key"] is None:
+                rows.append((f.name, _toml(value), meta["note"]))
                 continue
-            ms = [f"{t!r}," for t, _ in v]
-            width = max(map(len, ms))
-            curves += [_note(f"{f.name} = [", m["note"])]
-            curves += [f"  {{ ms = {t.ljust(width)} {m['key']} = {x!r} }}," for t, (_, x) in zip(ms, v, strict=True)]
+            times = [f"{ms!r}," for ms, _ in value]  # with their commas, so that the values after them line up
+            width = max(map(len, times))
+            curves += [_note(f"{f.name} = [", meta["note"])]
+            curves += [
+                f"  {{ ms = {t.ljust(width)} {meta['key']} = {x!r} }}," for t, (_, x) in zip(times, value, strict=True)
+            ]
             curves += ["]"]
         width = max(len(key) for key, _, _ in rows)
         lines += ["", f"[{name}]", *(_note(f"{key.ljust(width)} = {text}", note) for key, text, note in rows), *curves]

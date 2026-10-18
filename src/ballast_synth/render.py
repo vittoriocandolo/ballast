@@ -137,10 +137,18 @@ def output_stage(out: NDArray[np.float64], o: Output, ceiling: float) -> NDArray
     return scaled.astype(np.float32)
 
 
+def oversample(audio: NDArray[np.floating[Any]]) -> NDArray[np.float64]:
+    """Interpolate the audio 4×, to show the peaks between its samples.
+
+    The result runs on past the end of the audio, for as long as the interpolation rings.
+    """
+    fine: NDArray[np.float64] = resample_poly(np.concatenate((audio.astype(float), np.zeros(32))), 4, 1)
+    return fine
+
+
 def true_peak(audio: NDArray[np.floating[Any]]) -> float:
     """Estimate the peak between samples, by 4× oversampling."""
-    x = np.concatenate((audio.astype(float), np.zeros(32)))
-    return max(float(np.max(np.abs(resample_poly(x, 4, 1)))), float(np.max(np.abs(audio), initial=0.0)))
+    return max(float(np.max(np.abs(oversample(audio)))), float(np.max(np.abs(audio), initial=0.0)))
 
 
 def db(x: float) -> float:

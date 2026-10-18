@@ -109,8 +109,9 @@ class Voice:
 
     def body(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
         """Return the body at times t: the swept sine and its second harmonic, under their amplitude shape."""
-        # φ = φ0 + 2π f0 τ, where τ(t) = R(t) − R(t_ref) + c integrates the pitch ratio.
-        if self.tail:  # τ = t exactly from the last pitch knot on, whatever the sweep does before it
+        # φ = φ0 + 2π f0 τ, where τ integrates the pitch ratio R: τ(t) = ∫₀ᵗ R, or with a tail reference
+        # τ(t) = t_n − ∫ₜ^{t_n} R, which is exactly t from the last pitch knot t_n on, whatever the sweep does.
+        if self.tail:
             t_n = self.pitch.t[-1]
             tau = np.where(t >= t_n, t, t_n - self.pitch.remaining(t))
         else:

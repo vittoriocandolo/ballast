@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 from scipy.interpolate import CubicSpline
-from scipy.signal import fftconvolve, resample_poly, sosfreqz
+from scipy.signal import fftconvolve, sosfreqz
 
 from ballast_synth import audition, noise, patch, render
 from ballast_synth.voice import Voice
@@ -871,7 +871,7 @@ def figure_output_stage(p: patch.Patch) -> str:
         0.0,
     )
     audio, report = render.render(hot)
-    fine = resample_poly(np.concatenate((audio.astype(float), np.zeros(32))), 4, 1)  # as the report estimates it
+    fine = render.oversample(audio)  # as the report estimates the true peak
     at = int(np.argmax(np.abs(fine))) / 4
     sign = math.copysign(1.0, fine[round(at * 4)])
     lo, hi = math.floor(at) - 4, math.ceil(at) + 4
@@ -914,13 +914,14 @@ def figure_audition(k: Kick) -> str:
     mix = audition.Hits(k.audio, RATE, bpm).fill(round(beats * 60 / bpm * RATE))[:, 0]
     grid = Panel((left, 96, width, 304), Axis(0, beats), Axis(0, 1))
     body = [grid.frame(Ticks(tuple(range(beats + 1)), num, f"beats at {num(bpm)} bpm"), Ticks(()))]
-    body += [grid.vline(b, "axis") for b in (0, 4, 8)]
+    bar = audition.BEATS_PER_BAR
+    body += [grid.vline(b, "axis") for b in range(0, beats + 1, bar)]
     for n in range(beats):
         y = 104 + 14 * n
         body.append(column(float(grid.sx(n)) + 1, float(grid.sx(min(n + length, beats))), y, y + 10))
-    body.append(f'<text class="label" x="28" y="{104 + 14 * 4}">hits</text>')
-    for loop in range(2):
-        x0, x1 = grid.sx(4 * loop) + 1, grid.sx(4 * loop + 4) - 1
+    body.append(f'<text class="label" x="28" y="{104 + 14 * (beats // 2)}">hits</text>')
+    for loop in range(beats // bar):
+        x0, x1 = grid.sx(bar * loop) + 1, grid.sx(bar * (loop + 1)) - 1
         body.append(f'<rect class="key2" x="{x0:.1f}" y="240" width="{x1 - x0:.1f}" height="10" rx="3"/>')
         body.append(f'<text class="label" x="{x0 + 4:.1f}" y="232">loop {loop + 1}</text>')
     body.append('<text class="label" x="28" y="249">bed</text>')

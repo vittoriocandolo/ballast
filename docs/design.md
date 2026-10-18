@@ -10,7 +10,7 @@ cut, all at the internal rate F; h is the frozen decimator of the sample
 rate's family, K the decimation factor, g_out the output gain and p the
 polarity.
 
-![Signal flow: body and attack are summed into the drive at 16 times the base rate, then decimated, scaled and written to WAV](figures/pipeline.svg)
+![Signal flow: body and attack are summed, saturated and optionally high-passed at 16 times the base rate, then decimated, scaled and written to WAV](figures/pipeline.svg)
 
 - [The body](#the-body)
 - [Curves](#curves)
@@ -59,10 +59,10 @@ at its start; the [preset gallery](presets.md) has one for every preset.
 Every curve is a monotone cubic Hermite interpolant (PCHIP) through its knots.
 Interior slopes are the weighted harmonic mean of the neighboring secants
 (Fritsch–Butland), or zero where the secants differ in sign or one of them is
-zero; end slopes use the shape-preserving three-point rule. Every slope this produces keeps both
-normalized slopes of each segment within the Fritsch–Carlson region, so each
-segment is monotone and stays between its two knot values: a curve never
-overshoots.
+zero; end slopes use the shape-preserving three-point rule. Every slope this
+produces keeps both normalized slopes of each segment within the
+Fritsch–Carlson region, so each segment is monotone and stays between its two
+knot values: a curve never overshoots.
 
 ![The tight preset's pitch curve and body amplitude through their knots: Ballast's curves stay between the knots, while cubic splines through the same knots swing far past them](figures/curves.svg)
 
@@ -155,8 +155,8 @@ up to 20 kHz, with no new content above it.
 ![The tight preset's click at 48, 96 and 192 kHz, sample by sample: every 48 kHz sample is also a 96 and a 192 kHz sample](figures/rates.svg)
 
 The file keeps the whole filter tail: a render is N internal samples, with N
-the number of n such that n / F ≤ T, and out has ⌊(N + L − 2) / K⌋ + 1
-samples for L taps.
+the number of n such that n / F ≤ T, the patch's length, and out has
+⌊(N + L − 2) / K⌋ + 1 samples for L taps.
 
 ## The output stage
 
@@ -186,8 +186,8 @@ output of the decimator is one fixed sum over its own inputs, and each chunk
 starts on the factor's grid with every input its outputs need, so the chunks
 match a single pass bit for bit. Neither the blocks nor the threads change a
 sample, and because the filter is causal, a longer render never changes
-earlier samples. On a 12-core laptop, the 1.45 s `long` preset renders in
-about 80 ms.
+earlier samples. On a 12-core laptop, the 1.45 s `long` preset renders in a
+little over a tenth of a second.
 
 ## Reproducibility
 

@@ -82,7 +82,7 @@ def write(
     root: tuple[int, int],
     meta: dict[str, object],
 ) -> None:
-    """Write float32 samples, or for PCM integer samples already quantized to `fmt.bits`, 16 or 24."""
+    """Write a WAV file of float32 samples, or of integer samples already quantized to `fmt.bits`, 16 or 24, for PCM."""
     if fmt.bits is None:
         chunks = _chunk(b"fmt ", struct.pack("<HHIIHHH", FLOAT, 1, fmt.rate, 4 * fmt.rate, 4, 32, 0))
         chunks += _chunk(b"fact", struct.pack("<I", samples.size))

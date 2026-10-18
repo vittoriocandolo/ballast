@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 
 GAP_S = 0.5  # the silence between hits without a tempo
 POLL_S = 0.1  # how often the play loop looks at the device and the watched file
+BEATS_PER_BAR = 4
 BAR_TOLERANCE_S = 0.001  # how far a bed may be from a whole number of bars
 LAYOUTS = {1: "mono", 2: "stereo"}  # the channel counts a bed may have
 
@@ -90,14 +91,14 @@ def load_bed(path: str | os.PathLike[str], rate: int, bpm: float) -> Bed:
     if channels not in LAYOUTS:
         msg = f"{path}: {channels} channels; a bed must be mono or stereo"
         raise AuditionError(msg)
-    bar = rate * 4 * 60 / bpm
+    bar = rate * BEATS_PER_BAR * 60 / bpm
     bars = round(len(frames) / bar)
     if bars < 1 or abs(len(frames) - bars * bar) > BAR_TOLERANCE_S * rate:
         msg = f"{path}: {len(frames) / bar:.3f} bars at {bpm:g} bpm; a bed must be a whole number of bars"
         raise AuditionError(msg)
     summary = f"{path}: {bars} bar{'s' if bars > 1 else ''} at {bpm:g} bpm, {LAYOUTS[channels]}"
     sys.stdout.write(row("bed", summary) + "\n")
-    return Bed(frames.astype(np.float32), 4 * bars)
+    return Bed(frames.astype(np.float32), BEATS_PER_BAR * bars)
 
 
 class Hits:
