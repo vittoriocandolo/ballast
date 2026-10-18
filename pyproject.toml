@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling>=1.32"]
 build-backend = "hatchling.build"
 
 [project]
@@ -9,7 +9,7 @@ description = "A kick drum synthesizer that renders a text patch to an alias-fre
 readme = "README.md"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE", "NOTICE"]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [{ name = "Vittorio Candolo" }]
 keywords = ["audio", "synthesizer", "drum", "kick"]
 classifiers = [
@@ -18,31 +18,35 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: Multimedia :: Sound/Audio :: Sound Synthesis",
 ]
-dependencies = ["numpy>=1.24", "scipy>=1.14"]
+dependencies = ["numpy>=2.5", "scipy>=1.18"]
 
 [project.optional-dependencies]
-audition = ["sounddevice>=0.4"]
+audition = ["sounddevice>=0.5"]
 
 [project.scripts]
 ballast = "ballast_synth.cli:main"
 
 [dependency-groups]
-dev = ["mypy>=2.4", "pytest>=9", "ruff>=0.17", "typos>=1.51", "zizmor>=1.31"]
+dev = ["mypy>=2.4", "pytest>=9.1", "ruff>=0.17", "typos>=1.51", "zizmor>=1.31"]
+
+[tool.uv]
+required-version = ">=0.13"
 
 [tool.mypy]
 files = ["src", "tests", "docs"]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 warn_unreachable = true
 enable_error_code = [
     "deprecated",
     "exhaustive-match",
+    "explicit-override",
     "ignore-without-code",
     "mutable-override",
     "possibly-undefined",

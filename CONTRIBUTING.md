@@ -22,7 +22,7 @@ uv run zizmor --persona auditor .
 ```
 
 Ruff runs every stable rule, mypy checks all the code strictly, as Python
-3.11 would run it, pytest turns any warning into an error, typos checks the
+3.12 would run it, pytest turns any warning into an error, typos checks the
 spelling of code and documentation, and zizmor audits the GitHub workflows.
 
 `uv run ruff check --fix`, then `uv run ruff format`, fix most of what ruff

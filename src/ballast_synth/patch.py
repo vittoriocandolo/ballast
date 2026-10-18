@@ -22,14 +22,13 @@ import tomllib
 from dataclasses import dataclass, field, fields
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 if TYPE_CHECKING:
     import os
     from collections.abc import Callable, Collection, Iterable
 
-T = TypeVar("T")
-Knots = tuple[tuple[float, float], ...]  # a curve's (ms, value) knots
+type Knots = tuple[tuple[float, float], ...]  # a curve's (ms, value) knots
 
 SCHEMA = 2  # schema 1 had no output.low_cut_hz; its patches still render as they did
 SAMPLE_RATES = (44100, 48000, 88200, 96000, 176400, 192000)
@@ -133,11 +132,11 @@ def _toml(v: object) -> str:
 # dataclasses.field is.
 
 if TYPE_CHECKING:
-    Parse = Callable[[str, Any, list[str], dict[str, Any]], T | None]
-    Check = Callable[[str, Knots, list[str], dict[str, Any]], None]
+    type Parse[T] = Callable[[str, Any, list[str], dict[str, Any]], T | None]
+    type Check = Callable[[str, Knots, list[str], dict[str, Any]], None]
 
 
-def _rule(parse: Parse[T], note: str = "", key: str | None = None) -> T:
+def _rule[T](parse: Parse[T], note: str = "", key: str | None = None) -> T:
     return cast("T", field(metadata={"parse": parse, "note": note, "key": key}))
 
 
@@ -158,7 +157,7 @@ def number(
     return _rule(parse, note)
 
 
-def choice(allowed: tuple[T, ...], note: str = "") -> T:
+def choice[T](allowed: tuple[T, ...], note: str = "") -> T:
     """Declare one of `allowed`, and of its type: neither true nor 48000.0 passes for an integer."""
 
     def parse(path: str, v: object, problems: list[str], _section: dict[str, Any]) -> T | None:

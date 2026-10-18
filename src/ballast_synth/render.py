@@ -29,7 +29,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from importlib import resources
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, override
 
 import numpy as np
 import scipy
@@ -166,6 +166,7 @@ class Report:
         """How far the peak is above the format's ceiling."""
         return db(self.peak / self.ceiling)
 
+    @override
     def __str__(self) -> str:
         """Format the report as `ballast render` prints it."""
         if self.peak == 0:

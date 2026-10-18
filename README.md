@@ -40,7 +40,7 @@ Listen to the presets: [tight](docs/audio/tight.wav) ·
 
 ## Install
 
-Ballast needs Python 3.11 or later. From a checkout of this repository:
+Ballast needs Python 3.12 or later. From a checkout of this repository:
 
 ```
 uv tool install ".[audition]"   # the ballast command, with live audition

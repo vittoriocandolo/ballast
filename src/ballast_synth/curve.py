@@ -29,7 +29,7 @@ import numpy as np
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
 
-    Floats = NDArray[np.float64]
+    type Floats = NDArray[np.float64]
 
 
 def _slopes(h: Floats, m: Floats) -> Floats:

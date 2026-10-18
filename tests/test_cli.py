@@ -22,7 +22,7 @@ from ballast_synth.cli import main
 BAD_INPUT = 2  # the exit status for input the command cannot use
 REFUSED = 1  # the exit status for a refusal or a failure
 
-Run = Callable[..., tuple[int, str, str]]
+type Run = Callable[..., tuple[int, str, str]]
 
 
 @pytest.fixture
