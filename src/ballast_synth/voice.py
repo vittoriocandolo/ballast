@@ -3,11 +3,12 @@
 
 """Body, attack and drive as pure functions of time.
 
-    x(t) = b(t) + a(t),    y(t) = S_α(x(t))
+    x(t) = b(t) + a(t),    y[n] = the drive's curve S_α, averaged around t_n = n / F
 
-Nothing here keeps state: sample n at rate F is computed from t_n = n / F
-alone, so a block boundary, a longer render or a different rate never
-changes a sample's value.
+Nothing here keeps state: sample n at rate F is computed from x at t_(n-2) … t_(n+2)
+alone, so a block boundary, a longer render or another rate of the same family
+never changes a sample's value. The averaging keeps the drive from aliasing; see
+shaper.py.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from scipy.optimize import brentq
 
-from . import noise
+from . import noise, shaper
 from .curve import Curve
 
 if TYPE_CHECKING:
@@ -70,7 +71,7 @@ def _support(t: NDArray[np.float64], curve: Curve) -> slice:
 
 
 class Voice:
-    """The patch at internal rate F: y[n] = S_α(b(n / F) + a(n / F))."""
+    """The patch at internal rate F: y[n], the drive's curve averaged around n / F over x(t) = b(t) + a(t)."""
 
     def __init__(self, p: Patch, rate: int) -> None:
         """Prepare the patch's curves, gains, noise and drive for synthesis at `rate`."""
@@ -88,6 +89,7 @@ class Voice:
         uses_noise = self.attack_gain != 0.0 and self.noise_weight != 0.0
         self.noise = noise.table(p.seed, *a.noise_band_hz, rate) if uses_noise else None
         self.alpha = drive_alpha(p.drive.db)
+        self.curve = shaper.Tanh(self.alpha) if self.alpha != 0.0 else None  # no curve at all at 0 dB
         self.count = sample_count(p.length_ms / 1000, rate)
 
     def samples(self) -> NDArray[np.float64]:
@@ -95,7 +97,12 @@ class Voice:
         return np.concatenate([self._block(n, min(n + BLOCK, self.count)) for n in range(0, self.count, BLOCK)])
 
     def _block(self, n0: int, n1: int) -> NDArray[np.float64]:
-        """Compute y[n] for n0 ≤ n < n1, each source only over its support."""
+        """Compute y[n] for n0 ≤ n < n1, from the sources two samples either side, which the drive averages over."""
+        x = self.sources(n0 - 2, n1 + 2)
+        return x[2:-2] if self.curve is None else shaper.drive(self.curve, x)
+
+    def sources(self, n0: int, n1: int) -> NDArray[np.float64]:
+        """Compute x[n] = b(n / F) + a(n / F) for n0 ≤ n < n1, each source only over its support."""
         n = np.arange(n0, n1)
         t = n / self.rate
         x = np.zeros(n1 - n0)
@@ -105,7 +112,7 @@ class Voice:
         if self.attack_gain != 0.0:
             s = _support(t, self.attack_amp)
             x[s] += self.attack(t[s], n[s])
-        return self.saturate(x)
+        return x
 
     def body(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
         """Return the body at times t: the swept sine and its second harmonic, under their amplitude shape."""
@@ -131,11 +138,3 @@ class Voice:
         if self.noise is not None:  # computed whenever the attack has noise
             carrier += self.noise_weight * self.noise[n % self.rate]  # the noise repeats every second
         return self.attack_gain * self.attack_amp(t) * carrier
-
-    def saturate(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Apply S_α(x) = tanh(αx) / tanh α, odd by construction; the identity when α = 0."""
-        if self.alpha == 0.0:
-            return x
-        norm: float = np.tanh(np.array([self.alpha]))[0]  # the same tanh as below, so S(1) = 1 exactly
-        with np.errstate(over="ignore"):
-            return np.copysign(np.tanh(self.alpha * np.abs(x)), x) / norm

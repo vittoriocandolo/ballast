@@ -144,7 +144,7 @@ float file with overs, for a DAW to bring down.
 tuning   43.654 Hz, F1 +0.0 cents
 length   240.0 ms source, 241.9 ms exported (11612 samples at 48000 Hz, 24-bit PCM)
 peak     -5.82 dBFS sample, -5.74 dBTP true
-render   56 ms
+render   52 ms
 ```
 
 - **tuning**: `tune_hz`, and the nearest note with its offset in cents.

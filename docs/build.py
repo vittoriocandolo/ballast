@@ -28,8 +28,8 @@ import numpy as np
 from scipy.interpolate import CubicSpline
 from scipy.signal import fftconvolve, sosfreqz
 
-from ballast_synth import audition, noise, patch, render
-from ballast_synth.voice import Voice
+from ballast_synth import audition, noise, patch, render, shaper
+from ballast_synth.voice import Voice, drive_alpha
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
@@ -67,6 +67,12 @@ LIGHT = {
     "step-2": "#3987e5",
     "step-3": "#1c5cab",
     "step-4": "#0d366b",
+    "heat-1": "#cde2fb",
+    "heat-2": "#9ec5f4",
+    "heat-3": "#6da7ec",
+    "heat-4": "#256abf",
+    "heat-5": "#184f95",
+    "heat-6": "#0d366b",
     "show-light": "inline",
     "show-dark": "none",
 }
@@ -85,6 +91,12 @@ DARK = {
     "step-2": "#2a78d6",
     "step-3": "#6da7ec",
     "step-4": "#b7d3f6",
+    "heat-1": "#104281",
+    "heat-2": "#184f95",
+    "heat-3": "#1c5cab",
+    "heat-4": "#6da7ec",
+    "heat-5": "#9ec5f4",
+    "heat-6": "#cde2fb",
     "show-light": "none",
     "show-dark": "inline",
 }
@@ -140,6 +152,15 @@ STYLE = f"""<style>
 .fig .zone{{fill:var(--panel);stroke:var(--rule);stroke-width:1}}
 .fig .flow{{fill:none;stroke:var(--ink-2);stroke-width:1.5}}
 .fig .head{{fill:var(--ink-2)}}
+.fig .h0{{fill:var(--panel)}}
+.fig .h1{{fill:var(--heat-1)}}
+.fig .h2{{fill:var(--heat-2)}}
+.fig .h3{{fill:var(--heat-3)}}
+.fig .h4{{fill:var(--heat-4)}}
+.fig .h5{{fill:var(--heat-5)}}
+.fig .h6{{fill:var(--heat-6)}}
+.fig .on-light{{fill:var(--ink);font-size:11px}}
+.fig .on-dark{{fill:var(--paper);font-size:11px}}
 .fig .light{{display:var(--show-light)}}
 .fig .dark{{display:var(--show-dark)}}
 </style>"""
@@ -728,8 +749,8 @@ def figure_attack(p: patch.Patch) -> str:
 DRIVES = (("o1", 6.0), ("o2", 12.0), ("o3", 21.0), ("o4", 48.0))
 
 
-def figure_saturator(p: patch.Patch) -> str:
-    """Draw the saturator's transfer curve at four drives, and a full-scale sine through each."""
+def figure_saturator() -> str:
+    """Draw the saturator's curve at four drives, and a full-scale sine through each."""
     transfer = Panel(LEFT, Axis(-2, 2), Axis(-1.2, 1.2))
     cycle = Panel(RIGHT, Axis(0, 360), Axis(-1.2, 1.2))
     x = np.linspace(-2, 2, 801)
@@ -737,9 +758,9 @@ def figure_saturator(p: patch.Patch) -> str:
     sine = np.sin(np.radians(phi))
     lines, waves = [transfer.line("ref", x, x)], [cycle.line("ref", phi, sine)]
     for cls, db in DRIVES:
-        v = Voice(patch.edit(p, "drive.db", db), RATE)
-        lines.append(transfer.line(cls, x, v.saturate(x)))
-        waves.append(cycle.line(cls, phi, v.saturate(sine)))
+        curve = shaper.Tanh(drive_alpha(db))
+        lines.append(transfer.line(cls, x, curve(x)))
+        waves.append(cycle.line(cls, phi, curve(sine)))
     body = [
         transfer.frame(Ticks((-2, -1, 0, 1, 2), num, "input"), Ticks((-1, 0, 1), num, "Output against input")),
         transfer.clip("transfer", "".join(lines)),
@@ -757,6 +778,87 @@ def figure_saturator(p: patch.Patch) -> str:
     subtitle = "Drive raises the small-signal gain and squares the wave off, while full scale stays at full scale"
     description = "The saturator's transfer curve and a full-scale sine at drives from 0 to 48 dB"
     return svg(fit(transfer, 1), "The saturator", subtitle, "".join(body), description)
+
+
+ALIAS_TONES = tuple(4 * p for p in (13, 97, 251, 631, 1249, 1999, 3001, 4999))  # 52 Hz to 20 kHz, 4 × a prime
+ALIAS_DRIVES = (3, 6, 12, 18, 21, 24, 30, 36, 42, 48)
+ALIAS_STEPS = (-140, -120, -100, -80, -60, -40)  # the boundaries of the map's seven shades, in dB
+DARK_SHADES = 4  # from this shade on, a cell's number takes the paper's color
+
+
+def worst_alias(tone: int, db: float, *, anti_aliased: bool) -> float:
+    """Measure the strongest component in 20 Hz … 20 kHz that is no harmonic, in dB re a full-scale tone.
+
+    The tone is 4 times a prime number of Hz, so over a quarter of a second every alias lands on a 4 Hz bin of
+    its own. Without anti-aliasing, the drive's curve is read at each internal sample.
+    """
+    _, rate, factor = render.rates(RATE)
+    t = (np.arange(round(0.27 * rate) + 4) - 2) / rate
+    x = np.sin(2 * np.pi * tone * t)
+    curve = shaper.Tanh(drive_alpha(db))
+    y = shaper.drive(curve, x) if anti_aliased else curve(x[2:-2])
+    out = render.decimate(render.decimator(RATE), y, factor)[RATE // 50 : RATE // 50 + RATE // 4]
+    spectrum = np.abs(np.fft.rfft(out))
+    f = 4 * np.arange(spectrum.size)
+    band = (f >= PASSBAND_HZ / KILO) & (f <= PASSBAND_HZ) & (f % tone != 0)
+    return float(20 * np.log10(max(float(np.max(spectrum[band])), 1e-300) / spectrum[tone // 4]))
+
+
+def heat_map(area: tuple[float, float, float, float], title: str, *, anti_aliased: bool) -> str:
+    """Draw the worst alias for every tone and drive as a grid of shaded cells, numbered where it is loud."""
+    x0, y0, w, h = area
+    cw, ch = w / len(ALIAS_DRIVES), h / len(ALIAS_TONES)
+    out = [
+        f'<text class="label" x="{x0}" y="{y0 - 10}">{title}</text>',
+        f'<text x="{x0 - 8}" y="{y0 - 10}" text-anchor="end">Hz</text>',
+    ]
+    for row, tone in enumerate(reversed(ALIAS_TONES)):  # the highest tone on top
+        y = y0 + row * ch
+        label = f"{tone / KILO:.2g}k" if tone >= KILO else f"{tone}"
+        out.append(f'<text x="{x0 - 8}" y="{y + ch / 2 + 4:.1f}" text-anchor="end">{label}</text>')
+        for col, db in enumerate(ALIAS_DRIVES):
+            value = worst_alias(tone, db, anti_aliased=anti_aliased)
+            shade = int(np.searchsorted(ALIAS_STEPS, value, side="right"))
+            x = x0 + col * cw
+            out.append(
+                f'<rect class="h{shade}" x="{x + 1:.1f}" y="{y + 1:.1f}" width="{cw - 2:.1f}" height="{ch - 2:.1f}" '
+                'rx="2"/>',
+            )
+            if shade > 0:  # an alias 140 dB down or more needs no number
+                ink = "on-dark" if shade >= DARK_SHADES else "on-light"
+                out.append(
+                    f'<text class="{ink}" x="{x + cw / 2:.1f}" y="{y + ch / 2 + 4:.1f}" text-anchor="middle">'
+                    f"{num(round(value))}</text>",
+                )
+    out += [
+        f'<text x="{x0 + (col + 0.5) * cw:.1f}" y="{y0 + h + 18}" text-anchor="middle">{num(db)}</text>'
+        for col, db in enumerate(ALIAS_DRIVES)
+    ]
+    out.append(f'<text class="label" x="{x0 + w}" y="{y0 + h + 36}" text-anchor="end">drive, dB</text>')
+    return "".join(out)
+
+
+def figure_aliasing() -> str:
+    """Map the worst alias over tone and drive: the drive's curve read at each sample, and Ballast's drive."""
+    body = [
+        heat_map(LEFT, "The curve read at each sample", anti_aliased=False),
+        heat_map(RIGHT, "Ballast's drive, averaged around each sample", anti_aliased=True),
+    ]
+    x0, y = LEFT[0], LEFT[1] + LEFT[3] + 54
+    body.append(f'<text class="label" x="{x0}" y="{y - 8}">worst alias, dB re the tone</text>')
+    body += [
+        f'<rect class="h{i}" x="{x0 + 44 * i}" y="{y}" width="42" height="10" rx="2"/>'
+        for i in range(len(ALIAS_STEPS) + 1)
+    ]
+    body += [
+        f'<text x="{x0 + 44 * i - 1}" y="{y + 26}" text-anchor="middle">{num(step)}</text>'
+        for i, step in enumerate(ALIAS_STEPS, 1)
+    ]
+    subtitle = "A full-scale tone in the 48 kHz family, at the internal rate of 1536 kHz: the worst alias it leaves"
+    description = (
+        "Maps of the worst alias over tone and drive, for the curve read at each sample and for Ballast's drive"
+    )
+    return svg(y + 26 + 28, "Aliasing", subtitle, "".join(body), description)
 
 
 CORNERS = (("o1", 10.0), ("o2", 30.0), ("o3", 100.0), ("o4", 1000.0))
@@ -1074,7 +1176,8 @@ def main() -> None:
         "body": figure_body(kicks["long"].p),
         "curves": figure_curves(tight),
         "attack": figure_attack(tight),
-        "saturator": figure_saturator(tight),
+        "saturator": figure_saturator(),
+        "aliasing": figure_aliasing(),
         "low-cut": figure_low_cut(),
         "decimator": figure_decimator(),
         "rates": figure_rates(tight),

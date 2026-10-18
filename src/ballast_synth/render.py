@@ -5,12 +5,14 @@
 
     out[m] = p · g_out · Σ_{k<L} h[k] z[mK − k],    z[n] = C(y)[n] for 0 ≤ n < N, else 0
 
-Here y[n] = S_α(x(n / F)) is the voice at the internal rate F = 32 × base,
-with base 44.1 or 48 kHz, and C the optional low cut. The decimation factor
-is K = F / rate: 16 at the base rates, 8 at 88.2 and 96 kHz, 4 at 176.4 and
-192 kHz. A higher rate reuses its family's F and filter, so a 96 kHz file is
-exactly the 48 kHz file with the in-between samples filled in. Nothing trims
-or fades, only the low cut high-passes, and the whole filter tail is kept.
+Here y[n] is the voice at the internal rate F = 32 × base, with base 44.1 or
+48 kHz: the sources through the drive's curve, averaged around n / F so that
+it does not alias (see shaper.py). C is the optional low cut. The decimation
+factor is K = F / rate: 32 at the base rates, 16 at 88.2 and 96 kHz, 8 at
+176.4 and 192 kHz. A higher rate reuses its family's F and filter, so a 96 kHz
+file is exactly the 48 kHz file with the in-between samples filled in. Nothing
+trims or fades, only the low cut high-passes, and the whole filter tail is
+kept.
 
 The internal signal is computed in blocks aligned to the trigger and
 decimated in parallel chunks. Every sample is a pure function of its time,

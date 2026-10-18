@@ -14,12 +14,14 @@ from ballast_synth.voice import Voice
 _, INTERNAL, _ = render.rates(48000)  # the internal rate of the 48 kHz family
 
 
-def test_blocks_never_change_a_sample(tight: patch.Patch, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Synthesize in blocks of three sizes, one longer than the kick, and compare every sample."""
-    whole = Voice(tight, INTERNAL).samples()
-    for block in (999, 4096, 2**17):
+@pytest.mark.parametrize("db", [6.0, 48.0])
+def test_blocks_never_change_a_sample(tight: patch.Patch, db: float, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Synthesize in three block sizes, one longer than the kick, gently and hard driven, and compare every sample."""
+    driven = patch.edit(tight, "drive.db", db)
+    whole = Voice(driven, INTERNAL).samples()
+    for block in (999, 4096, 2**18):
         monkeypatch.setattr(voice, "BLOCK", block)
-        assert np.array_equal(Voice(tight, INTERNAL).samples(), whole)
+        assert np.array_equal(Voice(driven, INTERNAL).samples(), whole)
 
 
 def test_a_longer_render_starts_with_the_same_samples(tight: patch.Patch) -> None:
@@ -46,22 +48,11 @@ def test_onset_phase_starts_at_phase_deg(tight: patch.Patch) -> None:
     assert v.phi0 == math.pi / 2
 
 
-@pytest.mark.parametrize("db", [1e-6, 3.0, 21.0, 48.0])
-def test_the_saturator_is_odd_and_keeps_full_scale_exactly(tight: patch.Patch, db: float) -> None:
-    """Saturate full scale, its negative and silence exactly, and small signals by the drive's gain."""
-    v = Voice(patch.edit(tight, "drive.db", db), INTERNAL)
-    x = np.linspace(-2.0, 2.0, 4001)
-    assert v.saturate(np.array([1.0, -1.0, 0.0])).tolist() == [1.0, -1.0, 0.0]
-    assert np.array_equal(v.saturate(-x), -v.saturate(x))
-    small = 1e-9  # the small-signal gain is 10^(db/20)
-    assert v.saturate(np.array([small]))[0] / small == pytest.approx(10 ** (db / 20), rel=1e-9)
-
-
 def test_drive_at_0_db_is_an_exact_bypass(tight: patch.Patch) -> None:
-    """Saturate with no drive, and get back the very same array."""
+    """Synthesize with no drive, and get the sources themselves, sample for sample."""
     v = Voice(patch.edit(tight, "drive.db", 0.0), INTERNAL)
-    x = np.random.default_rng(0).standard_normal(1000)
-    assert v.saturate(x) is x
+    assert v.curve is None
+    assert np.array_equal(v.samples(), v.sources(0, v.count))
 
 
 @pytest.mark.parametrize("db", [0.5, 6.0, 21.0, 48.0])

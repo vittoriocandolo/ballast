@@ -110,6 +110,34 @@ tanh α, so it is odd by construction.
 
 ![The saturator's transfer curve, and a full-scale sine through it, at drives from 0 to 48 dB](figures/saturator.svg)
 
+A curve makes harmonics without limit, and those near a multiple of the
+internal rate fold back into the audio band, where no filter can tell them
+from the sound. So Ballast never reads the curve at single points. Each output
+sample is the average of S along the input's path from one sample before to
+one after, weighted by a triangle that peaks on the sample, with the input
+taken as linear between samples:
+
+    y[n] = R(x[n], x[n+1]) + R(x[n], x[n−1]),    R(a, b) = ∫₀¹ (1 − u) S(a + u(b − a)) du
+
+This is second-order antiderivative anti-aliasing, centred on each sample so
+that it adds no delay. The triangle's spectrum has a double zero at every
+multiple of the internal rate, exactly where the aliases come from. R has a
+closed form in S's first and second antiderivatives, which for tanh involve
+log cosh and the dilogarithm, arranged so that rounding cancels nothing large;
+a Taylor series takes over for steps much shorter than 1/α. Against numerical
+integration it is exact to within 10⁻¹¹. For a small signal the average is
+(x[n−1] + 4x[n] + x[n+1]) / 6, which would take 0.0097 dB off at 20 kHz; a
+three-tap correction keeps the passband flat within 0.00002 dB.
+
+![The worst alias of a full-scale tone for every tone and drive: the curve read at each sample aliases up to −38 dB, Ballast's drive no higher than −107 dB](figures/aliasing.svg)
+
+Measured with full-scale tones, every setting the patch allows keeps its
+aliases at least 104 dB down. The worst corner is a 20 kHz tone at the maximum
+drive of 48 dB: 107 dB down in the 48 kHz family, 104 dB in the 44.1 kHz one,
+whose internal rate is lower. Up to 24 dB of drive, every tone stays more than
+130 dB down. Read at each sample instead, the same curve aliases as loud as
+−38 dB.
+
 ## The low cut
 
 `output.low_cut_hz` adds a second-order Butterworth high-pass, 12 dB per
@@ -182,13 +210,14 @@ removes DC.
 
 The internal signal is computed in blocks of 2¹⁵ samples aligned to the
 trigger, which bounds memory; each source is evaluated only over its own
-support. The decimator then runs in parallel chunks of 2048 outputs. Each
-output of the decimator is one fixed sum over its own inputs, and each chunk
-starts on the factor's grid with every input its outputs need, so the chunks
-match a single pass bit for bit. Neither the blocks nor the threads change a
-sample, and because the filter is causal, a longer render never changes
-earlier samples. On a 12-core laptop, the 1.45 s `long` preset renders in
-about a fifth of a second.
+support, and the two samples either side of a block that the drive averages
+over are computed again rather than carried. The decimator then runs in
+parallel chunks of 2048 outputs. Each output of the decimator is one fixed sum
+over its own inputs, and each chunk starts on the factor's grid with every
+input its outputs need, so the chunks match a single pass bit for bit. Neither
+the blocks nor the threads change a sample, and because the filter is causal,
+a longer render never changes earlier samples. On a 12-core laptop, the 1.45 s
+`long` preset renders in about a quarter of a second.
 
 ## Reproducibility
 
@@ -199,10 +228,10 @@ time. Each WAV records the renderer version, the decimator checksum, the
 platform and the library versions next to the patch.
 
 Across platforms or library versions, the elementary functions (sine, tanh,
-logarithm) and the FFT may round their last bit differently, so a few samples
-may differ in their last bit, far below audibility. The inputs that define the
-sound are exact and portable: the patch, the SHAKE-256 bytes behind the noise
-and the dither, and the filter taps.
+logarithm, dilogarithm) and the FFT may round their last bit differently, so a
+few samples may differ at the level of rounding, far below audibility. The
+inputs that define the sound are exact and portable: the patch, the SHAKE-256
+bytes behind the noise and the dither, and the filter taps.
 
 ## Audition
 
@@ -231,6 +260,7 @@ Audition reuses the renderer and adds four small parts:
 | `curve.py` | monotone cubic Hermite curves with exact integrals |
 | `noise.py` | the seeded continuous-time noise, and the PCM dither |
 | `voice.py` | body, attack and saturator as pure functions of time, evaluated in blocks |
+| `shaper.py` | the drive's curve, anti-aliased by its antiderivatives |
 | `render.py` | rates, frozen decimators, parallel decimation, output stage, report, export |
 | `wav.py` | the RIFF writer, the chunk reader behind `extract`, and writing any file whole or not at all |
 | `audition.py` | hits, bed, watcher and playback |
