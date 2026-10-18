@@ -5,9 +5,10 @@ and the renderer has no defaults, so a future default can never change an old
 patch. The parser rejects anything outside the valid domain, reports every
 problem with its field path, and never clamps or repairs.
 
-![The tight preset's pitch, body and attack curves through their knots, and the first 60 ms of its output](figures/anatomy.svg)
+![The tight preset's pitch, body and attack curves through their knots, and the first 60 ms of its output](figures/anatomy-tight.svg)
 
-This is the `tight` preset, drawn above:
+This is the `tight` preset, drawn above; the [preset gallery](presets.md) draws
+every preset the same way:
 
 ```toml
 schema = 2
@@ -115,8 +116,9 @@ the pitch, `gain` for an amplitude shape.
   (10 µs) apart. The spacing is compared on the decimal values as written, so
   `0.01` after `0.0` is exactly enough.
 - **Shape.** Ballast draws a monotone cubic (PCHIP) through the knots: it
-  passes through every knot and never overshoots between two of them. Before
-  its first knot and after its last, a curve holds its end value.
+  passes through every knot and, unlike a cubic spline, never overshoots
+  between two of them ([Design](design.md#curves) draws both). Before its first
+  knot and after its last, a curve holds its end value.
 - **Amplitude shapes** have gains from 0 to 1, start and end at 0, and peak at
   exactly 1. Levels belong in `level_db`, so a shape only says how the sound
   moves. Their ends are flat, so they leave and join silence smoothly.

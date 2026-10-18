@@ -46,7 +46,12 @@ then exactly the free-running sine at f₀ with phase φ₀, whatever the sweep
 does, and the integral from t to t_n is computed on its own so it stays exact
 as t approaches t_n.
 
-![Spectrogram of the tight preset: the body sweeps from 385 Hz down to 55 Hz while the attack adds a short broadband burst](figures/spectrum.svg)
+![The body's shape for h2 = 0, 0.25 and 0.5, and the long preset's body around its last pitch knot with each phase reference](figures/body.svg)
+
+A spectrogram shows the sweep over a whole kick, with the attack's short burst
+at its start; the [preset gallery](presets.md) has one for every preset.
+
+![Spectrogram of the tight preset: the body sweeps from 385 Hz down to 55 Hz while the attack adds a short broadband burst](figures/spectrum-tight.svg)
 
 ## Curves
 
@@ -57,6 +62,8 @@ zero; end slopes use the shape-preserving three-point rule. Every slope this pro
 normalized slopes of each segment within the Fritsch–Carlson region, so each
 segment is monotone and stays between its two knot values: a curve never
 overshoots.
+
+![The tight preset's pitch curve and body amplitude through their knots: Ballast's curves stay between the knots, while cubic splines through the same knots swing far past them](figures/curves.svg)
 
 Amplitude shapes fix both end slopes to zero, so they leave and join silence
 smoothly; the pitch curve fixes its last slope to zero, so it lands on the
@@ -84,6 +91,8 @@ Gaussian and n(t) is exactly Gaussian at every t. |H| is a pair of
 second-order Butterworth skirts with their half-power points at the band
 edges, and γ makes the expected power ½, that of a unit sine.
 
+![The weights of tone and noise against noise_mix, and the tight preset's noise band, as designed and as its seeded noise measures](figures/attack.svg)
+
 Because the noise is a function of t, it is the same signal at every sample
 rate, and because the shaping only reweights components, editing the band
 keeps the same noise. It repeats every second, so Ballast computes one second
@@ -98,6 +107,8 @@ small-signal gain is `drive.db`. α solves that equation numerically; at 0 dB,
 S is the identity, an exact bypass. It is computed as sign(x) · tanh(α|x|) /
 tanh α, so it is odd by construction.
 
+![The saturator's transfer curve, and a full-scale sine through it, at drives from 0 to 48 dB](figures/saturator.svg)
+
 ## The low cut
 
 `output.low_cut_hz` adds a second-order Butterworth high-pass, 12 dB per
@@ -111,6 +122,8 @@ changes earlier samples. At 0 the filter is not there at all.
 A high-pass shifts the phase of low frequencies, so with `phase_ref = "tail"`
 the tail is the free-running sine before the low cut, and the same sine
 shifted by the filter's constant phase at f₀ after it.
+
+![Magnitude and phase of the low cut at corners of 10, 30, 100 and 1000 Hz](figures/low-cut.svg)
 
 ## Rates and the decimator
 
@@ -138,6 +151,8 @@ in-between samples filled in, bit for bit; 88.2 and 176.4 kHz relate to
 44.1 kHz the same way. The higher rates therefore carry the same audio band,
 up to 20 kHz, with no new content above it.
 
+![The tight preset's click at 48, 96 and 192 kHz, sample by sample: every 48 kHz sample is also a 96 and a 192 kHz sample](figures/rates.svg)
+
 The file keeps the whole filter tail: a render is N internal samples, with N
 the number of n such that n / F ≤ T, and out has ⌊(N + L − 2) / K⌋ + 1
 samples for L taps.
@@ -155,6 +170,8 @@ PCM exports have a ceiling 2 LSB below full scale. They add TPDF dither of
 ±1 LSB, the difference of two 32-bit uniforms from SHAKE-256 keyed by
 `ballast/dither/v1` and the seed, and round. A render within the ceiling stays
 within range after dither, and exact zeros stay zero.
+
+![A 15 kHz click whose true peak lies between samples, above the highest sample, and the triangular density of the seeded dither](figures/output-stage.svg)
 
 Nothing trims or fades, and only the low cut, when it is on, high-passes or
 removes DC.
@@ -187,7 +204,7 @@ and the dither, and the filter taps.
 
 ## Audition
 
-Audition reuses the renderer and adds three small parts:
+Audition reuses the renderer and adds four small parts:
 
 - **Hits** mixes the output block by block. Every sound is an unchoked
   one-shot: each hit plays the current buffer to its end, and loop k of the bed

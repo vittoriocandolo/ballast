@@ -175,6 +175,8 @@ Readers skip chunks they do not know.
 `ballast audition` plays the exact buffer `ballast render` would write, at the
 patch's sample rate.
 
+![Audition of the long preset at 128 bpm: each hit plays to its end and the tails sum, while a bed loops on the bar](figures/audition.svg)
+
 - **Hits.** Without `--bpm`, the kick repeats after its own length plus
   half a second. With `--bpm`, it hits on every beat. Hits are unchoked: each
   plays to its end, so long tails overlap and sum, as in a DAW.
@@ -199,18 +201,31 @@ patch's sample rate.
 
 ## Designing a kick
 
+Six of the moves below are made on the `tight` preset, each with a link to its
+sound, to compare with [tight itself](audio/tight.wav); the figure shows what
+they do.
+
+![The tight preset and six moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, more drive and a low cut](figures/design.svg)
+
 - **Tune it to the track.** A kick in the key of the bass sits in the mix. Use
-  `ballast tune kick.toml G1`, or `--tune` with `init`.
+  `ballast tune kick.toml E1`, or `--tune` with `init`.
+  [Hear it in E1](audio/tight-e1.wav).
 - **Punch is the pitch drop.** A higher first ratio and a faster fall give a
   harder hit; a slower fall sounds rounder. The `tight` preset falls from 7
-  times the tuning to 2.2 in 6 ms, then to the note by 40 ms.
+  times the tuning to 2.2 in 6 ms, then to the note by 40 ms;
+  `ballast stretch kick.toml body.pitch 0.5` makes it fall twice as fast.
+  [Hear the faster fall](audio/tight-snap.wav).
 - **Length is the body's amplitude shape.** Stretch it after the peak with
   `ballast stretch kick.toml body.amp 1.5`, which keeps the attack intact.
+  [Hear the longer body](audio/tight-long.wav).
 - **The click is the attack.** A tone around 1.5–3 kHz with band-limited
   noise, a few milliseconds long, cuts through a dense mix; `noise_mix` blends
-  the two at constant power.
+  the two at constant power. `attack.level_db = -8.0` brings the click 8 dB
+  forward. [Hear the louder click](audio/tight-click.wav).
 - **Weight is the drive.** `drive.db` adds odd harmonics and density while
   full scale stays at full scale; `h2` adds the even second harmonic.
+  `drive.db = 18.0`, up from 6, squares the body off.
+  [Hear the heavier drive](audio/tight-drive.wav).
 - **Long 808 tails want `phase_ref = "tail"`.** The tail is then exactly the
   sine at `tune_hz` with phase `phase_deg`, whatever the sweep does before it.
   Editing the sweep never shifts the tail, and kicks that share a tuning share
@@ -222,6 +237,7 @@ patch's sample rate.
   kick at 30 Hz with a 12 dB/octave Butterworth filter, which removes DC and
   sub-sonic energy. The presets leave it off: they carry DC between 45 and 62
   dB below their RMS level, and what you design is what you get.
+  [Hear the low cut](audio/tight-cut.wav).
 - **Play it as an instrument.** `ballast multisample bass.toml E1 E2 -o bass`
   gives an 808 bassline a sample for every note.
 

@@ -53,15 +53,16 @@ versions.
 
 ## Documentation
 
-The figures in `docs/figures` and the sounds in `docs/audio` are generated
-from the code:
+The figures in `docs/figures`, the sounds in `docs/audio` and the preset
+gallery `docs/presets.md` are generated from the code:
 
 ```
 uv run python docs/build.py
 ```
 
 Commit them with the change that alters them, and keep the documentation in
-`docs/` and the README true to the code.
+`docs/` and the README true to the code. The tests check that every link in
+the documentation leads somewhere, and that every figure and sound is shown.
 
 ## Releasing
 

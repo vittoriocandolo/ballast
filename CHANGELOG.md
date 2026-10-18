@@ -27,7 +27,10 @@ The first public release.
 - The `ballast` command: `init` from four presets, `tune`, `stretch`,
   `render`, `multisample` for one sample per key with an SFZ map, `audition`
   with live re-rendering, tempo, a bed and dropout warnings, and `extract`.
-- Documentation, figures and example sounds generated from the code, and a
-  test suite that checks the documented properties on every platform.
+- Documentation with figures and sounds generated from the code: a figure for
+  every stage of the signal path, a gallery of the presets with their sounds,
+  curves, spectra and patches, and the sound of every design move in the usage
+  guide.
+- A test suite that checks the documented properties on every platform.
 - Type annotations throughout, with a `py.typed` marker so that type checkers
   use them.

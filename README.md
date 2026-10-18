@@ -13,7 +13,8 @@ the patch that made them.
 
 Listen to the presets: [tight](docs/audio/tight.wav) ·
 [driven](docs/audio/driven.wav) · [round](docs/audio/round.wav) ·
-[long](docs/audio/long.wav)
+[long](docs/audio/long.wav). The [preset gallery](docs/presets.md) shows each
+one's curves, spectrum and patch.
 
 ## Features
 
@@ -91,9 +92,11 @@ wrote kick.wav
 
 - [Usage](docs/usage.md): the commands, rendering for DAWs and samplers,
   audition, designing a kick, and the Python API.
+- [Presets](docs/presets.md): every preset, with its sound, curves, spectrum
+  and patch.
 - [Patch reference](docs/patch.md): every field, its range and what it does.
-- [Design](docs/design.md): the signal path, the filters, and what makes a
-  render reproducible.
+- [Design](docs/design.md): every stage of the signal path, drawn from the
+  code, and what makes a render reproducible.
 - [Changelog](CHANGELOG.md).
 
 ## Contributing
