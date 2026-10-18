@@ -8,10 +8,10 @@ import math
 import numpy as np
 import pytest
 
-from ballast_synth import patch, voice
+from ballast_synth import patch, render, voice
 from ballast_synth.voice import Voice
 
-INTERNAL = 768000  # the internal rate of the 48 kHz family
+_, INTERNAL, _ = render.rates(48000)  # the internal rate of the 48 kHz family
 
 
 def test_blocks_never_change_a_sample(tight: patch.Patch, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -80,13 +80,21 @@ def test_the_attack_mix_keeps_constant_power_and_is_exact_at_both_ends() -> None
         assert tone**2 + noise**2 == pytest.approx(1.0, abs=1e-15)
 
 
-# Lengths where t_src × rate rounds across an integer in float64: below it at the 44.1 kHz family's rate
-# (real patch lengths, 21.875 and 35.625 ms), and above it just below a sample (6.5 µs, shorter than a patch).
-EDGES = [0.021875, 0.035625, float(np.nextafter(5 / 768000, 0)), float(np.nextafter(5 / 705600, 0))]
+# Lengths where t_src × rate rounds across an integer in float64: below it at either family's rate (real
+# patch lengths: 21.875 and 35.625 ms at 1411.2 kHz, 1.125 and 2.25 ms at 1536 kHz), and above it just below a
+# sample (3.3 µs, shorter than a patch).
+EDGES = [
+    0.021875,
+    0.035625,
+    0.001125,
+    0.00225,
+    float(np.nextafter(5 / 1536000, 0)),
+    float(np.nextafter(5 / 1411200, 0)),
+]
 
 
 @pytest.mark.parametrize("t_src", [0.0, 1e-6, 0.24, 0.1 + 0.2, 1.45, 8.0, *EDGES])
-@pytest.mark.parametrize("rate", [705600, 768000])
+@pytest.mark.parametrize("rate", [1411200, 1536000])
 def test_sample_count_covers_every_sample_up_to_the_source_length(t_src: float, rate: int) -> None:
     """Count the samples of a source, so that the last one is at or before its end and the next one after."""
     n = voice.sample_count(t_src, rate)

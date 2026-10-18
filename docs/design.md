@@ -1,6 +1,6 @@
 # Design
 
-Ballast computes one kick as a pure function of time, at 16 times the sample
+Ballast computes one kick as a pure function of time, at 32 times the sample
 rate, and band-limits it once.
 
     x(t) = b(t) + a(t),    z = C(S_α(x)),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
@@ -10,7 +10,7 @@ cut, all at the internal rate F; h is the frozen decimator of the sample
 rate's family, K the decimation factor, g_out the output gain and p the
 polarity.
 
-![Signal flow: body and attack are summed, saturated and optionally high-passed at 16 times the base rate, then decimated, scaled and written to WAV](figures/pipeline.svg)
+![Signal flow: body and attack are summed, saturated and optionally high-passed at 32 times the base rate, then decimated, scaled and written to WAV](figures/pipeline.svg)
 
 - [The body](#the-body)
 - [Curves](#curves)
@@ -130,19 +130,20 @@ shifted by the filter's constant phase at f₀ after it.
 
 | Sample rate | Internal rate F | Factor K | Decimator |
 |---|---|---|---|
-| 44.1 kHz | 705.6 kHz | 16 | 44.1 kHz family, 2593 taps |
-| 88.2 kHz | 705.6 kHz | 8 | 44.1 kHz family, 2593 taps |
-| 176.4 kHz | 705.6 kHz | 4 | 44.1 kHz family, 2593 taps |
-| 48 kHz | 768 kHz | 16 | 48 kHz family, 1447 taps |
-| 96 kHz | 768 kHz | 8 | 48 kHz family, 1447 taps |
-| 192 kHz | 768 kHz | 4 | 48 kHz family, 1447 taps |
+| 44.1 kHz | 1411.2 kHz | 32 | 44.1 kHz family, 5231 taps |
+| 88.2 kHz | 1411.2 kHz | 16 | 44.1 kHz family, 5231 taps |
+| 176.4 kHz | 1411.2 kHz | 8 | 44.1 kHz family, 5231 taps |
+| 48 kHz | 1536 kHz | 32 | 48 kHz family, 2919 taps |
+| 96 kHz | 1536 kHz | 16 | 48 kHz family, 2919 taps |
+| 192 kHz | 1536 kHz | 8 | 48 kHz family, 2919 taps |
 
 Each family has one minimum-phase FIR, frozen and shipped as data with a
 SHA-256 checksum that Ballast verifies before use, so the filter cannot drift
-with SciPy versions. Both pass 0–20 kHz within ±0.00002 dB, attenuate
-everything from half the base rate up by at least 115.7 dB, and have taps that
+with SciPy versions. Both pass 0–20 kHz within ±0.000014 dB, attenuate
+everything from half the base rate up by at least 116.4 dB, and have taps that
 sum to exactly 1. Minimum phase puts all the ringing after the transient, none
-before it.
+before it. `tools/decimators.py` records how they were designed: a Kaiser
+linear-phase prototype, made minimum phase by the homomorphic method.
 
 ![Magnitude response of both decimators: flat to 20 kHz, at least 110 dB down from half the base rate, with the passband ripple in detail](figures/decimator.svg)
 
@@ -186,8 +187,8 @@ output of the decimator is one fixed sum over its own inputs, and each chunk
 starts on the factor's grid with every input its outputs need, so the chunks
 match a single pass bit for bit. Neither the blocks nor the threads change a
 sample, and because the filter is causal, a longer render never changes
-earlier samples. On a 12-core laptop, the 1.45 s `long` preset renders in a
-little over a tenth of a second.
+earlier samples. On a 12-core laptop, the 1.45 s `long` preset renders in
+about a fifth of a second.
 
 ## Reproducibility
 

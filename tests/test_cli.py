@@ -97,9 +97,9 @@ def test_a_render_over_full_scale_is_not_written(run: Run, tmp_path: Path, read_
     (tmp_path / "loud.toml").write_text(loud, encoding="utf-8")
     status, out, err = run("render", "loud.toml", "-o", "loud.wav")
     assert status == REFUSED
-    assert "over full scale by 12.32 dB" in out
+    assert "over full scale by 12.28 dB" in out
     assert err == (
-        "not written: lower output.db by at least 12.32 dB, or pass --allow-over to write a float file with overs\n"
+        "not written: lower output.db by at least 12.28 dB, or pass --allow-over to write a float file with overs\n"
     )
     assert not (tmp_path / "loud.wav").exists()
     assert run("render", "loud.toml", "-o", "loud.wav", "--allow-over")[0] == 0
@@ -144,7 +144,7 @@ def test_audition_refuses_a_render_over_full_scale(run: Run, tmp_path: Path, rea
     (tmp_path / "loud.toml").write_text(loud, encoding="utf-8")
     status, _, err = run("audition", "loud.toml")
     assert status == REFUSED
-    assert err == "over full scale by 12.32 dB: lower output.db to audition it\n"
+    assert err == "over full scale by 12.28 dB: lower output.db to audition it\n"
 
 
 @pytest.mark.parametrize(
@@ -212,7 +212,7 @@ def test_a_pcm_render_over_its_ceiling_is_not_written(
     status, out, err = run("render", "hot.toml", "-o", "hot.wav", "--format", "pcm16")
     assert status == REFUSED
     assert "over the 16-bit ceiling of -0.0005 dBFS, which keeps 2 LSB for dither" in out
-    assert err == "not written: lower output.db by at least 0.9221 dB\n"
+    assert err == "not written: lower output.db by at least 0.8786 dB\n"
     assert not (tmp_path / "hot.wav").exists()
 
 

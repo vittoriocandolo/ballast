@@ -5,7 +5,7 @@
 
     out[m] = p · g_out · Σ_{k<L} h[k] z[mK − k],    z[n] = C(y)[n] for 0 ≤ n < N, else 0
 
-Here y[n] = S_α(x(n / F)) is the voice at the internal rate F = 16 × base,
+Here y[n] = S_α(x(n / F)) is the voice at the internal rate F = 32 × base,
 with base 44.1 or 48 kHz, and C the optional low cut. The decimation factor
 is K = F / rate: 16 at the base rates, 8 at 88.2 and 96 kHz, 4 at 176.4 and
 192 kHz. A higher rate reuses its family's F and filter, so a 96 kHz file is
@@ -43,14 +43,14 @@ from .voice import Voice
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-OVERSAMPLING = 16  # the internal rate F is 16 × the base rate
+OVERSAMPLING = 32  # the internal rate F is 32 × the base rate
 CHUNK = 2048  # decimator outputs per parallel chunk
 FAMILY = {44100: 44100, 88200: 44100, 176400: 44100, 48000: 48000, 96000: 48000, 192000: 48000}
-# One frozen minimum-phase FIR per family, shipped as data so the sound cannot drift with SciPy:
-# flat to 0.001 dB up to 20 kHz, at least 110 dB down from base/2, taps summing to exactly 1.
+# One frozen minimum-phase FIR per family, shipped as data so the sound cannot drift with SciPy, and designed by
+# tools/decimators.py: flat to 0.001 dB up to 20 kHz, at least 110 dB down from base/2, taps summing to exactly 1.
 DECIMATORS = {
-    44100: ("decimator-44100x16.f64", "0932afce82f960c811e1a3bf74ccc4636a5aefd2161f5d69466b0a522955c7d0"),
-    48000: ("decimator-48000x16.f64", "753e10eadb9b6550d7dfc81847d7a3057b578c8d3bfe07278d0b474d7e29b676"),
+    44100: ("decimator-44100x32.f64", "f74810b0e955e0aada486f9f064b82435ea11a64e155afd2905c29d99e662efd"),
+    48000: ("decimator-48000x32.f64", "229115e8e64a113a77c5c008c7cd2272c87431cd9b682007de8b21b47d24b41d"),
 }
 FORMATS = {"float32": None, "pcm24": 24, "pcm16": 16}  # the PCM bit depth of each export format
 POOL = ThreadPoolExecutor(os.cpu_count())  # upfirdn releases the GIL

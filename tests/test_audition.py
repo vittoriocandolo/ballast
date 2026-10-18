@@ -262,7 +262,7 @@ def test_the_watch_loop_rerenders_every_edit(
         lines[1],  # "[1] rendered in … ms; plays at the next hit, in 0 ms"
         "tuning   49.000 Hz, G1 +0.0 cents",
         "[2] invalid patch, still playing the last valid one:",
-        "[3] over full scale by 12.32 dB; still playing the last valid one",
+        "[3] over full scale by 12.28 dB; still playing the last valid one",
         "[4] now at 96000 Hz; restart audition to hear it. Still playing the last valid one",
         "[5] dropped: a newer edit is rendering",
         lines[7],

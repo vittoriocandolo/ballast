@@ -11,10 +11,10 @@ from ballast_synth import noise
 
 def test_the_noise_is_the_same_at_every_internal_rate() -> None:
     """Sample the noise at both internal rates, and compare it at the times both grids share."""
-    a = noise.table(1, 700.0, 9000.0, 768000)
-    b = noise.table(1, 700.0, 9000.0, 705600)
+    a = noise.table(1, 700.0, 9000.0, 1536000)
+    b = noise.table(1, 700.0, 9000.0, 1411200)
     k = np.arange(2400)  # times k / 2400 s fall on both grids
-    assert np.allclose(a[k * 320], b[k * 294], rtol=0, atol=1e-12)
+    assert np.allclose(a[k * 640], b[k * 588], rtol=0, atol=1e-12)
 
 
 def test_editing_the_band_reweights_the_same_components() -> None:

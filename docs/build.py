@@ -484,7 +484,7 @@ def figure_pipeline() -> str:
             'orient="auto-start-reverse"><path class="head" d="M0,1L10,5L0,9Z"/></marker></defs>'
         ),
         f'<rect class="zone" x="16" y="{top}" width="520" height="196" rx="8"/>',
-        f'<text class="label" x="32" y="{top + 22}">16 × the base rate: 705.6 or 768 kHz</text>',
+        f'<text class="label" x="32" y="{top + 22}">32 × the base rate: 1411.2 or 1536 kHz</text>',
         f'<text class="label" x="834" y="{top + 22}" text-anchor="middle">at the file\'s sample rate</text>',
     ]
 
@@ -510,7 +510,7 @@ def figure_pipeline() -> str:
     body.append(arrow(f"M228,{cy}H244"))
     body.append(box(402, cy - 32, 118, "Low cut", ("label", "12 dB/octave"), ("label", "0 Hz: off")))
     body.append(arrow(f"M382,{cy}H400"))
-    body.append(box(566, cy - 32, 128, "Decimator", ("math", "↓16, ↓8 or ↓4"), ("label", "minimum phase")))
+    body.append(box(566, cy - 32, 128, "Decimator", ("math", "↓32, ↓16 or ↓8"), ("label", "minimum phase")))
     body.append(arrow(f"M520,{cy}H564"))
     body.append(box(720, cy - 32, 110, "Output", ("label", "gain or peak"), ("label", "polarity")))
     body.append(arrow(f"M694,{cy}H718"))
@@ -797,7 +797,7 @@ def response(base: int, n: int = 1 << 20) -> tuple[NDArray[np.float64], NDArray[
 def figure_decimator() -> str:
     """Draw both decimators' magnitude responses, with the passband in detail."""
     top = 96
-    wide = Panel((64, top, 560, 260), Axis(1000, 384000, log=True), Axis(-170, 10))
+    wide = Panel((64, top, 560, 260), Axis(1000, 768000, log=True), Axis(-170, 10))
     near = Panel((712, top, 220, 260), Axis(0, 20000), Axis(-0.00003, 0.00003))
     body = [wide.frame(Ticks((1000, 10000, 100000), hz, "frequency, Hz"), Ticks((-150, -110, -50, 0), num, "gain, dB"))]
     band = wide.sx(PASSBAND_HZ) - wide.x

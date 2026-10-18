@@ -13,9 +13,9 @@ The first public release.
 
 - A one-voice kick drum synthesizer: a body with an exact pitch sweep and a
   second harmonic, an attack of tone and seeded band-limited noise, and a tanh
-  saturator, computed at 16 times the sample rate.
+  saturator, computed at 32 times the sample rate.
 - Frozen minimum-phase decimators for the 44.1 and 48 kHz families, verified
-  by checksum: flat to ±0.00002 dB up to 20 kHz and at least 115.7 dB down
+  by checksum: flat to ±0.000014 dB up to 20 kHz and at least 116.4 dB down
   from half the base rate.
 - Patches in TOML, with every field required, every problem reported with its
   field path, and a canonical form. Schema 2 adds an optional 12 dB/octave low

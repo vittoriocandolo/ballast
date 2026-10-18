@@ -10,7 +10,7 @@ ballast init round --tune F1 -o kick.toml
 
 | Preset | Tuning | Length | Pitch drop | Drive | Peak | Sound |
 |---|---|---|---|---|---|---|
-| [`tight`](#tight) | 55 Hz, A1 | 240 ms | 7× to the note in 40 ms | 6 dB | −5.68 dBFS | [tight.wav](audio/tight.wav) |
+| [`tight`](#tight) | 55 Hz, A1 | 240 ms | 7× to the note in 40 ms | 6 dB | −5.72 dBFS | [tight.wav](audio/tight.wav) |
 | [`driven`](#driven) | 50 Hz, G1 +35.0 cents | 400 ms | 6× to the note in 55 ms | 21 dB | −8.84 dBFS | [driven.wav](audio/driven.wav) |
 | [`round`](#round) | 48.999 Hz, G1 | 600 ms | 4.5× to the note in 90 ms | 3 dB | −5.91 dBFS | [round.wav](audio/round.wav) |
 | [`long`](#long) | 41.203 Hz, E1 | 1450 ms | 3.5× to the note in 70 ms | 2 dB | −5.97 dBFS | [long.wav](audio/long.wav) |

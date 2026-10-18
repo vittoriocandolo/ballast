@@ -66,6 +66,13 @@ Commit them with the change that alters them, and keep the documentation in
 `docs/` and the README true to the code. The tests check that every link in
 the documentation leads somewhere, and that every figure and sound is shown.
 
+## Frozen filters
+
+The decimators ship as data in `src/ballast_synth/data`, checked by SHA-256.
+`uv run python tools/decimators.py` shows how they were designed, and whether
+a design with the current SciPy still matches them. `--force` replaces them,
+which changes every render.
+
 ## Releasing
 
 1. Set the version in `pyproject.toml` and `src/ballast_synth/__init__.py`;

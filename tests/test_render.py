@@ -37,12 +37,12 @@ def test_decimators_meet_their_specification(base: int) -> None:
 
 def test_a_decimator_that_fails_its_checksum_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     """Refuse taps whose checksum is not the one the code expects."""
-    monkeypatch.setitem(render.DECIMATORS, 1, ("decimator-48000x16.f64", "0" * 64))
+    monkeypatch.setitem(render.DECIMATORS, 1, (render.DECIMATORS[48000][0], "0" * 64))
     with pytest.raises(RuntimeError, match="does not match its checksum"):
         render.decimator(1)
 
 
-@pytest.mark.parametrize("size", [1, 10, 1447, 30_000])
+@pytest.mark.parametrize("size", [1, 10, render.decimator(48000).size, 30_000])
 @pytest.mark.parametrize("chunk", [1, 7, 2048])
 def test_parallel_decimation_matches_one_upfirdn_call_bit_for_bit(
     size: int,
@@ -53,7 +53,7 @@ def test_parallel_decimation_matches_one_upfirdn_call_bit_for_bit(
     y = np.random.default_rng(size).standard_normal(size)
     taps = render.decimator(48000)
     monkeypatch.setattr(render, "CHUNK", chunk)
-    for factor in (8, 16):
+    for factor in (8, 16, 32):  # the factors of the three rates of a family
         assert np.array_equal(render.decimate(taps, y, factor), upfirdn(taps, y, down=factor))
 
 
@@ -61,8 +61,8 @@ def test_decimation_is_causal() -> None:
     """Decimate the start of a signal alone, and get the outputs that depend only on it unchanged."""
     y = np.random.default_rng(0).standard_normal(50_000)
     taps = render.decimator(44100)
-    whole, part = render.decimate(taps, y, 16), render.decimate(taps, y[:20_000], 16)
-    n = 20_000 // 16  # outputs whose inputs all lie in the first 20 000 samples
+    whole, part = render.decimate(taps, y, 32), render.decimate(taps, y[:20_000], 32)
+    n = 20_000 // 32  # outputs whose inputs all lie in the first 20 000 samples
     assert np.array_equal(part[:n], whole[:n])
 
 
@@ -131,7 +131,7 @@ def test_the_report(tight: patch.Patch) -> None:
     lines = str(report).splitlines()
     assert [line.split()[0] for line in lines] == ["tuning", "length", "peak", "render"]
     assert lines[0] == "tuning   55.000 Hz, A1 +0.0 cents"
-    assert lines[1] == "length   240.0 ms source, 241.9 ms exported (11611 samples at 48000 Hz)"
+    assert lines[1] == "length   240.0 ms source, 241.9 ms exported (11612 samples at 48000 Hz)"
     assert report.true_peak >= report.peak
 
 
@@ -162,7 +162,7 @@ def test_true_peak_mode_reaches_its_target_within_the_pcm_ceiling(
 @pytest.mark.parametrize("hz", [10.0, 30.0, 1000.0])
 def test_the_low_cut_is_a_12_db_per_octave_butterworth_high_pass(hz: float) -> None:
     """Measure the low cut at its corner, a decade below it, and a decade above it and at 20 kHz."""
-    rate = 768000
+    _, rate, _ = render.rates(48000)
     _, h = sosfreqz(render.low_cut(hz, rate), worN=[hz / 10, hz, hz * 10, 20000.0], fs=rate)
     gain = 20 * np.log10(np.abs(h))
     assert gain[1] == pytest.approx(-3.0103, abs=1e-3)  # half power at the corner

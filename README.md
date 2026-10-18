@@ -6,7 +6,7 @@ way every time.
 ![Waveforms of the four presets, tight, driven, round and long, rendered at 48 kHz](docs/figures/presets.svg)
 
 Ballast synthesizes one voice: a tonal body with an exact pitch sweep, and a
-short attack of tone and noise. It computes them at 16 times the sample rate,
+short attack of tone and noise. It computes them at 32 times the sample rate,
 saturates their sum, and band-limits it once with a frozen minimum-phase
 filter. The files it writes are free of aliasing short of extreme drive, ready
 for any sampler, and carry the patch that made them.
@@ -18,10 +18,10 @@ one's curves, spectrum and patch.
 
 ## Features
 
-- **No aliasing short of extreme drive.** Synthesis runs at 705.6 or 768 kHz.
-  A minimum-phase FIR passes 0–20 kHz within ±0.00002 dB and rejects
-  everything from half the base rate up by at least 115.7 dB, without ringing
-  before the kick. Only the drive, pushed hard on a loud high tone, folds
+- **No aliasing short of extreme drive.** Synthesis runs at 1.4112 or
+  1.536 MHz. A minimum-phase FIR passes 0–20 kHz within ±0.000014 dB and
+  rejects everything from half the base rate up by at least 116.4 dB, without
+  ringing before the kick. Only the drive, pushed hard on a loud high tone, folds
   harmonics back into the audio band.
 - **Exact pitch.** The pitch curve is integrated exactly into phase. With
   `phase_ref = "tail"`, an 808-style tail meets the free-running sine at its
@@ -68,9 +68,9 @@ ballast multisample kick.toml C1 C2 -o kick     # one sample per key, with an SF
 
 ```
 tuning   43.654 Hz, F1 +0.0 cents
-length   240.0 ms source, 241.9 ms exported (11611 samples at 48000 Hz, 24-bit PCM)
-peak     -5.76 dBFS sample, -5.73 dBTP true
-render   36 ms
+length   240.0 ms source, 241.9 ms exported (11612 samples at 48000 Hz, 24-bit PCM)
+peak     -5.82 dBFS sample, -5.74 dBTP true
+render   56 ms
 wrote kick.wav
 ```
 
@@ -80,16 +80,16 @@ wrote kick.wav
 |---|---|
 | Output | mono WAV: float32, or 24- or 16-bit PCM with TPDF dither |
 | Sample rates | 44.1, 48, 88.2, 96, 176.4 and 192 kHz |
-| Internal rate | 16 × the base rate: 705.6 or 768 kHz |
-| Passband | 0–20 kHz within ±0.00002 dB (specified ±0.001 dB) |
-| Stopband | at least 115.7 dB down from half the base rate (specified 110 dB) |
-| Aliasing | more than 130 dB down for a full-scale tone up to 20 kHz with up to 12 dB of drive, and for a body below 400 Hz at any drive; at the maximum drive, 48 dB, a full-scale 2.5 kHz tone aliases at −54 dB |
+| Internal rate | 32 × the base rate: 1411.2 or 1536 kHz |
+| Passband | 0–20 kHz within ±0.000014 dB (specified ±0.001 dB) |
+| Stopband | at least 116.4 dB down from half the base rate (specified 110 dB) |
+| Aliasing | more than 140 dB down for a full-scale tone up to 20 kHz with up to 18 dB of drive, and for a body below 400 Hz at any drive; at the maximum drive, 48 dB, a full-scale 2.5 kHz tone aliases at −71 dB |
 | Levels | a gain, or a sample or true peak target; nothing is ever clipped |
 | PCM headroom | peaks stay 2 LSB below full scale, so dither never clips |
 | Low cut | optional 12 dB/octave Butterworth high-pass, 10 Hz – 1 kHz |
 | Tuning | 20 Hz – 1 kHz, by frequency or note name; the sweep spans 10 Hz – 20 kHz |
 | Length | body up to 8 s, attack up to 1 s |
-| Render time | about 30 ms for a 240 ms kick, a little over 0.1 s for a 1.45 s one, on a 12-core laptop |
+| Render time | about 50 ms for a 240 ms kick, about 0.2 s for a 1.45 s one, on a 12-core laptop |
 
 ## Documentation
 
