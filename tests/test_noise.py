@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from ballast import noise
+from ballast_synth import noise
 
 
 def test_the_noise_is_the_same_at_every_internal_rate():

@@ -20,8 +20,8 @@ from pathlib import Path
 import numpy as np
 from scipy.signal import fftconvolve
 
-from ballast import patch, render
-from ballast.voice import Voice
+from ballast_synth import patch, render
+from ballast_synth.voice import Voice
 
 DOCS = Path(__file__).resolve().parent
 RATE = 48000
@@ -206,7 +206,7 @@ class Kick:
 def render_kicks() -> dict[str, Kick]:
     kicks = {}
     for name in PRESETS:
-        text = resources.files("ballast").joinpath("data", "presets", f"{name}.toml").read_text(encoding="utf-8")
+        text = resources.files("ballast_synth").joinpath("data", "presets", f"{name}.toml").read_text(encoding="utf-8")
         p = patch.loads(text)
         kicks[name] = Kick(name, text, p, *render.render(p, 16))
     return kicks

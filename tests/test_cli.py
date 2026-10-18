@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 from scipy.io import wavfile
 
-from ballast import __version__, patch, wav
-from ballast.cli import main
+from ballast_synth import __version__, patch, wav
+from ballast_synth.cli import main
 
 
 @pytest.fixture
@@ -164,7 +164,7 @@ def test_a_pcm_render_over_its_ceiling_is_not_written(run, tmp_path, read_preset
 
 
 def test_an_audition_ends_cleanly_when_interrupted(run, tmp_path, monkeypatch):
-    from ballast import audition
+    from ballast_synth import audition
 
     def interrupted(*args, **kwargs):
         raise KeyboardInterrupt
@@ -175,7 +175,8 @@ def test_an_audition_ends_cleanly_when_interrupted(run, tmp_path, monkeypatch):
 
 
 def test_python_dash_m_runs_the_command_line():
-    done = subprocess.run([sys.executable, "-m", "ballast", "--version"], capture_output=True, text=True, check=True)
+    command = [sys.executable, "-m", "ballast_synth", "--version"]
+    done = subprocess.run(command, capture_output=True, text=True, check=True)
     assert done.stdout == f"ballast {__version__}\n"
 
 
@@ -197,7 +198,7 @@ def test_extract_reports_a_damaged_or_foreign_patch_chunk(run, tmp_path):
 
 
 def test_ctrl_c_stops_quietly_with_status_130(run, monkeypatch):
-    from ballast import cli
+    from ballast_synth import cli
 
     def interrupted(*args):
         raise KeyboardInterrupt

@@ -4,13 +4,13 @@ from importlib import resources
 
 import pytest
 
-from ballast import patch
+from ballast_synth import patch
 
 PRESETS = ("round", "tight", "long", "driven")
 
 
 def preset_text(name: str) -> str:
-    return resources.files("ballast").joinpath("data", "presets", f"{name}.toml").read_text(encoding="utf-8")
+    return resources.files("ballast_synth").joinpath("data", "presets", f"{name}.toml").read_text(encoding="utf-8")
 
 
 @pytest.fixture

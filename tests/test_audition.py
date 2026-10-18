@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 from scipy.io import wavfile
 
-from ballast import audition, patch
-from ballast.audition import AuditionError, Bed, Hits, Watcher, beat, load_bed
+from ballast_synth import audition, patch
+from ballast_synth.audition import AuditionError, Bed, Hits, Watcher, beat, load_bed
 
 RATE = 48000
 

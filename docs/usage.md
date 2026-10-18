@@ -230,7 +230,7 @@ patch's sample rate.
 The modules are importable for scripting renders:
 
 ```python
-from ballast import patch, render
+from ballast_synth import patch, render
 
 text = patch.read_text("kick.toml")  # UTF-8, or UTF-16 with a BOM
 kick = patch.loads(text)  # raises patch.PatchError, with .problems

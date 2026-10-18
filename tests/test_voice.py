@@ -5,8 +5,8 @@ import math
 import numpy as np
 import pytest
 
-from ballast import patch, voice
-from ballast.voice import Voice
+from ballast_synth import patch, voice
+from ballast_synth.voice import Voice
 
 RATE = 768000
 

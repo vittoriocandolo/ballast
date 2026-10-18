@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from scipy.interpolate import PchipInterpolator
 
-from ballast.curve import Curve
+from ballast_synth.curve import Curve
 
 
 def random_curve(seed: int, **ends) -> Curve:

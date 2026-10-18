@@ -6,8 +6,8 @@ import math
 
 import pytest
 
-from ballast import patch
-from ballast.patch import PatchError
+from ballast_synth import patch
+from ballast_synth.patch import PatchError
 
 RATES = "44100, 48000, 88200, 96000, 176400, 192000"
 

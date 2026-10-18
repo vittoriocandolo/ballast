@@ -2,8 +2,8 @@
 
 from importlib.metadata import version
 
-import ballast
+import ballast_synth
 
 
 def test_the_version_is_declared_once():
-    assert ballast.__version__ == version("ballast-synth")
+    assert ballast_synth.__version__ == version("ballast-synth")

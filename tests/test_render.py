@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from scipy.signal import sosfreqz, upfirdn
 
-from ballast import patch, render
+from ballast_synth import patch, render
 
 
 def with_output(p, **values):

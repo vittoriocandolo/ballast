@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from scipy.io import wavfile
 
-from ballast import patch, render, wav
+from ballast_synth import patch, render, wav
 
 # SciPy skips the smpl and blst chunks, as RIFF readers should, and says so.
 pytestmark = pytest.mark.filterwarnings("ignore::scipy.io.wavfile.WavFileWarning")
