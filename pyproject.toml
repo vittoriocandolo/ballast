@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "ballast-synth"  # the command is still ballast
 version = "0.1.0"
-description = "A kick drum synthesizer that renders a text patch to an alias-free, sampler-ready WAV"
+description = "A kick drum synthesizer that renders a text patch to a tuned, sampler-ready WAV"
 readme = "README.md"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE", "NOTICE"]

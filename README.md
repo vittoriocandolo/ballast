@@ -8,8 +8,8 @@ way every time.
 Ballast synthesizes one voice: a tonal body with an exact pitch sweep, and a
 short attack of tone and noise. It computes them at 16 times the sample rate,
 saturates their sum, and band-limits it once with a frozen minimum-phase
-filter. The files it writes are alias-free, ready for any sampler, and carry
-the patch that made them.
+filter. The files it writes are free of aliasing short of extreme drive, ready
+for any sampler, and carry the patch that made them.
 
 Listen to the presets: [tight](docs/audio/tight.wav) ·
 [driven](docs/audio/driven.wav) · [round](docs/audio/round.wav) ·
@@ -18,9 +18,11 @@ one's curves, spectrum and patch.
 
 ## Features
 
-- **Alias-free.** Synthesis runs at 705.6 or 768 kHz. A minimum-phase FIR
-  passes 0–20 kHz within ±0.00002 dB and rejects everything from half the base
-  rate up by at least 115.7 dB, without ringing before the kick.
+- **No aliasing short of extreme drive.** Synthesis runs at 705.6 or 768 kHz.
+  A minimum-phase FIR passes 0–20 kHz within ±0.00002 dB and rejects
+  everything from half the base rate up by at least 115.7 dB, without ringing
+  before the kick. Only the drive, pushed hard on a loud high tone, folds
+  harmonics back into the audio band.
 - **Exact pitch.** The pitch curve is integrated exactly into phase. With
   `phase_ref = "tail"`, an 808-style tail meets the free-running sine at its
   note exactly, whatever the sweep did before.
@@ -81,6 +83,7 @@ wrote kick.wav
 | Internal rate | 16 × the base rate: 705.6 or 768 kHz |
 | Passband | 0–20 kHz within ±0.00002 dB (specified ±0.001 dB) |
 | Stopband | at least 115.7 dB down from half the base rate (specified 110 dB) |
+| Aliasing | more than 130 dB down for a full-scale tone up to 20 kHz with up to 12 dB of drive, and for a body below 400 Hz at any drive; at the maximum drive, 48 dB, a full-scale 2.5 kHz tone aliases at −54 dB |
 | Levels | a gain, or a sample or true peak target; nothing is ever clipped |
 | PCM headroom | peaks stay 2 LSB below full scale, so dither never clips |
 | Low cut | optional 12 dB/octave Butterworth high-pass, 10 Hz – 1 kHz |
