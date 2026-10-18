@@ -25,7 +25,14 @@ Ruff runs every stable rule, mypy checks all the code strictly, as Python
 3.11 would run it, pytest turns any warning into an error, typos checks the
 spelling of code and documentation, and zizmor audits the GitHub workflows.
 
-CI runs the tests with the oldest NumPy and SciPy supported versions.
+`uv run ruff check --fix`, then `uv run ruff format`, fix most of what ruff
+finds; in that order, the formatter keeps the trailing commas the linter
+adds. The formatter warns that the trailing comma rule, COM812, may conflict
+with it: on this code they agree, so the rule stays on.
+
+CI runs mypy and the tests on every platform and Python that Ballast
+supports, and the tests again with the oldest NumPy and SciPy supported
+versions.
 
 ## Rules
 
@@ -58,7 +65,7 @@ Commit them with the change that alters them, and keep the documentation in
 
 ## Releasing
 
-1. Set the version in `pyproject.toml` and `src/ballast_synth/__init__.py`;
+1. Set the version in `pyproject.toml` and `src/ballast_synth/__init__.py`.
 2. Move the changelog's entries under the new version, with the date.
 3. Tag the commit `vX.Y.Z` and push the tag.
 
