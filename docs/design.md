@@ -3,11 +3,12 @@
 Ballast computes one kick as a pure function of time, at 16 times the sample
 rate, and band-limits it once.
 
-    x(t) = b(t) + a(t),    y = L(S_α(x)),    out[m] = p · g · Σ_k h[k] · y[mK − k]
+    x(t) = b(t) + a(t),    z = C(S_α(x)),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
 
-Here b is the body, a the attack, S_α the saturator and L the optional low
+Here b is the body, a the attack, S_α the saturator and C the optional low
 cut, all at the internal rate F; h is the frozen decimator of the sample
-rate's family, K the decimation factor, g the output gain and p the polarity.
+rate's family, K the decimation factor, g_out the output gain and p the
+polarity.
 
 ![Signal flow: body and attack are summed into the drive at 16 times the base rate, then decimated, scaled and written to WAV](figures/pipeline.svg)
 

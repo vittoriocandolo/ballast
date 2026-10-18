@@ -523,9 +523,9 @@ def note_hz(n: int) -> float:
 
 def describe_tuning(hz: float) -> str:
     """Describe a frequency by its nearest note and its offset in cents, such as 'G1 +35.3 cents'."""
-    p = midi_pitch(hz)
-    n = round(p)
-    cents = round(100 * (p - n), 1) + 0.0  # + 0.0 turns -0.0 into 0.0
+    pitch = midi_pitch(hz)
+    n = round(pitch)
+    cents = round(100 * (pitch - n), 1) + 0.0  # + 0.0 turns -0.0 into 0.0
     return f"{note_name(n)} {cents:+.1f} cents"
 
 

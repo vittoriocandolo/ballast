@@ -30,7 +30,7 @@ def test_decimators_meet_their_specification(base: int) -> None:
     assert math.fsum(taps) == 1.0  # unity gain at DC, exactly
     n = 1 << 21
     db = 20 * np.log10(np.maximum(np.abs(np.fft.rfft(taps, n)), 1e-300))
-    f = np.fft.rfftfreq(n, 1 / (base * render.K))
+    f = np.fft.rfftfreq(n, 1 / (base * render.OVERSAMPLING))
     assert np.max(np.abs(db[f <= PASSBAND_HZ])) < RIPPLE_DB
     assert np.max(db[f >= base / 2]) < STOPBAND_DB
 

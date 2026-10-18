@@ -31,7 +31,7 @@ BLOCK = 2**15
 
 
 def drive_alpha(db: float) -> float:
-    """Solve α / tanh α = 10^(db/20) for α, the saturator's small-signal gain. A gain of 1 is bypass."""
+    """Solve α / tanh α = 10^(db/20), the saturator's small-signal gain, for α. A gain of 1 is a bypass: α = 0."""
     g = 10.0 ** (db / 20.0)
     if g == 1.0:  # 0 dB, or so little drive that the gain rounds to 1
         return 0.0

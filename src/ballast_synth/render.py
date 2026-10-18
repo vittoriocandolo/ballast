@@ -3,13 +3,14 @@
 
 """Rendering: rates, the frozen decimators, the output stage and the exported file.
 
-    out[m] = p · g_out · Σ_{k<L} h[k] y[mK − k],    y = L(y(n / F)) for 0 ≤ n < N, else 0
+    out[m] = p · g_out · Σ_{k<L} h[k] z[mK − k],    z[n] = C(y)[n] for 0 ≤ n < N, else 0
 
-The internal rate is F = K × base, with base 44.1 or 48 kHz. The 88.2 and
-96 kHz exports reuse their family's F and filter with factor K/2, and 176.4
-and 192 kHz with K/4, so a 96 kHz file is exactly the 48 kHz file with the
-in-between samples filled in. Nothing trims or fades, only the optional low
-cut L high-passes, and the whole filter tail is kept.
+Here y[n] = S_α(x(n / F)) is the voice at the internal rate F = 16 × base,
+with base 44.1 or 48 kHz, and C the optional low cut. The decimation factor
+is K = F / rate: 16 at the base rates, 8 at 88.2 and 96 kHz, 4 at 176.4 and
+192 kHz. A higher rate reuses its family's F and filter, so a 96 kHz file is
+exactly the 48 kHz file with the in-between samples filled in. Nothing trims
+or fades, only the low cut high-passes, and the whole filter tail is kept.
 
 The internal signal is computed in blocks aligned to the trigger and
 decimated in parallel chunks. Every sample is a pure function of its time,
@@ -42,7 +43,7 @@ from .voice import Voice
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-K = 16
+OVERSAMPLING = 16  # the internal rate F is 16 × the base rate
 CHUNK = 2048  # decimator outputs per parallel chunk
 FAMILY = {44100: 44100, 88200: 44100, 176400: 44100, 48000: 48000, 96000: 48000, 192000: 48000}
 # One frozen minimum-phase FIR per family, shipped as data so the sound cannot drift with SciPy:
@@ -56,9 +57,10 @@ POOL = ThreadPoolExecutor(os.cpu_count())  # upfirdn releases the GIL
 
 
 def rates(sample_rate: int) -> tuple[int, int, int]:
-    """Return the family's base rate, the internal rate F and the decimation factor for an export rate."""
+    """Return the family's base rate, the internal rate F and the decimation factor K for an export rate."""
     base = FAMILY[sample_rate]
-    return base, base * K, K * base // sample_rate
+    internal = base * OVERSAMPLING
+    return base, internal, internal // sample_rate
 
 
 @functools.cache
@@ -115,10 +117,10 @@ def synthesize(p: Patch) -> NDArray[np.float64]:
     return decimate(decimator(base), y, factor)
 
 
-def output_stage(out: NDArray[np.float64], o: Output, top: float) -> NDArray[np.float32]:
+def output_stage(out: NDArray[np.float64], o: Output, ceiling: float) -> NDArray[np.float32]:
     """Scale by the output gain, or to a sample or true peak target, apply the polarity, and convert once to float32.
 
-    `top` is the format's ceiling: in either peak mode, the highest sample never goes above it.
+    In either peak mode, the highest sample stays at or below the format's `ceiling`.
     """
     peak = float(np.max(np.abs(out), initial=0.0))
     target: float = 10.0 ** (o.db / 20.0)
@@ -127,9 +129,9 @@ def output_stage(out: NDArray[np.float64], o: Output, top: float) -> NDArray[np.
     elif peak == 0:
         scaled = out.copy()
     elif o.mode == "peak":
-        scaled = out * (min(target, top) / peak)
+        scaled = out * (min(target, ceiling) / peak)
     else:  # true-peak: the estimate is linear, so scaling the signal scales it alike
-        scaled = out * min(target / true_peak(out), top / peak)
+        scaled = out * min(target / true_peak(out), ceiling / peak)
     if o.polarity < 0:
         scaled = -scaled
     return scaled.astype(np.float32)
@@ -197,8 +199,8 @@ class Report:
 def render(p: Patch, bits: int | None = None) -> tuple[NDArray[np.float32], Report]:
     """Render the float32 audio and its report, for export as float32 or, with `bits`, as PCM of that depth."""
     start = time.perf_counter()
-    top = 1.0 if bits is None else 1.0 - 2.0 ** (2 - bits)  # PCM keeps 2 LSB of headroom, so dither never clips
-    audio = output_stage(synthesize(p), p.output, top)
+    ceiling = 1.0 if bits is None else 1.0 - 2.0 ** (2 - bits)  # PCM keeps 2 LSB of headroom, so dither never clips
+    audio = output_stage(synthesize(p), p.output, ceiling)
     peak = float(np.max(np.abs(audio), initial=0.0))
     return audio, Report(
         tune_hz=p.body.tune_hz,
@@ -208,8 +210,8 @@ def render(p: Patch, bits: int | None = None) -> tuple[NDArray[np.float32], Repo
         bits=bits,
         peak=peak,
         true_peak=true_peak(audio),
-        ceiling=top,
-        over=p.output.mode == "gain" and peak > top,
+        ceiling=ceiling,
+        over=p.output.mode == "gain" and peak > ceiling,
         render_s=time.perf_counter() - start,
     )
 

@@ -47,9 +47,9 @@ def root_note(hz: float) -> tuple[int, int]:
     than half a cent flat of a note counts as that note, so samplers that
     ignore the fraction are never a semitone off.
     """
-    p = midi_pitch(hz)
-    note = math.floor(p + 0.005)
-    return note, round(max(0.0, p - note) * 2**32)
+    pitch = midi_pitch(hz)
+    note = math.floor(pitch + 0.005)
+    return note, round(max(0.0, pitch - note) * 2**32)
 
 
 def save(path: str | os.PathLike[str], data: bytes) -> None:
@@ -88,8 +88,8 @@ def write(
         chunks += _chunk(b"fact", struct.pack("<I", samples.size))
         data = samples.astype("<f4").tobytes()
     else:
-        top = 2 ** (fmt.bits - 1)
-        if samples.size and not (-top <= np.min(samples) and np.max(samples) < top):
+        full_scale = 2 ** (fmt.bits - 1)
+        if samples.size and not (-full_scale <= np.min(samples) and np.max(samples) < full_scale):
             msg = f"samples out of range for {fmt.bits}-bit PCM"
             raise ValueError(msg)
         width = fmt.bits // 8

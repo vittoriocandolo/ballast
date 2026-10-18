@@ -36,8 +36,8 @@ def test_float_samples_read_back_exactly(tmp_path: Path) -> None:
 @pytest.mark.parametrize("bits", [16, 24])
 def test_pcm_samples_read_back_exactly(tmp_path: Path, bits: int) -> None:
     """Write PCM samples up to both ends of the range, and read them back with SciPy."""
-    top = 2 ** (bits - 1)
-    q = np.array([-top, -top + 1, -1, 0, 1, 1234, top - 1], dtype=np.int32)
+    full_scale = 2 ** (bits - 1)
+    q = np.array([-full_scale, -full_scale + 1, -1, 0, 1, 1234, full_scale - 1], dtype=np.int32)
     wav.write(tmp_path / "p.wav", q, wav.Format(CD_RATE, bits), ROOT, {})
     rate, data = wavfile.read(tmp_path / "p.wav")
     assert rate == CD_RATE

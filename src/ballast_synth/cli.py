@@ -244,63 +244,63 @@ def _parser() -> argparse.ArgumentParser:
     output.add_argument("-o", "--out", metavar="FILE", help="write to FILE instead of standard output")
     note = "a note name such as F1 or C#2, or a frequency in Hz"
 
-    p = sub.add_parser("init", parents=[output], help="start a patch from a preset")
-    p.add_argument("preset", choices=PRESETS)
-    p.add_argument("--tune", metavar="NOTE", help=note)
-    p.set_defaults(run=cmd_init)
+    command = sub.add_parser("init", parents=[output], help="start a patch from a preset")
+    command.add_argument("preset", choices=PRESETS)
+    command.add_argument("--tune", metavar="NOTE", help=note)
+    command.set_defaults(run=cmd_init)
 
-    p = sub.add_parser("tune", parents=[output], help="retune a patch to a note or frequency")
-    p.add_argument("patch")
-    p.add_argument("note", help=note)
-    p.set_defaults(run=cmd_tune)
+    command = sub.add_parser("tune", parents=[output], help="retune a patch to a note or frequency")
+    command.add_argument("patch")
+    command.add_argument("note", help=note)
+    command.set_defaults(run=cmd_tune)
 
-    p = sub.add_parser("stretch", parents=[output], help="rescale the knot times of one curve")
-    p.add_argument("patch")
-    p.add_argument("curve", choices=CURVES)
-    p.add_argument("factor", type=float, help="below 1 shortens, above 1 lengthens")
-    p.add_argument(
+    command = sub.add_parser("stretch", parents=[output], help="rescale the knot times of one curve")
+    command.add_argument("patch")
+    command.add_argument("curve", choices=CURVES)
+    command.add_argument("factor", type=float, help="below 1 shortens, above 1 lengthens")
+    command.add_argument(
         "--after",
         type=float,
         metavar="MS",
         help="keep knots up to this time (default: the peak of an amplitude shape, 0 ms for pitch)",
     )
-    p.set_defaults(run=cmd_stretch)
+    command.set_defaults(run=cmd_stretch)
 
-    p = sub.add_parser("render", help="render a patch to WAV")
-    p.add_argument("patch")
-    p.add_argument("-o", "--out", required=True, metavar="WAV")
-    p.add_argument(
+    command = sub.add_parser("render", help="render a patch to WAV")
+    command.add_argument("patch")
+    command.add_argument("-o", "--out", required=True, metavar="WAV")
+    command.add_argument(
         "--format",
         choices=FORMATS,
         default="float32",
         help="float32 (default), or PCM with seeded TPDF dither for hardware samplers",
     )
-    p.add_argument("--allow-over", action="store_true", help="write a gain-mode render over full scale (float32)")
-    p.set_defaults(run=cmd_render)
+    command.add_argument("--allow-over", action="store_true", help="write a gain-mode render over full scale (float32)")
+    command.set_defaults(run=cmd_render)
 
-    p = sub.add_parser("multisample", help="render one sample per key, with an SFZ map, to play as an instrument")
-    p.add_argument("patch")
-    p.add_argument("low", help="the lowest note, such as C1")
-    p.add_argument("high", help="the highest note, such as C2")
-    p.add_argument("-o", "--out", required=True, metavar="DIR", help="the folder for the samples and the map")
-    p.add_argument("--format", choices=FORMATS, default="float32", help="as for render")
-    p.set_defaults(run=cmd_multisample)
+    command = sub.add_parser("multisample", help="render one sample per key, with an SFZ map, to play as an instrument")
+    command.add_argument("patch")
+    command.add_argument("low", help="the lowest note, such as C1")
+    command.add_argument("high", help="the highest note, such as C2")
+    command.add_argument("-o", "--out", required=True, metavar="DIR", help="the folder for the samples and the map")
+    command.add_argument("--format", choices=FORMATS, default="float32", help="as for render")
+    command.set_defaults(run=cmd_multisample)
 
-    p = sub.add_parser("audition", help="play a patch in a loop")
-    p.add_argument("patch")
-    p.add_argument("--watch", action="store_true", help="re-render whenever the file changes")
-    p.add_argument("--bpm", type=bpm, help="hit on the beat instead of after each kick")
-    p.add_argument(
+    command = sub.add_parser("audition", help="play a patch in a loop")
+    command.add_argument("patch")
+    command.add_argument("--watch", action="store_true", help="re-render whenever the file changes")
+    command.add_argument("--bpm", type=bpm, help="hit on the beat instead of after each kick")
+    command.add_argument(
         "--with",
         dest="bed",
         metavar="WAV",
         help="loop a bed under the hits, such as the track's bass line: a whole number of bars at --bpm",
     )
-    p.set_defaults(run=cmd_audition)
+    command.set_defaults(run=cmd_audition)
 
-    p = sub.add_parser("extract", parents=[output], help="recover the patch embedded in a rendered WAV")
-    p.add_argument("wav")
-    p.set_defaults(run=cmd_extract)
+    command = sub.add_parser("extract", parents=[output], help="recover the patch embedded in a rendered WAV")
+    command.add_argument("wav")
+    command.set_defaults(run=cmd_extract)
     return ap
 
 

@@ -784,7 +784,7 @@ def figure_low_cut() -> str:
 def response(base: int, n: int = 1 << 20) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Compute a decimator's magnitude response in dB, at n / 2 + 1 frequencies up to half the internal rate."""
     taps = render.decimator(base)
-    f = np.fft.rfftfreq(n, 1 / (base * render.K))
+    f = np.fft.rfftfreq(n, 1 / (base * render.OVERSAMPLING))
     return f, 20 * np.log10(np.maximum(np.abs(np.fft.rfft(taps, n)), 1e-300))
 
 
@@ -806,7 +806,7 @@ def figure_decimator() -> str:
     series = (("48 kHz family", 48000, "s1", "key1"), ("44.1 kHz family", 44100, "s2", "key2"))
     for name, base, cls, _ in series:
         f, gain = response(base)
-        edges = np.geomspace(1000, base * render.K / 2, 561)
+        edges = np.geomspace(1000, base * render.OVERSAMPLING / 2, 561)
         envelope = np.maximum.reduceat(gain, np.searchsorted(f, edges[:-1]))  # the worst case in each column
         body.append(f'<path class="{cls}" d="{wide.path(np.sqrt(edges[:-1] * edges[1:]), envelope)}"/>')
         passband = f <= PASSBAND_HZ
