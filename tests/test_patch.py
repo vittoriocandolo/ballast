@@ -106,6 +106,28 @@ def test_curve_rules(raw: dict[str, Any], curve: str, index: int, change: dict[s
     assert problems(raw) == [message]
 
 
+@pytest.mark.parametrize(
+    ("pitch", "message"),
+    [
+        ([{"ms": 1.0, "ratio": 1.0}], "attack.pitch[0].ms: the pitch curve must start at 0 ms"),
+        ([{"ms": 0.0, "ratio": 2.0}], "attack.pitch[0].ratio: the pitch curve must end at ratio 1"),
+        (
+            [{"ms": 0.0, "ratio": 10.0}, {"ms": 1.0, "ratio": 1.0}],
+            "attack.pitch[0].ratio: tone frequency 25000 Hz is outside 20 … 20000 Hz",
+        ),
+        ([], "attack.pitch: needs 1 to 32 knots, found 0"),
+    ],
+)
+def test_the_tone_pitch_follows_the_body_pitch_rules_within_the_tone_range(
+    raw: dict[str, Any],
+    pitch: list[dict[str, float]],
+    message: str,
+) -> None:
+    """Break one rule of the attack's pitch curve, and get exactly that problem."""
+    raw["attack"]["pitch"] = pitch
+    assert problems(raw) == [message]
+
+
 def test_knot_spacing_is_compared_on_the_decimal_values_as_written(raw: dict[str, Any]) -> None:
     """Space two knots exactly 0.01 ms apart as written, which binary floats would put a hair short."""
     spacing = float(patch.MIN_SPACING_MS)
@@ -215,6 +237,12 @@ def test_stretch_scales_the_pitch_curve_from_its_start(tight: patch.Patch) -> No
     """Stretch the pitch curve, which moves every knot."""
     after = patch.stretch(tight, "body.pitch", 0.5).body.pitch
     assert [ms for ms, _ in after] == [round(0.5 * ms, 3) for ms, _ in tight.body.pitch]
+
+
+def test_stretch_scales_the_tone_pitch_curve_from_its_start(tight: patch.Patch) -> None:
+    """Stretch a sweep of the attack's tone, which moves every knot."""
+    zap = patch.edit(tight, "attack.pitch", ((0.0, 4.0), (0.5, 2.0), (2.0, 1.0)))
+    assert patch.stretch(zap, "attack.pitch", 1.5).attack.pitch == ((0.0, 4.0), (0.75, 2.0), (3.0, 1.0))
 
 
 def test_stretch_after_an_explicit_time(tight: patch.Patch) -> None:
@@ -331,7 +359,7 @@ def test_every_malformed_knot_is_reported(raw: dict[str, Any]) -> None:
 def older(raw: dict[str, Any], schema: int) -> dict[str, Any]:
     """Return the patch as an older schema writes it: without the fields that schema did not have."""
     raw["schema"] = schema
-    del raw["clip"], raw["drive"]["asymmetry"], raw["drive"]["mix"]
+    del raw["clip"], raw["drive"]["asymmetry"], raw["drive"]["mix"], raw["attack"]["pitch"]
     if schema == 1:
         del raw["output"]["low_cut_hz"]
     return raw
@@ -341,19 +369,20 @@ def older(raw: dict[str, Any], schema: int) -> dict[str, Any]:
 def test_older_schemas_still_read_with_everything_new_off(raw: dict[str, Any], schema: int) -> None:
     """Read a schema 1 or 2 patch, with every later field off, and write it back as schema 3, sounding the same."""
     old = patch.from_dict(older(raw, schema))
-    assert (old.drive.asymmetry, old.drive.mix, old.clip.db) == (0.0, 1.0, 0.0)
+    assert (old.attack.pitch, old.drive.asymmetry, old.drive.mix, old.clip.db) == (patch.FIXED_TONE, 0.0, 1.0, 0.0)
     assert old.output.low_cut_hz == (0.0 if schema == 1 else raw["output"]["low_cut_hz"])
     assert patch.dumps(old).startswith("schema = 3\n")
 
 
 def test_an_older_schema_refuses_what_it_did_not_have(raw: dict[str, Any]) -> None:
-    """Refuse a low cut in schema 1, and a clipper in schema 2."""
+    """Refuse a low cut in schema 1, and a clipper and a sweep of the attack's tone in schema 2."""
     raw = older(raw, 1)
     raw["output"]["low_cut_hz"] = 30.0
     assert problems(raw) == ["output.low_cut_hz: unknown field"]
     raw["schema"] = 2
     raw["clip"] = {"db": 3.0, "knee_db": 0.0}
-    assert problems(raw) == ["clip: unknown field"]
+    raw["attack"]["pitch"] = [{"ms": 0.0, "ratio": 1.0}]
+    assert problems(raw) == ["clip: unknown field", "attack.pitch: unknown field"]
 
 
 def test_schema_2_requires_the_low_cut(raw: dict[str, Any]) -> None:

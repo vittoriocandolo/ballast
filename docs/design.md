@@ -74,13 +74,21 @@ both ends, which gives the exact phase above.
 
 ## The attack
 
-The attack mixes a sine and noise at constant power, under its own amplitude
+The attack mixes a tone and noise at constant power, under its own amplitude
 shape A_a:
 
-    a(t) = g_a · A_a(t) · (cos(πm/2) sin(2π f_t t) + sin(πm/2) n(t))
+    a(t) = g_a · A_a(t) · (cos(πm/2) sin(2π f_t τ_a(t)) + sin(πm/2) n(t)),    τ_a(t) = ∫₀ᵗ R_a
 
-where m is `noise_mix` and f_t is `tone_hz`; at m = 0 and m = 1 the weights
-are exactly 1 and 0.
+where m is `noise_mix`, f_t is `tone_hz` and R_a is the tone's own pitch
+curve, `attack.pitch`; at m = 0 and m = 1 the weights are exactly 1 and 0.
+
+The tone's phase integrates its curve in closed form, as the body's does. A
+curve held at ratio 1 is the fixed tone, computed as τ_a(t) = t itself. A
+curve that falls into ratio 1 sweeps the tone down into `tone_hz` while the
+attack sounds: a zap, which spreads the click's tone over the octaves it falls
+through and raises its center of brightness.
+
+![A zap: the tone's frequency falling from 10 kHz into 2.5 kHz in 2 ms, and the tone it makes, against the fixed tone](figures/zap.svg)
 
 The noise is a seeded continuous-time Gaussian process:
 

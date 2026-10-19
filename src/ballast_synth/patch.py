@@ -38,6 +38,7 @@ MIN_SPACING_MS = Decimal("0.01")  # 10 µs, compared on the decimal values as wr
 MAX_SEED = 2**63 - 1
 PEAK_MODES = ("peak", "true-peak")  # the modes whose `db` is a target at or below full scale
 BODY_HZ = (10.0, 20000.0)  # where the body's frequency must lie at every pitch knot
+TONE_HZ = (20.0, 20000.0)  # where the attack tone's frequency must lie, at every pitch knot too
 
 
 class PatchError(ValueError):
@@ -237,19 +238,23 @@ def _spacing(path: str, curve: Knots, problems: list[str]) -> None:
             problems.append(f"{path}[{i}].ms: is {b - a} ms after the previous knot; knots need {MIN_SPACING_MS} ms")
 
 
-def _pitch(path: str, curve: Knots, problems: list[str], section: dict[str, Any]) -> None:
-    """Check that the pitch curve starts at 0 ms, ends at ratio 1, and keeps the body within 10 Hz … 20 kHz."""
-    if curve[0][0] != 0.0:
-        problems.append(f"{path}[0].ms: the pitch curve must start at 0 ms")
-    if curve[-1][1] != 1.0:
-        problems.append(f"{path}[{len(curve) - 1}].ratio: the pitch curve must end at ratio 1")
-    tune = section["tune_hz"]
-    lo, hi = BODY_HZ
-    for i, (_, r) in enumerate(curve):
-        if tune is not None and not lo <= tune * r <= hi:
-            problems.append(f"{path}[{i}].ratio: body frequency {tune * r:g} Hz is outside {lo:g} … {hi:g} Hz")
-        elif tune is None and r <= 0:
-            problems.append(f"{path}[{i}].ratio: must be positive")
+def _pitch(reference: str, name: str, hz: tuple[float, float]) -> Check:
+    """Make the check of a pitch curve: it starts at 0 ms, ends at ratio 1, and keeps `reference` × ratio within hz."""
+
+    def check(path: str, curve: Knots, problems: list[str], section: dict[str, Any]) -> None:
+        if curve[0][0] != 0.0:
+            problems.append(f"{path}[0].ms: the pitch curve must start at 0 ms")
+        if curve[-1][1] != 1.0:
+            problems.append(f"{path}[{len(curve) - 1}].ratio: the pitch curve must end at ratio 1")
+        f0 = section[reference]
+        lo, hi = hz
+        for i, (_, r) in enumerate(curve):
+            if f0 is not None and not lo <= f0 * r <= hi:
+                problems.append(f"{path}[{i}].ratio: {name} frequency {f0 * r:g} Hz is outside {lo:g} … {hi:g} Hz")
+            elif f0 is None and r <= 0:
+                problems.append(f"{path}[{i}].ratio: must be positive")
+
+    return check
 
 
 def _shape(path: str, curve: Knots, problems: list[str], _section: dict[str, Any]) -> None:
@@ -279,7 +284,7 @@ class Body:
         "ratio",
         (2, 32),
         MAX_BODY_MS,
-        _pitch,
+        _pitch("tune_hz", "body", BODY_HZ),
         "ratio to tune_hz; starts at 0 ms, ends at 1",
     )
     amp: tuple[tuple[float, float], ...] = knots(
@@ -293,10 +298,17 @@ class Body:
 
 @dataclass(frozen=True)
 class Attack:
-    """The attack: a tone and seeded band-limited noise, under a short amplitude shape."""
+    """The attack: a tone with its own pitch curve, and seeded band-limited noise, under a short amplitude shape."""
 
     level_db: float = number(-60.0, 24.0, off=-math.inf)
-    tone_hz: float = number(20.0, 20000.0)
+    tone_hz: float = number(*TONE_HZ)
+    pitch: tuple[tuple[float, float], ...] = knots(
+        "ratio",
+        (1, 32),
+        MAX_ATTACK_MS,
+        _pitch("tone_hz", "tone", TONE_HZ),
+        "ratio to tone_hz; starts at 0 ms, ends at 1",
+    )
     noise_mix: float = number(0.0, 1.0, "0 = tone … 1 = noise")
     noise_band_hz: tuple[float, float] = band(20.0, 20000.0)
     amp: tuple[tuple[float, float], ...] = knots("gain", (3, 32), MAX_ATTACK_MS, _shape)
@@ -356,10 +368,16 @@ SECTIONS: dict[str, type[Section]] = {
     "clip": Clip,
     "output": Output,
 }
+FIXED_TONE = ((0.0, 1.0),)  # a pitch curve of one knot: the attack's tone holds tone_hz
 # What each older schema lacks, with the values that render its patches exactly as they always sounded.
 ADDED: dict[int, dict[str, dict[str, Any]]] = {
-    1: {"drive": {"asymmetry": 0.0, "mix": 1.0}, "clip": {"db": 0.0, "knee_db": 0.0}, "output": {"low_cut_hz": 0.0}},
-    2: {"drive": {"asymmetry": 0.0, "mix": 1.0}, "clip": {"db": 0.0, "knee_db": 0.0}},
+    1: {
+        "attack": {"pitch": FIXED_TONE},
+        "drive": {"asymmetry": 0.0, "mix": 1.0},
+        "clip": {"db": 0.0, "knee_db": 0.0},
+        "output": {"low_cut_hz": 0.0},
+    },
+    2: {"attack": {"pitch": FIXED_TONE}, "drive": {"asymmetry": 0.0, "mix": 1.0}, "clip": {"db": 0.0, "knee_db": 0.0}},
     SCHEMA: {},
 }
 CURVES = tuple(f"{name}.{f.name}" for name, cls in SECTIONS.items() for f in fields(cls) if f.metadata["key"])

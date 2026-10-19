@@ -39,6 +39,9 @@ level_db      = -16.0
 tone_hz       = 2500.0
 noise_mix     = 0.55        # 0 = tone … 1 = noise
 noise_band_hz = [1200.0, 8000.0]
+pitch = [                   # ratio to tone_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 amp = [
   { ms = 0.0,  gain = 0.0 },
   { ms = 0.08, gain = 1.0 },
@@ -92,7 +95,8 @@ as Windows PowerShell writes.
 | Field | Type | Range | Meaning |
 |---|---|---|---|
 | `level_db` | number | −60 – +24 dB, or `-inf` | The attack's level; `-inf` silences it. |
-| `tone_hz` | number | 20 Hz – 20 kHz | The frequency of the attack's sine. |
+| `tone_hz` | number | 20 Hz – 20 kHz | The frequency the attack's tone settles on. |
+| `pitch` | curve | 1 – 32 knots of `{ ms, ratio }` | The tone's frequency as a ratio to `tone_hz`, like the body's. It starts at 0 ms and ends at ratio 1, and `tone_hz × ratio` stays within 20 Hz – 20 kHz at every knot. One knot, `{ ms = 0.0, ratio = 1.0 }`, holds the tone at `tone_hz`; a curve that falls into 1 is a zap. |
 | `noise_mix` | number | 0 – 1 | Tone (0) to noise (1), at constant power; both ends are exact. |
 | `noise_band_hz` | `[low, high]` | 20 ≤ low < high ≤ 20 000 | The noise band: second-order skirts with their half-power points at the edges. |
 | `amp` | curve | 3 – 32 knots of `{ ms, gain }` | The attack's amplitude shape, ending by 1 s. |
@@ -125,7 +129,7 @@ as Windows PowerShell writes.
 ## Curves
 
 A curve is an array of knots, each a table of `ms` and a value: `ratio` for
-the pitch, `gain` for an amplitude shape.
+a pitch curve, `gain` for an amplitude shape.
 
 - **Times** start at 0 ms or later and strictly increase, at least 0.01 ms
   (10 µs) apart. The spacing is compared on the decimal values as written, so
@@ -137,8 +141,8 @@ the pitch, `gain` for an amplitude shape.
 - **Amplitude shapes** have gains from 0 to 1, start and end at 0, and peak at
   exactly 1. Levels belong in `level_db`, so a shape only says how the sound
   moves. Their ends are flat, so they leave and join silence smoothly.
-- **The pitch curve** ends flat on ratio 1, so the body lands on its note
-  without a kink.
+- **Pitch curves** end flat on ratio 1, so the body lands on its note, and
+  the attack's tone on `tone_hz`, without a kink.
 
 The kick lasts until the later of the two amplitude shapes' last knots.
 
@@ -171,12 +175,12 @@ and writing it again gives the same text.
 A patch states its schema, so a later renderer can read it as it was meant,
 and a renderer refuses a schema it does not know rather than guess.
 
-- **Schema 3**, the current one, adds `drive.asymmetry`, `drive.mix` and the
-  `[clip]` section.
+- **Schema 3**, the current one, adds `attack.pitch`, `drive.asymmetry`,
+  `drive.mix` and the `[clip]` section.
 - **Schema 2** adds `output.low_cut_hz` to schema 1.
 - **Schema 1** has no low cut.
 
 Ballast still reads schemas 1 and 2 and renders them exactly as they always
-sounded: what they lack is off, with no asymmetry, all of the drive, and no
-clipper or low cut. `tune` and `stretch` write them back as schema 3 with
+sounded: what they lack is off, with a fixed tone, no asymmetry, all of the
+drive, and no clipper or low cut. `tune` and `stretch` write them back as schema 3 with
 those values, which sound the same.

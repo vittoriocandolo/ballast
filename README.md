@@ -6,7 +6,7 @@ way every time.
 ![Waveforms of the four presets, tight, driven, round and long, rendered at 48 kHz](docs/figures/presets.svg)
 
 Ballast synthesizes one voice: a tonal body with an exact pitch sweep, and a
-short attack of tone and noise. It computes them at 32 times the sample rate,
+short attack of a tone, which can sweep too, and noise. It computes them at 32 times the sample rate,
 saturates their sum, and band-limits it once with a frozen minimum-phase
 filter. The files it writes keep every alias at least 104 dB down, are ready
 for any sampler, and carry the patch that made them.
@@ -28,8 +28,9 @@ one's curves, spectrum and patch.
   grow as the body decays, with full scale and the drive's gain left exactly
   where they were. `drive.mix` blends in the undriven kick, sample-aligned.
   Loudness is the clipper: `clip.db` takes exactly that many decibels off the
-  file's true peak, from a hard to a soft knee.
-- **Exact pitch.** The pitch curve is integrated exactly into phase. With
+  file's true peak, from a hard to a soft knee. A zap is `attack.pitch`: the
+  click's tone dives into its own frequency.
+- **Exact pitch.** Pitch curves are integrated exactly into phase. With
   `phase_ref = "tail"`, an 808-style tail meets the free-running sine at its
   note exactly, whatever the sweep did before.
 - **Deterministic.** Every sample is a pure function of the patch and its

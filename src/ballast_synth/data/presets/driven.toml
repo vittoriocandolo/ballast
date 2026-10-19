@@ -26,6 +26,9 @@ level_db      = -20.0
 tone_hz       = 3000.0
 noise_mix     = 0.5         # 0 = tone … 1 = noise
 noise_band_hz = [800.0, 10000.0]
+pitch = [                   # ratio to tone_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 amp = [
   { ms = 0.0,  gain = 0.0 },
   { ms = 0.05, gain = 1.0 },

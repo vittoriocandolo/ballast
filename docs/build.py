@@ -424,6 +424,7 @@ def design_moves(tight: Kick) -> list[tuple[str, Kick]]:
         ("tight-snap", "ballast stretch kick.toml body.pitch 0.5", patch.stretch(p, "body.pitch", 0.5)),
         ("tight-long", "ballast stretch kick.toml body.amp 1.5", patch.stretch(p, "body.amp", 1.5)),
         ("tight-click", "attack.level_db = -8.0", patch.edit(p, "attack.level_db", -8.0)),
+        ("tight-zap", "attack.pitch: 4 to 1 in 2 ms", patch.edit(p, "attack.pitch", ZAP)),
         ("tight-drive", "drive.db = 18.0", patch.edit(p, "drive.db", 18.0)),
         ("tight-cut", "output.low_cut_hz = 30.0", patch.edit(p, "output.low_cut_hz", 30.0)),
         ("tight-warm", "drive.asymmetry = 1.0", patch.edit(p, "drive.asymmetry", 1.0)),
@@ -749,6 +750,48 @@ def figure_attack(p: patch.Patch) -> str:
     subtitle = "Tone and noise mix at constant power; the noise fills its band, with half power at the edges"
     description = "The weights of tone and noise against noise_mix, and the tight preset's noise band"
     return svg(fit(mix, 2), "The attack", subtitle, "".join(body), description)
+
+
+ZAP = ((0.0, 4.0), (2.0, 1.0))  # the usage guide's zap: two octaves down into tone_hz, in 2 ms
+
+
+def centroid(v: Voice) -> float:
+    """Measure the spectral centroid of the attack's tone under its shape, in Hz, rounded to 0.1 kHz."""
+    n = np.arange(round(v.attack_amp.t[-1] * INTERNAL) + 1)
+    power = np.abs(np.fft.rfft(v.attack(n / INTERNAL, n), 1 << 22)) ** 2
+    f = np.fft.rfftfreq(1 << 22, 1 / INTERNAL)
+    return round(float(np.sum(f * power) / np.sum(power)), -2)
+
+
+def figure_zap(p: patch.Patch) -> str:
+    """Draw a zap's frequency against time, and its tone under the attack's shape, against the fixed tone."""
+    ms = 3.0
+    zap = Voice(patch.edit(patch.edit(p, "attack.pitch", ZAP), "attack.noise_mix", 0.0), INTERNAL)
+    fixed = Voice(patch.edit(p, "attack.noise_mix", 0.0), INTERNAL)
+    if zap.tone_pitch is None:
+        msg = "a zap sweeps its tone, so the voice has the curve"
+        raise ValueError(msg)
+    tone = zap.tone_hz
+    pitch = Panel(LEFT, Axis(0, ms), Axis(1000, 20000, log=True))
+    shown = (Ticks((0, 1, 2, 3), num, "ms"), Ticks((1000, 2000, 5000, 10000, 20000), hz, "The tone's frequency, Hz"))
+    body = [pitch.hline(tone, "ref"), knotted(pitch, ZAP, zap.tone_pitch, shown, tone)]
+    wave = Panel(RIGHT, Axis(0, ms), Axis(-1.05, 1.05))
+    t = np.linspace(0, ms / KILO, 1501)
+    silent = np.zeros(t.size, dtype=int)  # sample indices, which only the noise reads
+    body += [
+        wave.frame(Ticks((0, 1, 2, 3), num, "ms"), Ticks((-1, 0, 1), num, "The tone under the attack's shape")),
+        wave.line("ref", t * KILO, fixed.attack(t, silent) / fixed.attack_gain),
+        wave.line("s1", t * KILO, zap.attack(t, silent) / zap.attack_gain),
+    ]
+    sweep = f"attack.pitch, {num(ZAP[0][1])} to 1 in {num(ZAP[-1][0])} ms"
+    keys = [
+        ("kref", f"fixed tone: centroid {num(centroid(fixed) / KILO)} kHz"),
+        ("key1", f"{sweep}: centroid {num(centroid(zap) / KILO)} kHz"),
+    ]
+    body.append(legend_row(below(pitch), keys))
+    subtitle = "attack.pitch sweeps the click's tone into tone_hz, its phase integrated exactly, as the body's is"
+    description = "A zap: the tone's frequency falling from 10 kHz into 2.5 kHz in 2 ms, and the tone it makes"
+    return svg(fit(pitch, 1), "A zap", subtitle, "".join(body), description)
 
 
 DRIVES = (("o1", 6.0), ("o2", 12.0), ("o3", 21.0), ("o4", 48.0))
@@ -1153,7 +1196,7 @@ def figure_design(moves: Sequence[tuple[str, Kick]]) -> str:
         + whole.frame(Ticks(steps(length, length_step), num, "ms"), Ticks(())),
     )
     subtitle = "Each row is one move made on the tight preset, as the guide describes it"
-    description = "Waveforms of the tight preset and of six design moves made on it"
+    description = f"Waveforms of the tight preset and of the {len(moves) - 1} design moves made on it"
     return svg(end + 56, "Designing a kick", subtitle, "".join(body), description)
 
 
@@ -1260,6 +1303,7 @@ def main() -> None:
         "body": figure_body(kicks["long"].p),
         "curves": figure_curves(tight),
         "attack": figure_attack(tight),
+        "zap": figure_zap(tight),
         "saturator": figure_saturator(),
         "aliasing": figure_aliasing(),
         "asymmetry": figure_asymmetry(),

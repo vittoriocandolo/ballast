@@ -53,10 +53,10 @@ moves with it, and every knot must stay within 10 Hz – 20 kHz.
 
 ### `ballast stretch PATCH CURVE FACTOR [--after MS] [-o FILE]`
 
-Rescales the knot times of `body.pitch`, `body.amp` or `attack.amp`. Below 1
-shortens, above 1 lengthens. Knots up to `--after` stay put; by default, that
-is the peak of an amplitude shape, so the rise keeps its shape, and 0 ms for
-the pitch curve. Times are rounded to 1 µs, and the result is checked like
+Rescales the knot times of `body.pitch`, `body.amp`, `attack.pitch` or
+`attack.amp`. Below 1 shortens, above 1 lengthens. Knots up to `--after` stay
+put; by default, that is the peak of an amplitude shape, so the rise keeps its
+shape, and 0 ms for a pitch curve. Times are rounded to 1 µs, and the result is checked like
 any patch.
 
 `init`, `tune` and `stretch` write the canonical form of the patch, with its
@@ -201,11 +201,11 @@ patch's sample rate.
 
 ## Designing a kick
 
-Eight of the moves below are made on the `tight` preset, each with a link to its
+Nine of the moves below are made on the `tight` preset, each with a link to its
 sound, to compare with [tight itself](audio/tight.wav); the figure shows what
 they do.
 
-![The tight preset and eight moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, more drive, a low cut, warmth and clipping](figures/design.svg)
+![The tight preset and nine moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a zap, more drive, a low cut, warmth and clipping](figures/design.svg)
 
 - **Tune it to the track.** A kick in the key of the bass sits in the mix. Use
   `ballast tune kick.toml E1`, or `--tune` with `init`.
@@ -222,6 +222,11 @@ they do.
   noise, a few milliseconds long, cuts through a dense mix; `noise_mix` blends
   the two at constant power. `attack.level_db = -8.0` brings the click 8 dB
   forward. [Hear the louder click](audio/tight-click.wav).
+- **A zap is the click's own sweep.** `attack.pitch` is a pitch curve for the
+  attack's tone, a ratio to `tone_hz` like the body's. Falling into 1, it
+  dives into `tone_hz` and brightens the click:
+  `pitch = [{ ms = 0.0, ratio = 4.0 }, { ms = 2.0, ratio = 1.0 }]` dives two
+  octaves, from 10 kHz, in 2 ms. [Hear the zap](audio/tight-zap.wav).
 - **Weight is the drive.** `drive.db` adds odd harmonics and density while
   full scale stays at full scale; `h2` adds the even second harmonic.
   `drive.db = 18.0`, up from 6, squares the body off.

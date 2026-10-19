@@ -85,6 +85,8 @@ class Voice:
         self.attack_amp = _curve(a.amp, first=0.0, last=0.0)
         self.attack_gain: float = 10.0 ** (a.level_db / 20.0)
         self.tone_hz = a.tone_hz
+        # A flat pitch curve is the fixed tone, whose phase 2π f_t t needs no integral.
+        self.tone_pitch = _curve(a.pitch, last=0.0) if any(r != 1.0 for _, r in a.pitch) else None
         self.tone_weight, self.noise_weight = mix_weights(a.noise_mix)
         uses_noise = self.attack_gain != 0.0 and self.noise_weight != 0.0
         self.noise = noise.table(p.seed, *a.noise_band_hz, rate) if uses_noise else None
@@ -141,7 +143,9 @@ class Voice:
         """Return the attack at times t, sample indices n: the tone and the noise, under their amplitude shape."""
         carrier = np.zeros_like(t)
         if self.tone_weight != 0.0:
-            carrier += self.tone_weight * np.sin((2 * math.pi * self.tone_hz) * t)
+            # φ = 2π f_t τ, where τ(t) = ∫₀ᵗ R integrates the tone's own pitch ratio, as the body's does.
+            tau = t if self.tone_pitch is None else self.tone_pitch.integral(t)
+            carrier += self.tone_weight * np.sin((2 * math.pi * self.tone_hz) * tau)
         if self.noise is not None:  # computed whenever the attack has noise
             carrier += self.noise_weight * self.noise[n % self.rate]  # the noise repeats every second
         return self.attack_gain * self.attack_amp(t) * carrier

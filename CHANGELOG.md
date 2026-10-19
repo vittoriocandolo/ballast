@@ -12,9 +12,10 @@ The first public release.
 ### Added
 
 - A one-voice kick drum synthesizer: a body with an exact pitch sweep and a
-  second harmonic, an attack of tone and seeded band-limited noise, and a tanh
-  saturator anti-aliased to the second order, computed at 32 times the sample
-  rate: every setting keeps its aliases at least 104 dB down.
+  second harmonic, an attack of a tone with a pitch sweep of its own and
+  seeded band-limited noise, and a tanh saturator anti-aliased to the second
+  order, computed at 32 times the sample rate: every setting keeps its aliases
+  at least 104 dB down.
 - Frozen minimum-phase decimators for the 44.1 and 48 kHz families, verified
   by checksum: flat to ±0.000014 dB up to 20 kHz and at least 116.4 dB down
   from half the base rate.

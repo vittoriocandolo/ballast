@@ -61,6 +61,9 @@ level_db      = -16.0
 tone_hz       = 2500.0
 noise_mix     = 0.55        # 0 = tone … 1 = noise
 noise_band_hz = [1200.0, 8000.0]
+pitch = [                   # ratio to tone_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 amp = [
   { ms = 0.0,  gain = 0.0 },
   { ms = 0.08, gain = 1.0 },
@@ -129,6 +132,9 @@ level_db      = -20.0
 tone_hz       = 3000.0
 noise_mix     = 0.5         # 0 = tone … 1 = noise
 noise_band_hz = [800.0, 10000.0]
+pitch = [                   # ratio to tone_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 amp = [
   { ms = 0.0,  gain = 0.0 },
   { ms = 0.05, gain = 1.0 },
@@ -197,6 +203,9 @@ level_db      = -28.0
 tone_hz       = 900.0
 noise_mix     = 0.3         # 0 = tone … 1 = noise
 noise_band_hz = [300.0, 4000.0]
+pitch = [                   # ratio to tone_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 amp = [
   { ms = 0.0,  gain = 0.0 },
   { ms = 0.4,  gain = 1.0 },
@@ -268,6 +277,9 @@ level_db      = -24.0
 tone_hz       = 1500.0
 noise_mix     = 0.4         # 0 = tone … 1 = noise
 noise_band_hz = [500.0, 6000.0]
+pitch = [                   # ratio to tone_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 amp = [
   { ms = 0.0, gain = 0.0 },
   { ms = 0.2, gain = 1.0 },

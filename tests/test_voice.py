@@ -7,6 +7,7 @@ import math
 
 import numpy as np
 import pytest
+from scipy.integrate import cumulative_simpson
 
 from ballast_synth import patch, render, voice
 from ballast_synth.voice import Voice
@@ -118,6 +119,26 @@ def test_the_attack_is_pure_tone_or_pure_noise_at_the_ends_of_the_mix(
     else:
         assert v.noise is not None
         assert np.array_equal(attack, v.attack_gain * v.attack_amp(t) * v.noise[: t.size])
+
+
+def test_a_flat_tone_pitch_is_the_fixed_tone(tight: patch.Patch) -> None:
+    """Hold the tone's pitch at ratio 1 over two knots, and synthesize exactly the tone of one knot."""
+    pure = patch.edit(tight, "attack.noise_mix", 0.0)
+    flat = Voice(patch.edit(pure, "attack.pitch", ((0.0, 1.0), (3.0, 1.0))), INTERNAL)
+    assert flat.tone_pitch is None
+    assert np.array_equal(flat.samples(), Voice(pure, INTERNAL).samples())
+
+
+def test_the_tone_sweeps_along_its_pitch_curve(tight: patch.Patch) -> None:
+    """Sweep the tone from 4 times tone_hz down to it, and find the phase of 2π f_t ∫ R, integrated numerically."""
+    zap = patch.edit(patch.edit(tight, "attack.noise_mix", 0.0), "attack.pitch", ((0.0, 4.0), (2.0, 1.0)))
+    v = Voice(zap, INTERNAL)
+    assert v.tone_pitch is not None
+    t = np.arange(round(0.006 * INTERNAL)) / INTERNAL
+    phase = 2 * math.pi * v.tone_hz * cumulative_simpson(v.tone_pitch(t), x=t, initial=0.0)
+    assert v.tone_pitch(np.array([0.0, 0.002, 0.004])).tolist() == [4.0, 1.0, 1.0]
+    tone = v.attack(t, np.arange(t.size)) / (v.attack_gain * v.tone_weight)
+    assert np.allclose(tone, v.attack_amp(t) * np.sin(phase), rtol=0, atol=1e-9)
 
 
 @pytest.mark.parametrize("db", [5e-324, 1e-300, 1e-16])
