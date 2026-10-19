@@ -1,4 +1,4 @@
-schema = 2
+schema = 3
 seed = 1
 
 [body]
@@ -37,7 +37,13 @@ amp = [
 ]
 
 [drive]
-db = 2.0                    # small-signal gain; 0 = bypass
+db        = 2.0             # small-signal gain; 0 = bypass
+asymmetry = 0.0             # even harmonics, 0 … 1
+mix       = 1.0             # 0 = dry … 1 = driven
+
+[clip]
+db      = 0.0               # off the peaks; 0 = off
+knee_db = 0.0               # 0 = hard … 6 = soft
 
 [output]
 sample_rate = 48000

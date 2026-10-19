@@ -57,9 +57,9 @@ def test_the_drive_is_odd_and_exact_on_steady_inputs(db: float) -> None:
     """Drive a signal and its negative into exact negatives, and steady full scale and silence into themselves."""
     curve = shaper.Tanh(drive_alpha(db))
     x = np.random.default_rng(0).standard_normal(10_000)
-    assert np.array_equal(shaper.drive(curve, -x), -shaper.drive(curve, x))
+    assert np.array_equal(shaper.apply(curve, -x), -shaper.apply(curve, x))
     for level in (1.0, -1.0, 0.0):
-        assert np.all(shaper.drive(curve, np.full(100, level)) == level)
+        assert np.all(shaper.apply(curve, np.full(100, level)) == level)
 
 
 @pytest.mark.parametrize("hz", [1000.0, 10000.0, 20000.0])
@@ -68,7 +68,7 @@ def test_the_drive_is_flat_for_small_signals(hz: float) -> None:
     _, rate, _ = render.rates(48000)
     curve = shaper.Tanh(drive_alpha(21.0))
     level = 1e-6
-    y = shaper.drive(curve, level * tone(hz, rate, 0.01))  # a whole number of periods
+    y = shaper.apply(curve, level * tone(hz, rate, 0.01))  # a whole number of periods
     t = np.arange(y.size) / rate
     gain = abs(2 * np.mean(y * np.exp(-2j * np.pi * hz * t))) / level
     assert 20 * math.log10(gain / 10 ** (21.0 / 20)) == pytest.approx(0.0, abs=0.00002)
@@ -82,9 +82,63 @@ def test_the_worst_setting_aliases_at_least_104_db_down(base: int) -> None:
     """
     _, rate, factor = render.rates(base)
     hz = 19996
-    driven = shaper.drive(shaper.Tanh(drive_alpha(48.0)), tone(hz, rate, 0.27))
+    driven = shaper.apply(shaper.Tanh(drive_alpha(48.0)), tone(hz, rate, 0.27))
     out = render.decimate(render.decimator(base), driven, factor)
     spectrum = np.abs(np.fft.rfft(out[base // 50 : base // 50 + base // 4]))  # a steady quarter second
     f = 4 * np.arange(spectrum.size)
     band = (f >= BAND_HZ[0]) & (f <= BAND_HZ[1]) & (f % hz != 0)
     assert 20 * math.log10(np.max(spectrum[band]) / spectrum[hz // 4]) < WORST_ALIAS_DB
+
+
+@pytest.mark.filterwarnings("ignore::scipy.integrate.IntegrationWarning")
+@pytest.mark.parametrize("asymmetry", [0.5, 1.0])
+def test_the_asymmetric_curve_matches_quadrature_and_keeps_full_scale(asymmetry: float) -> None:
+    """Compare R with quadrature for the curve with its even term, which keeps full scale and stays monotonic."""
+    curve = shaper.Tanh(drive_alpha(21.0), asymmetry / 2)
+    assert curve(np.array([1.0, -1.0, 0.0])).tolist() == [1.0, -1.0, 0.0]
+    assert np.all(np.diff(curve(np.linspace(-1.0, 1.0, 100_001))) >= 0)
+    rng = np.random.default_rng(3)
+    for _ in range(300):
+        a = rng.uniform(-2.0, 2.0) * rng.choice([1.0, 1 / curve.alpha])
+        b = a + rng.choice([-1.0, 1.0]) * 10.0 ** rng.uniform(-9, 0.5) / curve.alpha
+        exact, _ = quad(weighted, 0, 1, args=(curve, a, b), epsabs=1e-15, epsrel=1e-13)
+        assert curve.half(np.array([a]), np.array([b]))[0] == pytest.approx(exact, rel=0, abs=1e-10)
+
+
+@pytest.mark.filterwarnings("ignore::scipy.integrate.IntegrationWarning")
+@pytest.mark.parametrize("knee_db", [0.0, 3.0, 6.0])
+def test_the_clipper_matches_quadrature_and_takes_exactly_its_db_off(knee_db: float) -> None:
+    """Compare R with quadrature for the clipper, from its corners too, and bring a peak down by exactly db."""
+    curve = shaper.Clip(knee_db)
+    rng = np.random.default_rng(5)
+    corners = [curve.start, curve.end, -curve.start, -curve.end]
+    for _ in range(500):
+        a = rng.choice([rng.uniform(-3.0, 3.0), *corners])
+        b = a + rng.choice([-1.0, 1.0]) * 10.0 ** rng.uniform(-9, 0.6)
+        points = [(c - a) / (b - a) for c in corners if 0 < (c - a) / (b - a) < 1]
+        exact, _ = quad(weighted, 0, 1, args=(curve, a, b), points=points or None, epsabs=1e-15, epsrel=1e-13)
+        assert curve.half(np.array([a]), np.array([b]))[0] == pytest.approx(exact, rel=0, abs=1e-13)
+    for db in (0.5, 3.0, 12.0):
+        ratio = curve.ratio(db)
+        assert 20 * math.log10(curve(np.array([ratio]))[0] / ratio) == pytest.approx(-db, abs=1e-12)
+
+
+def worst_alias(hz: int, factor: int, base: int, signal: NDArray[np.float64]) -> float:
+    """Return the strongest component of the band that is no harmonic of hz, in dB re hz, over a steady 1/4 s."""
+    out = render.decimate(render.decimator(base), signal, factor)
+    spectrum = np.abs(np.fft.rfft(out[base // 50 : base // 50 + base // 4]))
+    f = 4 * np.arange(spectrum.size)
+    band = (f >= BAND_HZ[0]) & (f <= BAND_HZ[1]) & (f % hz != 0)
+    return 20 * math.log10(np.max(spectrum[band]) / spectrum[hz // 4])
+
+
+@pytest.mark.parametrize("base", [44100, 48000])
+def test_asymmetry_and_hard_clipping_alias_no_more_than_the_drive(base: int) -> None:
+    """Drive a full-scale 20 kHz tone to the limit with full asymmetry, and hard-clip one by 12 dB: 104 dB down."""
+    _, rate, factor = render.rates(base)
+    hz = 19996
+    x = tone(hz, rate, 0.27)
+    driven = shaper.apply(shaper.Tanh(drive_alpha(48.0), 0.5), x)
+    assert worst_alias(hz, factor, base, driven) < WORST_ALIAS_DB
+    clipped = render.clip(x[2:-2], 12.0, 0.0, base, factor)
+    assert worst_alias(hz, factor, base, clipped) < WORST_ALIAS_DB

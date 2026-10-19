@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 type Knots = tuple[tuple[float, float], ...]  # a curve's (ms, value) knots
 
-SCHEMA = 2  # schema 1 had no output.low_cut_hz; its patches still render as they did
+SCHEMA = 3  # each older schema lacks fields, which ADDED fills so that its patches render as they always did
 SAMPLE_RATES = (44100, 48000, 88200, 96000, 176400, 192000)
 MAX_BODY_MS = 8000.0
 MAX_ATTACK_MS = 1000.0
@@ -304,9 +304,19 @@ class Attack:
 
 @dataclass(frozen=True)
 class Drive:
-    """The saturator: its small-signal gain."""
+    """The saturator: its small-signal gain, its even harmonics, and its blend with the undriven signal."""
 
     db: float = number(0.0, 48.0, "small-signal gain; 0 = bypass")
+    asymmetry: float = number(0.0, 1.0, "even harmonics, 0 … 1")
+    mix: float = number(0.0, 1.0, "0 = dry … 1 = driven")
+
+
+@dataclass(frozen=True)
+class Clip:
+    """The clipper before the decimator: how far it brings the kick's peaks down, and how softly it bends."""
+
+    db: float = number(0.0, 12.0, "off the peaks; 0 = off")
+    knee_db: float = number(0.0, 6.0, "0 = hard … 6 = soft")
 
 
 @dataclass(frozen=True)
@@ -328,6 +338,7 @@ class Patch:
     body: Body
     attack: Attack
     drive: Drive
+    clip: Clip
     output: Output
 
     @property
@@ -336,13 +347,20 @@ class Patch:
         return max(self.body.amp[-1][0], self.attack.amp[-1][0])
 
 
-type Section = Body | Attack | Drive | Output
+type Section = Body | Attack | Drive | Clip | Output
 
 SECTIONS: dict[str, type[Section]] = {
     "body": Body,
     "attack": Attack,
     "drive": Drive,
+    "clip": Clip,
     "output": Output,
+}
+# What each older schema lacks, with the values that render its patches exactly as they always sounded.
+ADDED: dict[int, dict[str, dict[str, Any]]] = {
+    1: {"drive": {"asymmetry": 0.0, "mix": 1.0}, "clip": {"db": 0.0, "knee_db": 0.0}, "output": {"low_cut_hz": 0.0}},
+    2: {"drive": {"asymmetry": 0.0, "mix": 1.0}, "clip": {"db": 0.0, "knee_db": 0.0}},
+    SCHEMA: {},
 }
 CURVES = tuple(f"{name}.{f.name}" for name, cls in SECTIONS.items() for f in fields(cls) if f.metadata["key"])
 
@@ -354,8 +372,8 @@ def _schema(data: dict[str, Any]) -> int:
     schema = data["schema"]
     if isinstance(schema, bool) or not isinstance(schema, int):
         raise PatchError([f"schema: expected an integer, found {_kind(schema)}"])
-    if schema not in (1, SCHEMA):
-        raise PatchError([f"schema: unsupported version {schema}; this renderer reads schemas 1 and {SCHEMA}"])
+    if schema not in ADDED:
+        raise PatchError([f"schema: unsupported version {schema}; this renderer reads schemas 1 to {SCHEMA}"])
     return schema
 
 
@@ -379,9 +397,10 @@ def from_dict(data: object) -> Patch:
     """Build a patch from parsed TOML, rejecting anything outside the schema."""
     if not isinstance(data, dict):
         raise PatchError(["expected a table"])
-    added = {"output": {"low_cut_hz": 0.0}} if _schema(data) == 1 else {}  # schema 1 had no low cut
+    added = ADDED[_schema(data)]
+    whole = {name for name, cls in SECTIONS.items() if added.get(name, {}).keys() >= {f.name for f in fields(cls)}}
     problems: list[str] = []
-    _keys(problems, "", data, ("schema", "seed", *SECTIONS))
+    _keys(problems, "", data, ("schema", "seed", *(name for name in SECTIONS if name not in whole)))
     seed = data.get("seed")
     if "seed" in data:
         if isinstance(seed, bool) or not isinstance(seed, int):
@@ -390,6 +409,9 @@ def from_dict(data: object) -> Patch:
             problems.append(f"seed: {seed} is outside 0 … 2**63 - 1")
     sections: dict[str, dict[str, Any]] = {}
     for name, cls in SECTIONS.items():
+        if name in whole:  # a section the patch's schema did not have at all
+            sections[name] = dict(added[name])
+            continue
         if name not in data:  # reported as missing above
             continue
         if not isinstance(data[name], dict):
@@ -403,6 +425,7 @@ def from_dict(data: object) -> Patch:
         Body(**sections["body"]),
         Attack(**sections["attack"]),
         Drive(**sections["drive"]),
+        Clip(**sections["clip"]),
         Output(**sections["output"]),
     )
 

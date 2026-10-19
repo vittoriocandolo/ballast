@@ -11,7 +11,7 @@ This is the `tight` preset, drawn above; the [preset gallery](presets.md) draws
 every preset the same way:
 
 ```toml
-schema = 2
+schema = 3
 seed = 1
 
 [body]
@@ -47,7 +47,13 @@ amp = [
 ]
 
 [drive]
-db = 6.0                    # small-signal gain; 0 = bypass
+db        = 6.0             # small-signal gain; 0 = bypass
+asymmetry = 0.0             # even harmonics, 0 … 1
+mix       = 1.0             # 0 = dry … 1 = driven
+
+[clip]
+db      = 0.0               # off the peaks; 0 = off
+knee_db = 0.0               # 0 = hard … 6 = soft
 
 [output]
 sample_rate = 48000
@@ -66,7 +72,7 @@ as Windows PowerShell writes.
 
 | Field | Type | Range | Meaning |
 |---|---|---|---|
-| `schema` | integer | 1 or 2 | The patch format, checked first: another schema may share nothing else with this one. Schema 2 is current; see [Versions](#versions). |
+| `schema` | integer | 1, 2 or 3 | The patch format, checked first: another schema may share nothing else with this one. Schema 3 is current; see [Versions](#versions). |
 | `seed` | integer | 0 – 2⁶³ − 1 | Draws the attack's noise and the PCM dither. The same seed gives the same noise at every sample rate. |
 
 ### `[body]`: the tonal body
@@ -95,7 +101,16 @@ as Windows PowerShell writes.
 
 | Field | Type | Range | Meaning |
 |---|---|---|---|
-| `db` | number | 0 – 48 dB | The small-signal gain of a tanh saturator that keeps full scale at full scale. 0 dB is an exact bypass. |
+| `db` | number | 0 – 48 dB | The small-signal gain of a tanh saturator that keeps full scale at full scale. 0 dB is an exact bypass, of asymmetry and mix too. |
+| `asymmetry` | number | 0 – 1 | Even harmonics: warmth that rises as the body decays through the curve. Full scale and the small-signal gain stay exactly put; 1 is as far as the curve stays monotonic. Even harmonics bring DC, which `output.low_cut_hz` removes. |
+| `mix` | number | 0 – 1 | The share of the driven signal, against the undriven one: 1 is all driven, 0 all dry. The two line up exactly, since the drive adds no delay. |
+
+### `[clip]`: the clipper
+
+| Field | Type | Range | Meaning |
+|---|---|---|---|
+| `db` | number | 0 – 12 dB | How far the clipper brings the file's true peak down, exactly; what lies below its knee is untouched. 0 is off. With a peak target in `[output]`, these decibels come back as loudness. |
+| `knee_db` | number | 0 – 6 dB | How far below the threshold the clipper starts to bend: 0 is a hard clip, 6 the softest. |
 
 ### `[output]`
 
@@ -156,7 +171,12 @@ and writing it again gives the same text.
 A patch states its schema, so a later renderer can read it as it was meant,
 and a renderer refuses a schema it does not know rather than guess.
 
-- **Schema 2**, the current one, adds `output.low_cut_hz`.
-- **Schema 1** has no low cut. Ballast still reads it, and renders it exactly
-  as it always did; `tune` and `stretch` write it back as schema 2 with
-  `low_cut_hz = 0.0`, which sounds the same.
+- **Schema 3**, the current one, adds `drive.asymmetry`, `drive.mix` and the
+  `[clip]` section.
+- **Schema 2** adds `output.low_cut_hz` to schema 1.
+- **Schema 1** has no low cut.
+
+Ballast still reads schemas 1 and 2 and renders them exactly as they always
+sounded: what they lack is off, with no asymmetry, all of the drive, and no
+clipper or low cut. `tune` and `stretch` write them back as schema 3 with
+those values, which sound the same.

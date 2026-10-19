@@ -89,7 +89,9 @@ class Voice:
         uses_noise = self.attack_gain != 0.0 and self.noise_weight != 0.0
         self.noise = noise.table(p.seed, *a.noise_band_hz, rate) if uses_noise else None
         self.alpha = drive_alpha(p.drive.db)
-        self.curve = shaper.Tanh(self.alpha) if self.alpha != 0.0 else None  # no curve at all at 0 dB
+        # No curve at all at 0 dB. Asymmetry adds the even term k S²(1 - S²), with k up to the monotonic limit 1/2.
+        self.curve = shaper.Tanh(self.alpha, p.drive.asymmetry / 2) if self.alpha != 0.0 else None
+        self.mix = p.drive.mix
         self.count = sample_count(p.length_ms / 1000, rate)
 
     def samples(self) -> NDArray[np.float64]:
@@ -99,7 +101,12 @@ class Voice:
     def _block(self, n0: int, n1: int) -> NDArray[np.float64]:
         """Compute y[n] for n0 ≤ n < n1, from the sources two samples either side, which the drive averages over."""
         x = self.sources(n0 - 2, n1 + 2)
-        return x[2:-2] if self.curve is None else shaper.drive(self.curve, x)
+        if self.curve is None:
+            return x[2:-2]
+        driven = shaper.apply(self.curve, x)
+        if self.mix == 1.0:
+            return driven
+        return (1 - self.mix) * x[2:-2] + self.mix * driven  # dry and driven line up: the drive adds no delay
 
     def sources(self, n0: int, n1: int) -> NDArray[np.float64]:
         """Compute x[n] = b(n / F) + a(n / F) for n0 ≤ n < n1, each source only over its support."""

@@ -126,3 +126,13 @@ def test_a_drive_too_small_to_change_the_gain_is_a_bypass(tight: patch.Patch, db
     assert voice.drive_alpha(db) == 0.0
     bypass = Voice(patch.edit(tight, "drive.db", 0.0), INTERNAL).samples()
     assert np.array_equal(Voice(patch.edit(tight, "drive.db", db), INTERNAL).samples(), bypass)
+
+
+def test_mix_blends_the_dry_and_the_driven_signal_exactly(tight: patch.Patch) -> None:
+    """Mix nothing of the drive into the very sources, all of it into the driven signal, and half into their mean."""
+    hard = patch.edit(tight, "drive.db", 21.0)
+    dry = Voice(hard, INTERNAL).sources(0, Voice(hard, INTERNAL).count)
+    driven = Voice(hard, INTERNAL).samples()
+    assert np.array_equal(Voice(patch.edit(hard, "drive.mix", 0.0), INTERNAL).samples(), dry)
+    half = Voice(patch.edit(hard, "drive.mix", 0.5), INTERNAL).samples()
+    assert np.allclose(half, (dry + driven) / 2, rtol=0, atol=1e-15)

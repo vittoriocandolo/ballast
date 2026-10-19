@@ -322,4 +322,4 @@ def test_any_standard_output_will_do(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     out = io.StringIO()
     monkeypatch.setattr(sys, "stdout", out)
     assert main(["init", "tight"]) == 0
-    assert out.getvalue().startswith("schema = 2\n")
+    assert out.getvalue().startswith("schema = 3\n")

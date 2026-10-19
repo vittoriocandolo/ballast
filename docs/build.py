@@ -426,6 +426,8 @@ def design_moves(tight: Kick) -> list[tuple[str, Kick]]:
         ("tight-click", "attack.level_db = -8.0", patch.edit(p, "attack.level_db", -8.0)),
         ("tight-drive", "drive.db = 18.0", patch.edit(p, "drive.db", 18.0)),
         ("tight-cut", "output.low_cut_hz = 30.0", patch.edit(p, "output.low_cut_hz", 30.0)),
+        ("tight-warm", "drive.asymmetry = 1.0", patch.edit(p, "drive.asymmetry", 1.0)),
+        ("tight-clip", "clip.db = 4.0", patch.edit(p, "clip.db", 4.0)),
     )
     return [("ballast init tight", tight)] + [(how, kick(name, patch.dumps(q))) for name, how, q in moves]
 
@@ -504,9 +506,9 @@ def figure_pipeline() -> str:
             '<defs><marker id="pipeline-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" '
             'orient="auto-start-reverse"><path class="head" d="M0,1L10,5L0,9Z"/></marker></defs>'
         ),
-        f'<rect class="zone" x="16" y="{top}" width="520" height="196" rx="8"/>',
+        f'<rect class="zone" x="16" y="{top}" width="928" height="196" rx="8"/>',
         f'<text class="label" x="32" y="{top + 22}">32 × the base rate: 1411.2 or 1536 kHz</text>',
-        f'<text class="label" x="834" y="{top + 22}" text-anchor="middle">at the file\'s sample rate</text>',
+        f'<text class="label" x="944" y="{top + 228}" text-anchor="end">at the file\'s sample rate</text>',
     ]
 
     def box(x: float, y: float, w: float, title: str, *lines: tuple[str, str], h: float = 64) -> str:
@@ -527,18 +529,21 @@ def figure_pipeline() -> str:
     )
     body.append(arrow(f"M182,{top + 68}C192,{top + 68} 204,{cy - 30} 208,{cy - 15}"))
     body.append(arrow(f"M182,{top + 148}C192,{top + 148} 204,{cy + 30} 208,{cy + 15}"))
-    body.append(box(246, cy - 32, 136, "Drive", ("math", "tanh(αx)/tanh α"), ("label", "0 dB: bypass")))
+    body.append(box(246, cy - 32, 190, "Drive", ("math", "tanh(αx)/tanh α + even"), ("label", "mixed with the dry")))
     body.append(arrow(f"M228,{cy}H244"))
-    body.append(box(402, cy - 32, 118, "Low cut", ("label", "12 dB/octave"), ("label", "0 Hz: off")))
-    body.append(arrow(f"M382,{cy}H400"))
-    body.append(box(566, cy - 32, 128, "Decimator", ("math", "↓32, ↓16 or ↓8"), ("label", "minimum phase")))
-    body.append(arrow(f"M520,{cy}H564"))
-    body.append(box(720, cy - 32, 110, "Output", ("label", "gain or peak"), ("label", "polarity")))
-    body.append(arrow(f"M694,{cy}H718"))
-    body.append(box(850, cy - 32, 98, "WAV", ("label", "float or PCM"), ("label", "patch inside")))
-    body.append(arrow(f"M830,{cy}H848"))
+    body.append(box(462, cy - 32, 140, "Low cut", ("label", "12 dB/octave"), ("label", "0 Hz: off")))
+    body.append(arrow(f"M436,{cy}H460"))
+    body.append(box(628, cy - 32, 180, "Clipper", ("label", "true peak down by db"), ("label", "knee: hard to soft")))
+    body.append(arrow(f"M602,{cy}H626"))
+    low = top + 244
+    body.append(box(628, low, 180, "Decimator", ("math", "↓32, ↓16 or ↓8"), ("label", "minimum phase")))
+    body.append(arrow(f"M718,{cy + 32}V{low - 2}"))
+    body.append(box(426, low, 160, "Output", ("label", "gain or peak target"), ("label", "polarity")))
+    body.append(arrow(f"M628,{low + 32}H588"))
+    body.append(box(246, low, 140, "WAV", ("label", "float or PCM"), ("label", "patch inside")))
+    body.append(arrow(f"M426,{low + 32}H388"))
     subtitle = "From the patch's curves to a WAV file"
-    return svg(top + 220, "Signal flow", subtitle, "".join(body), "Signal flow from patch to WAV")
+    return svg(low + 92, "Signal flow", subtitle, "".join(body), "Signal flow from patch to WAV")
 
 
 PITCH = Axis(30, 500, log=True)  # wide enough for every preset's sweep, so that their figures compare
@@ -796,7 +801,7 @@ def worst_alias(tone: int, db: float, *, anti_aliased: bool) -> float:
     t = (np.arange(round(0.27 * rate) + 4) - 2) / rate
     x = np.sin(2 * np.pi * tone * t)
     curve = shaper.Tanh(drive_alpha(db))
-    y = shaper.drive(curve, x) if anti_aliased else curve(x[2:-2])
+    y = shaper.apply(curve, x) if anti_aliased else curve(x[2:-2])
     out = render.decimate(render.decimator(RATE), y, factor)[RATE // 50 : RATE // 50 + RATE // 4]
     spectrum = np.abs(np.fft.rfft(out))
     f = 4 * np.arange(spectrum.size)
@@ -859,6 +864,85 @@ def figure_aliasing() -> str:
         "Maps of the worst alias over tone and drive, for the curve read at each sample and for Ballast's drive"
     )
     return svg(y + 26 + 28, "Aliasing", subtitle, "".join(body), description)
+
+
+ASYMMETRIES = (("ref", 0.0), ("o2", 0.5), ("o4", 1.0))
+
+
+def figure_asymmetry() -> str:
+    """Draw the drive's curve with its even term, and a half-scale sine through it, as a decaying body meets it."""
+    transfer = Panel(LEFT, Axis(-1.25, 1.25), Axis(-1.2, 1.2))
+    cycle = Panel(RIGHT, Axis(0, 360), Axis(-1.0, 1.0))
+    x = np.linspace(-1.25, 1.25, 1001)
+    phi = np.linspace(0, 360, 721)
+    half_sine = 0.5 * np.sin(np.radians(phi))
+    lines, waves, seconds = [], [], []
+    for cls, asymmetry in ASYMMETRIES:
+        curve = shaper.Tanh(drive_alpha(6.0), asymmetry / 2)
+        lines.append(transfer.line(cls, x, curve(x)))
+        wave = curve(half_sine[:-1])
+        waves.append(cycle.line(cls, phi[:-1], wave))
+        harmonics = np.abs(np.fft.rfft(wave))
+        seconds.append(20 * math.log10(max(float(harmonics[2]), 1e-300) / float(harmonics[1])))
+    body = [
+        transfer.frame(
+            Ticks((-1, -0.5, 0, 0.5, 1), num, "input"),
+            Ticks((-1, 0, 1), num, "Output against input, 6 dB"),
+        ),
+        transfer.clip("asymmetry", "".join(lines)),
+        cycle.frame(
+            Ticks((0, 90, 180, 270, 360), num, "phase, degrees"),
+            Ticks((-0.5, 0, 0.5), num, "A half-scale sine"),
+        ),
+        "".join(waves),
+    ]
+    keys = [("kref", "asymmetry 0")]
+    keys += [
+        (f"k{cls}", f"{num(a)}: 2nd harmonic {num(round(h))} dB")
+        for (cls, a), h in zip(ASYMMETRIES[1:], seconds[1:], strict=True)
+    ]
+    body.append(legend_row(below(transfer), keys))
+    subtitle = "The even term warms the body as it decays, while full scale and the small-signal gain stay exactly put"
+    description = "The drive's curve at 6 dB with asymmetry 0, 0.5 and 1, and a half-scale sine through each"
+    return svg(fit(transfer, 1), "Asymmetry", subtitle, "".join(body), description)
+
+
+KNEES = (("o1", 0.0), ("o3", 3.0), ("o4", 6.0))
+
+
+def figure_clipper(k: Kick) -> str:
+    """Draw the clipper's curve at three knees, and the tight preset's opening before and after 4 dB of clipping."""
+    shape = Panel(LEFT, Axis(0, 2), Axis(0, 1.25))
+    u = np.linspace(0, 2, 801)
+    lines = [shape.line("ref", u, u)]
+    lines += [shape.line(cls, u, shaper.Clip(knee)(u)) for cls, knee in KNEES]
+    clipped = kick("tight-clip", patch.dumps(patch.edit(k.p, "clip.db", 4.0)))
+    ms = 12
+    wave = Panel(RIGHT, Axis(0, ms), Axis(-0.6, 0.6))
+    body = [
+        shape.frame(
+            Ticks((0, 0.5, 1, 1.5, 2), num, "input ÷ threshold"),
+            Ticks((0, 0.5, 1), num, "Output ÷ threshold"),
+        ),
+        shape.clip("clipper", "".join(lines)),
+        wave.frame(Ticks((0, 3, 6, 9, 12), num, "ms"), Ticks((-0.5, 0, 0.5), num, "The tight preset, first 12 ms")),
+        wave.line("ref", *trace(k.audio, ms, round(wave.w))),
+        wave.line("s1", *trace(clipped.audio, ms, round(wave.w))),
+    ]
+    true_peak = render.db(k.report.true_peak) - render.db(clipped.report.true_peak)
+    keys = [
+        ("kref", "unclipped"),
+        ("ko1", "hard"),
+        ("ko3", "3 dB knee"),
+        ("ko4", "6 dB knee"),
+        ("key1", f"clip.db = 4: true peak {num(round(true_peak, 2))} dB lower"),
+    ]
+    body.append(legend_row(below(shape), keys))
+    subtitle = (
+        "The threshold is solved so the file's true peak drops by exactly clip.db; below the knee nothing changes"
+    )
+    description = "The clipper's curve at three knees, and the tight preset before and after 4 dB of clipping"
+    return svg(fit(shape, 1), "The clipper", subtitle, "".join(body), description)
 
 
 CORNERS = (("o1", 10.0), ("o2", 30.0), ("o3", 100.0), ("o4", 1000.0))
@@ -1178,6 +1262,8 @@ def main() -> None:
         "attack": figure_attack(tight),
         "saturator": figure_saturator(),
         "aliasing": figure_aliasing(),
+        "asymmetry": figure_asymmetry(),
+        "clipper": figure_clipper(kicks["tight"]),
         "low-cut": figure_low_cut(),
         "decimator": figure_decimator(),
         "rates": figure_rates(tight),

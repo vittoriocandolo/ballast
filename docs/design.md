@@ -3,12 +3,12 @@
 Ballast computes one kick as a pure function of time, at 32 times the sample
 rate, and band-limits it once.
 
-    x(t) = b(t) + a(t),    z = C(S_α(x)),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
+    x(t) = b(t) + a(t),    z = Q(C(D(x))),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
 
-Here b is the body, a the attack, S_α the saturator and C the optional low
-cut, all at the internal rate F; h is the frozen decimator of the sample
-rate's family, K the decimation factor, g_out the output gain and p the
-polarity.
+Here b is the body, a the attack, D the drive, C the optional low cut and Q
+the optional clipper, all at the internal rate F; h is the frozen decimator of
+the sample rate's family, K the decimation factor, g_out the output gain and p
+the polarity.
 
 ![Signal flow: body and attack are summed, saturated and optionally high-passed at 32 times the base rate, then decimated, scaled and written to WAV](figures/pipeline.svg)
 
@@ -17,6 +17,7 @@ polarity.
 - [The attack](#the-attack)
 - [The saturator](#the-saturator)
 - [The low cut](#the-low-cut)
+- [The clipper](#the-clipper)
 - [Rates and the decimator](#rates-and-the-decimator)
 - [The output stage](#the-output-stage)
 - [Evaluation](#evaluation)
@@ -138,6 +139,23 @@ whose internal rate is lower. Up to 24 dB of drive, every tone stays more than
 130 dB down. Read at each sample instead, the same curve aliases as loud as
 −38 dB.
 
+Two controls shape the drive. `asymmetry` adds an even term to the curve:
+
+    D(x) = S_α(x) + k S_α(x)² (1 − S_α(x)²),    k = asymmetry / 2
+
+The term is 0 at 0 and at ±1 and flat at 0, so full scale stays exactly at
+full scale and the small-signal gain stays `drive.db`; the curve stays
+monotonic up to k = ½, where `asymmetry` ends. It works where S is not yet
+flat, so its even harmonics rise as the body decays through the curve: at
+6 dB of drive, a half-scale sine gains a second harmonic of −24 dB at the
+most, while a full-scale one gains little. Even harmonics come with DC, which
+the low cut removes. Its antiderivatives are elementary, so it is averaged
+around each sample like S, with the same accuracy. `mix` blends the driven
+signal with the undriven one; the averaging adds no delay, so the two line up
+sample for sample and blend without combing.
+
+![The drive's curve at 6 dB with asymmetry 0, 0.5 and 1, and a half-scale sine through each: the positive half grows fuller](figures/asymmetry.svg)
+
 ## The low cut
 
 `output.low_cut_hz` adds a second-order Butterworth high-pass, 12 dB per
@@ -153,6 +171,30 @@ the tail is the free-running sine before the low cut, and the same sine
 shifted by the filter's constant phase at f₀ after it.
 
 ![Magnitude and phase of the low cut at corners of 10, 30, 100 and 1000 Hz](figures/low-cut.svg)
+
+## The clipper
+
+The clipper makes a kick loud by shaving its peaks. It comes after the low
+cut, at the internal rate, with a curve that follows the input up to the
+knee's start u₀, 10^(−knee_db/20) of the threshold, then bends along a
+parabola that meets the threshold with zero slope at 2 − u₀:
+
+    Q(u) = u for |u| ≤ u₀,    then a parabola to ±1 at 2 − u₀,    then ±1
+
+With no knee it is a hard clip. Its second derivative is constant in the knee,
+or a jump at a hard corner, so the triangle's average has an exact form
+without cancellation, and the clipper is anti-aliased like the drive.
+
+`clip.db` says how far the file's true peak comes down, exactly. The
+threshold follows the kick's own peak, as the output stage's peak modes do,
+so the same setting clips every kick, and every key of a multisample, by the
+same amount. The decimator's phase rebuilds part of a clipped peak, so the
+threshold is solved for: each trial clips and decimates only the outputs it
+can change, and the true peak lands within 0.000001 dB of the setting.
+Everything below the knee keeps its level, so with a peak or true-peak target
+in `[output]`, the decibels taken off the peaks come back as loudness.
+
+![The clipper's curve with a hard knee and with 3 and 6 dB knees, and the tight preset's first 12 ms before and after 4 dB of clipping](figures/clipper.svg)
 
 ## Rates and the decimator
 
@@ -260,7 +302,7 @@ Audition reuses the renderer and adds four small parts:
 | `curve.py` | monotone cubic Hermite curves with exact integrals |
 | `noise.py` | the seeded continuous-time noise, and the PCM dither |
 | `voice.py` | body, attack and saturator as pure functions of time, evaluated in blocks |
-| `shaper.py` | the drive's curve, anti-aliased by its antiderivatives |
+| `shaper.py` | the drive's and the clipper's curves, anti-aliased by their antiderivatives |
 | `render.py` | rates, frozen decimators, parallel decimation, output stage, report, export |
 | `wav.py` | the RIFF writer, the chunk reader behind `extract`, and writing any file whole or not at all |
 | `audition.py` | hits, bed, watcher and playback |

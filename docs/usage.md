@@ -201,11 +201,11 @@ patch's sample rate.
 
 ## Designing a kick
 
-Six of the moves below are made on the `tight` preset, each with a link to its
+Eight of the moves below are made on the `tight` preset, each with a link to its
 sound, to compare with [tight itself](audio/tight.wav); the figure shows what
 they do.
 
-![The tight preset and six moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, more drive and a low cut](figures/design.svg)
+![The tight preset and eight moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, more drive, a low cut, warmth and clipping](figures/design.svg)
 
 - **Tune it to the track.** A kick in the key of the bass sits in the mix. Use
   `ballast tune kick.toml E1`, or `--tune` with `init`.
@@ -226,6 +226,16 @@ they do.
   full scale stays at full scale; `h2` adds the even second harmonic.
   `drive.db = 18.0`, up from 6, squares the body off.
   [Hear the heavier drive](audio/tight-drive.wav).
+- **Warmth is asymmetry.** `drive.asymmetry` adds even harmonics that grow as
+  the body decays, and leaves full scale where it was; `drive.mix` below 1
+  keeps some of the undriven kick, for density without losing the hit. Even
+  harmonics bring a little DC, so pair them with a low cut.
+  [Hear `drive.asymmetry = 1.0`](audio/tight-warm.wav).
+- **Loudness is the clipper.** `clip.db` takes exactly that many decibels off
+  the kick's true peak and leaves everything below the knee alone; `knee_db`
+  softens the edge. In gain mode the kick just peaks lower, as here; with
+  `output.mode = "true-peak"`, the same decibels come back as loudness.
+  [Hear `clip.db = 4.0`](audio/tight-clip.wav).
 - **Long 808 tails want `phase_ref = "tail"`.** The tail is then exactly the
   sine at `tune_hz` with phase `phase_deg`, whatever the sweep does before it.
   Editing the sweep never shifts the tail, and kicks that share a tuning share

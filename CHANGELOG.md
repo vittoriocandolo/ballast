@@ -19,8 +19,12 @@ The first public release.
   by checksum: flat to ±0.000014 dB up to 20 kHz and at least 116.4 dB down
   from half the base rate.
 - Patches in TOML, with every field required, every problem reported with its
-  field path, and a canonical form. Schema 2 adds an optional 12 dB/octave low
-  cut; schema 1 patches still read and render as before.
+  field path, and a canonical form. Schema 3 is current; patches of schemas 1
+  and 2 still read and render exactly as they always sounded.
+- Character by design: the drive's asymmetry, even harmonics that leave full
+  scale and the drive's gain where they were, and its mix with the undriven
+  kick; and a clipper that takes exactly `clip.db` off the file's true peak,
+  from a hard to a soft knee, anti-aliased like the drive.
 - Exports at 44.1, 48, 88.2, 96, 176.4 and 192 kHz, as float32 or as 24- or
   16-bit PCM with seeded TPDF dither, normalized to a gain, a sample peak or a
   true peak, with the root key in a `smpl` chunk and the patch and its

@@ -147,7 +147,7 @@ def test_every_problem_is_reported_at_once_with_its_path(raw: dict[str, Any]) ->
     [
         (None, "schema: missing"),
         ("1", "schema: expected an integer, found a string"),
-        (3, "schema: unsupported version 3; this renderer reads schemas 1 and 2"),
+        (4, "schema: unsupported version 4; this renderer reads schemas 1 to 3"),
     ],
 )
 def test_the_schema_is_checked_first(raw: dict[str, Any], schema: object, message: str) -> None:
@@ -328,15 +328,32 @@ def test_every_malformed_knot_is_reported(raw: dict[str, Any]) -> None:
     assert problems(raw) == ["body.amp[1].gain: missing", "body.amp[3]: expected a { ms, gain } table, found a float"]
 
 
-def test_schema_1_patches_still_read_and_have_no_low_cut(raw: dict[str, Any]) -> None:
-    """Read a schema 1 patch without a low cut, write it as schema 2, and refuse a low cut in schema 1."""
-    raw["schema"] = 1
-    del raw["output"]["low_cut_hz"]
-    old = patch.from_dict(raw)
-    assert old.output.low_cut_hz == 0.0
-    assert patch.dumps(old).startswith("schema = 2\n")  # rewritten as the current schema, sounding the same
+def older(raw: dict[str, Any], schema: int) -> dict[str, Any]:
+    """Return the patch as an older schema writes it: without the fields that schema did not have."""
+    raw["schema"] = schema
+    del raw["clip"], raw["drive"]["asymmetry"], raw["drive"]["mix"]
+    if schema == 1:
+        del raw["output"]["low_cut_hz"]
+    return raw
+
+
+@pytest.mark.parametrize("schema", [1, 2])
+def test_older_schemas_still_read_with_everything_new_off(raw: dict[str, Any], schema: int) -> None:
+    """Read a schema 1 or 2 patch, with every later field off, and write it back as schema 3, sounding the same."""
+    old = patch.from_dict(older(raw, schema))
+    assert (old.drive.asymmetry, old.drive.mix, old.clip.db) == (0.0, 1.0, 0.0)
+    assert old.output.low_cut_hz == (0.0 if schema == 1 else raw["output"]["low_cut_hz"])
+    assert patch.dumps(old).startswith("schema = 3\n")
+
+
+def test_an_older_schema_refuses_what_it_did_not_have(raw: dict[str, Any]) -> None:
+    """Refuse a low cut in schema 1, and a clipper in schema 2."""
+    raw = older(raw, 1)
     raw["output"]["low_cut_hz"] = 30.0
     assert problems(raw) == ["output.low_cut_hz: unknown field"]
+    raw["schema"] = 2
+    raw["clip"] = {"db": 3.0, "knee_db": 0.0}
+    assert problems(raw) == ["clip: unknown field"]
 
 
 def test_schema_2_requires_the_low_cut(raw: dict[str, Any]) -> None:

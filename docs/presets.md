@@ -33,7 +33,7 @@ Short and punchy, for a busy mix: a fast pitch drop, a bright click of tone and 
 <summary>The tight patch</summary>
 
 ```toml
-schema = 2
+schema = 3
 seed = 1
 
 [body]
@@ -69,7 +69,13 @@ amp = [
 ]
 
 [drive]
-db = 6.0                    # small-signal gain; 0 = bypass
+db        = 6.0             # small-signal gain; 0 = bypass
+asymmetry = 0.0             # even harmonics, 0 … 1
+mix       = 1.0             # 0 = dry … 1 = driven
+
+[clip]
+db      = 0.0               # off the peaks; 0 = off
+knee_db = 0.0               # 0 = hard … 6 = soft
 
 [output]
 sample_rate = 48000
@@ -95,7 +101,7 @@ Dense and saturated: heavy drive squares the body off and adds odd harmonics, a 
 <summary>The driven patch</summary>
 
 ```toml
-schema = 2
+schema = 3
 seed = 1
 
 [body]
@@ -131,7 +137,13 @@ amp = [
 ]
 
 [drive]
-db = 21.0                   # small-signal gain; 0 = bypass
+db        = 21.0            # small-signal gain; 0 = bypass
+asymmetry = 0.0             # even harmonics, 0 … 1
+mix       = 1.0             # 0 = dry … 1 = driven
+
+[clip]
+db      = 0.0               # off the peaks; 0 = off
+knee_db = 0.0               # 0 = hard … 6 = soft
 
 [output]
 sample_rate = 48000
@@ -157,7 +169,7 @@ Warm and rounded: a gentle pitch drop, a soft, low click, and a body that rings 
 <summary>The round patch</summary>
 
 ```toml
-schema = 2
+schema = 3
 seed = 1
 
 [body]
@@ -193,7 +205,13 @@ amp = [
 ]
 
 [drive]
-db = 3.0                    # small-signal gain; 0 = bypass
+db        = 3.0             # small-signal gain; 0 = bypass
+asymmetry = 0.0             # even harmonics, 0 … 1
+mix       = 1.0             # 0 = dry … 1 = driven
+
+[clip]
+db      = 0.0               # off the peaks; 0 = off
+knee_db = 0.0               # 0 = hard … 6 = soft
 
 [output]
 sample_rate = 48000
@@ -219,7 +237,7 @@ An 808-style kick with a long tail, to play as a bassline with `ballast multisam
 <summary>The long patch</summary>
 
 ```toml
-schema = 2
+schema = 3
 seed = 1
 
 [body]
@@ -258,7 +276,13 @@ amp = [
 ]
 
 [drive]
-db = 2.0                    # small-signal gain; 0 = bypass
+db        = 2.0             # small-signal gain; 0 = bypass
+asymmetry = 0.0             # even harmonics, 0 … 1
+mix       = 1.0             # 0 = dry … 1 = driven
+
+[clip]
+db      = 0.0               # off the peaks; 0 = off
+knee_db = 0.0               # 0 = hard … 6 = soft
 
 [output]
 sample_rate = 48000

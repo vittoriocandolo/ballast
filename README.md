@@ -19,11 +19,16 @@ one's curves, spectrum and patch.
 ## Features
 
 - **Clean at any drive.** Synthesis runs at 1.4112 or 1.536 MHz, and the
-  drive averages its curve around each sample, by second-order antiderivative
-  anti-aliasing, so even a full-scale 20 kHz tone at the maximum drive keeps
-  every alias 104 dB down. A minimum-phase FIR passes 0–20 kHz within
+  drive and the clipper average their curves around each sample, by
+  second-order antiderivative anti-aliasing, so even a full-scale 20 kHz tone
+  at the maximum drive keeps every alias 104 dB down. A minimum-phase FIR passes 0–20 kHz within
   ±0.000014 dB and rejects everything from half the base rate up by at least
   116.4 dB, without ringing before the kick.
+- **Character by design.** Warmth is `drive.asymmetry`: even harmonics that
+  grow as the body decays, with full scale and the drive's gain left exactly
+  where they were. `drive.mix` blends in the undriven kick, sample-aligned.
+  Loudness is the clipper: `clip.db` takes exactly that many decibels off the
+  file's true peak, from a hard to a soft knee.
 - **Exact pitch.** The pitch curve is integrated exactly into phase. With
   `phase_ref = "tail"`, an 808-style tail meets the free-running sine at its
   note exactly, whatever the sweep did before.
@@ -39,8 +44,8 @@ one's curves, spectrum and patch.
 - **Sampler-ready.** The root key sits in the `smpl` chunk; 16- and 24-bit
   exports use seeded TPDF dither that never clips. `ballast multisample`
   renders one sample per key with an SFZ map, to play an 808 bassline.
-- **Mastering-aware.** Normalize to a sample peak or to a true peak, and
-  high-pass the kick with an optional low cut.
+- **Mastering-aware.** Normalize to a sample peak or to a true peak, clip
+  the transient for loudness, and high-pass the kick with an optional low cut.
 
 ## Install
 
@@ -84,13 +89,13 @@ wrote kick.wav
 | Internal rate | 32 × the base rate: 1411.2 or 1536 kHz |
 | Passband | 0–20 kHz within ±0.000014 dB (specified ±0.001 dB) |
 | Stopband | at least 116.4 dB down from half the base rate (specified 110 dB) |
-| Aliasing | at least 104 dB down for a full-scale tone at any frequency up to 20 kHz and any drive; more than 130 dB down with up to 24 dB of drive |
+| Aliasing | at least 104 dB down for a full-scale tone at any frequency up to 20 kHz, at any drive and asymmetry, and through the clipper; more than 130 dB down with up to 24 dB of drive |
 | Levels | a gain, or a sample or true peak target; nothing is ever clipped |
 | PCM headroom | peaks stay 2 LSB below full scale, so dither never clips |
 | Low cut | optional 12 dB/octave Butterworth high-pass, 10 Hz – 1 kHz |
 | Tuning | 20 Hz – 1 kHz, by frequency or note name; the sweep spans 10 Hz – 20 kHz |
 | Length | body up to 8 s, attack up to 1 s |
-| Render time | about 60 ms for a 240 ms kick, about 0.25 s for a 1.45 s one, on a 12-core laptop |
+| Render time | about 60 ms for a 240 ms kick, about 0.25 s for a 1.45 s one, on a 12-core laptop; the clipper adds up to half a second |
 
 ## Documentation
 

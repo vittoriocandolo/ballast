@@ -3,16 +3,16 @@
 
 """Rendering: rates, the frozen decimators, the output stage and the exported file.
 
-    out[m] = p · g_out · Σ_{k<L} h[k] z[mK − k],    z[n] = C(y)[n] for 0 ≤ n < N, else 0
+    out[m] = p · g_out · Σ_{k<L} h[k] z[mK − k],    z[n] = Q(C(y))[n] for 0 ≤ n < N, else 0
 
 Here y[n] is the voice at the internal rate F = 32 × base, with base 44.1 or
 48 kHz: the sources through the drive's curve, averaged around n / F so that
-it does not alias (see shaper.py). C is the optional low cut. The decimation
-factor is K = F / rate: 32 at the base rates, 16 at 88.2 and 96 kHz, 8 at
-176.4 and 192 kHz. A higher rate reuses its family's F and filter, so a 96 kHz
-file is exactly the 48 kHz file with the in-between samples filled in. Nothing
-trims or fades, only the low cut high-passes, and the whole filter tail is
-kept.
+it does not alias (see shaper.py). C is the optional low cut, Q the clipper.
+The decimation factor is K = F / rate: 32 at the base rates, 16 at 88.2 and 96
+kHz, 8 at 176.4 and 192 kHz. A higher rate reuses its family's F and filter,
+so a 96 kHz file is exactly the 48 kHz file with the in-between samples filled
+in. Nothing trims or fades, only the low cut high-passes, and the whole filter
+tail is kept.
 
 The internal signal is computed in blocks aligned to the trigger and
 decimated in parallel chunks. Every sample is a pure function of its time,
@@ -36,9 +36,10 @@ from typing import TYPE_CHECKING, Any, override
 
 import numpy as np
 import scipy
+from scipy.optimize import brentq
 from scipy.signal import resample_poly, sosfilt, upfirdn
 
-from . import __version__, noise, wav
+from . import __version__, noise, shaper, wav
 from .patch import Output, Patch, describe_tuning
 from .voice import Voice
 
@@ -110,13 +111,61 @@ def low_cut(hz: float, rate: int) -> NDArray[np.float64]:
 def synthesize(p: Patch) -> NDArray[np.float64]:
     """Compute the decimated signal at unity gain: everything before the output stage.
 
-    The low cut filters the internal signal, so every rate of a family still shares it.
+    The low cut and the clipper work on the internal signal, so every rate of a family still shares it.
     """
     base, rate, factor = rates(p.output.sample_rate)
     y = Voice(p, rate).samples()
     if p.output.low_cut_hz != 0.0:
         y = sosfilt(low_cut(p.output.low_cut_hz, rate), y)
+    if p.clip.db != 0.0:
+        y = clip(y, p.clip.db, p.clip.knee_db, base, factor)
     return decimate(decimator(base), y, factor)
+
+
+def clip(y: NDArray[np.float64], db: float, knee_db: float, base: int, factor: int) -> NDArray[np.float64]:
+    """Clip the internal signal so that the file's true peak comes down by exactly db, and nothing below the knee.
+
+    The threshold follows the kick's own true peak, as the output stage's peak modes do, so the same setting clips
+    every kick and every key by the same amount. The decimator's phase rebuilds part of a clipped peak, so the
+    threshold is solved for rather than set: each trial clips and decimates only the outputs it can change, and the
+    unclipped kick stands for the rest.
+    """
+    peak = float(np.max(np.abs(y), initial=0.0))
+    if peak == 0.0:
+        return y
+    taps, curve, padded = decimator(base), shaper.Clip(knee_db), np.pad(y, 2)  # silent beyond either end
+    plain = decimate(taps, y, factor)
+    between = np.abs(oversample(plain))  # the unclipped kick between its samples, 4 to each
+    before, after = np.maximum.accumulate(between), np.maximum.accumulate(between[::-1])[::-1]
+    reach, edge = taps.size // factor + 2, 32  # outputs one input reaches; outputs the oversampler's edge spoils
+    goal = math.log(true_peak(plain)) - db * math.log(10) / 20
+
+    def miss(log_t: float) -> float:
+        """Return how far above the goal the true peak lands, in nepers, when the threshold is e^log_t."""
+        t = math.exp(log_t)
+        hot = np.flatnonzero(np.abs(y) > curve.start * t)
+        if hot.size == 0:
+            return math.log(float(before[-1])) - goal
+        m0 = max(0, (hot[0] - 2) // factor - edge)
+        m1 = min(plain.size - 1, (hot[-1] + 2) // factor + reach + edge)
+        s0 = max(0, (m0 * factor - taps.size + 1) // factor * factor)
+        s1 = min(y.size, m1 * factor + 1)
+        part = decimate(taps, t * shaper.apply(curve, padded[s0 : s1 + 4] / t), factor)[m0 - s0 // factor :]
+        first = 0 if m0 == 0 else edge  # at either end of the kick, the oversampler's edge is the kick's own silence
+        last = m1 - m0 + 1 - (0 if m1 == plain.size - 1 else edge)
+        inside = np.abs(oversample(part[: m1 - m0 + 1]))[4 * first : 4 * last if last < m1 - m0 + 1 else None]
+        outside = max(
+            float(before[4 * (m0 + first) - 1]) if m0 + first > 0 else 0.0,
+            float(after[4 * (m0 + last)]) if 4 * (m0 + last) < after.size else 0.0,
+        )
+        return math.log(max(float(np.max(inside, initial=0.0)), outside)) - goal
+
+    top = math.log(peak / curve.start) + 1e-9  # nothing clips here
+    low = math.log(peak / curve.ratio(db))
+    while miss(low) > 0:
+        low -= math.log(2)
+    threshold = math.exp(brentq(miss, low, top, xtol=1e-7))  # to within 1e-6 dB
+    return threshold * shaper.apply(curve, padded / threshold)
 
 
 def output_stage(out: NDArray[np.float64], o: Output, ceiling: float) -> NDArray[np.float32]:
