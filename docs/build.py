@@ -28,7 +28,7 @@ import numpy as np
 from scipy.interpolate import CubicSpline
 from scipy.signal import fftconvolve, sosfreqz
 
-from ballast_synth import audition, noise, patch, render, shaper
+from ballast_synth import audition, family, noise, patch, render, shaper
 from ballast_synth.voice import Voice, drive_alpha
 
 if TYPE_CHECKING:
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
 DOCS = Path(__file__).resolve().parent
 RATE = 48000
-INTERNAL = render.rates(RATE)[1]  # the internal rate of the 48 kHz family
+INTERNAL = family.rates(RATE)[1]  # the internal rate of the 48 kHz family
 PRESETS = ("tight", "driven", "round", "long")  # shortest first
 KILO = 1000
 PASSBAND_HZ = 20000
@@ -840,12 +840,12 @@ def worst_alias(tone: int, db: float, *, anti_aliased: bool) -> float:
     The tone is 4 times a prime number of Hz, so over a quarter of a second every alias lands on a 4 Hz bin of
     its own. Without anti-aliasing, the drive's curve is read at each internal sample.
     """
-    _, rate, factor = render.rates(RATE)
+    _, rate, factor = family.rates(RATE)
     t = (np.arange(round(0.27 * rate) + 4) - 2) / rate
     x = np.sin(2 * np.pi * tone * t)
     curve = shaper.Tanh(drive_alpha(db))
     y = shaper.apply(curve, x) if anti_aliased else curve(x[2:-2])
-    out = render.decimate(render.decimator(RATE), y, factor)[RATE // 50 : RATE // 50 + RATE // 4]
+    out = render.decimate(family.decimator(RATE), y, factor)[RATE // 50 : RATE // 50 + RATE // 4]
     spectrum = np.abs(np.fft.rfft(out))
     f = 4 * np.arange(spectrum.size)
     band = (f >= PASSBAND_HZ / KILO) & (f <= PASSBAND_HZ) & (f % tone != 0)
@@ -1018,8 +1018,8 @@ def figure_low_cut() -> str:
 
 def response(base: int, n: int = 1 << 20) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Compute a decimator's magnitude response in dB, at n / 2 + 1 frequencies up to half the internal rate."""
-    taps = render.decimator(base)
-    f = np.fft.rfftfreq(n, 1 / (base * render.OVERSAMPLING))
+    taps = family.decimator(base)
+    f = np.fft.rfftfreq(n, 1 / (base * family.OVERSAMPLING))
     return f, 20 * np.log10(np.maximum(np.abs(np.fft.rfft(taps, n)), 1e-300))
 
 
@@ -1041,13 +1041,13 @@ def figure_decimator() -> str:
     series = (("48 kHz family", 48000, "s1", "key1"), ("44.1 kHz family", 44100, "s2", "key2"))
     for name, base, cls, _ in series:
         f, gain = response(base)
-        edges = np.geomspace(1000, base * render.OVERSAMPLING / 2, 561)
+        edges = np.geomspace(1000, base * family.OVERSAMPLING / 2, 561)
         envelope = np.maximum.reduceat(gain, np.searchsorted(f, edges[:-1]))  # the worst case in each column
         body.append(f'<path class="{cls}" d="{wide.path(np.sqrt(edges[:-1] * edges[1:]), envelope)}"/>')
         passband = f <= PASSBAND_HZ
         body.append(f'<path class="{cls}" d="{near.path(f[passband][::40], gain[passband][::40])}"/>')
         ripple, stopband = np.max(np.abs(gain[passband])), -np.max(gain[f >= base / 2])
-        taps = render.decimator(base).size
+        taps = family.decimator(base).size
         sys.stdout.write(f"decimator {name}: {taps} taps, ±{ripple:.5f} dB to 20 kHz, ≥ {stopband:.1f} dB\n")
     body.append(legend((wide.x + 16, float(wide.sy(-122))), [(key, name) for name, _, _, key in series]))
     subtitle = "Both frozen filters at the internal rate, as their checksummed taps say"

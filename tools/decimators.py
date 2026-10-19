@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from scipy.signal import firwin, kaiserord, minimum_phase
 
-from ballast_synth import render
+from ballast_synth import family
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -38,7 +38,7 @@ STOPBAND_DB = 110.0  # and everything from half the base rate up at least 110 dB
 
 def design(base: int) -> NDArray[np.float64]:
     """Design the minimum-phase decimator of a family, with taps that sum to exactly 1."""
-    rate = base * render.OVERSAMPLING
+    rate = base * family.OVERSAMPLING
     numtaps, beta = kaiserord(PROTOTYPE_DB, (base / 2 - PASSBAND_HZ) / (rate / 2))
     prototype = firwin(numtaps | 1, (PASSBAND_HZ + base / 2) / 2, window=("kaiser", beta), fs=rate)
     taps: NDArray[np.float64] = minimum_phase(prototype, method="homomorphic", n_fft=N_FFT, half=False)
@@ -53,23 +53,23 @@ def design(base: int) -> NDArray[np.float64]:
 def measure(taps: NDArray[np.float64], base: int) -> tuple[float, float, float]:
     """Measure the passband ripple and the stopband attenuation in dB, and the ms that hold 99% of the energy."""
     n = 1 << 22
-    f = np.fft.rfftfreq(n, 1 / (base * render.OVERSAMPLING))
+    f = np.fft.rfftfreq(n, 1 / (base * family.OVERSAMPLING))
     db = 20 * np.log10(np.maximum(np.abs(np.fft.rfft(taps, n)), 1e-300))
     energy = np.cumsum(taps * taps) / np.sum(taps * taps)
-    energy99_ms = (np.searchsorted(energy, 0.99) + 1) * 1000 / (base * render.OVERSAMPLING)
+    energy99_ms = (np.searchsorted(energy, 0.99) + 1) * 1000 / (base * family.OVERSAMPLING)
     return float(np.max(np.abs(db[f <= PASSBAND_HZ]))), float(-np.max(db[f >= base / 2])), float(energy99_ms)
 
 
 def main() -> None:
     """Design both families' decimators and compare them with the shipped data, which --force replaces."""
-    for base in sorted(set(render.FAMILY.values())):
+    for base in sorted(set(family.FAMILY.values())):
         taps = design(base)
         ripple, stopband, energy99_ms = measure(taps, base)
         if ripple > RIPPLE_DB or stopband < STOPBAND_DB:
             msg = f"the {base} Hz family misses its specification: ±{ripple} dB, {stopband} dB"
             raise SystemExit(msg)
         raw = taps.astype("<f8").tobytes()
-        path = DATA / f"decimator-{base}x{render.OVERSAMPLING}.f64"
+        path = DATA / f"decimator-{base}x{family.OVERSAMPLING}.f64"
         if not path.exists() or "--force" in sys.argv:
             path.write_bytes(raw)
             verdict = "written"

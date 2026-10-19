@@ -1,18 +1,18 @@
 # Copyright (C) 2026 Vittorio Candolo
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Rendering: rates, the frozen decimators, the output stage and the exported file.
+"""Rendering: the low cut, the clipper, the decimation, the output stage and the exported file.
 
     out[m] = p · g_out · Σ_{k<L} h[k] z[mK − k],    z[n] = Q(C(y))[n] for 0 ≤ n < N, else 0
 
-Here y[n] is the voice at the internal rate F = 32 × base, with base 44.1 or
-48 kHz: the sources through the drive's curve, averaged around n / F so that
-it does not alias (see shaper.py). C is the optional low cut, Q the clipper.
-The decimation factor is K = F / rate: 32 at the base rates, 16 at 88.2 and 96
-kHz, 8 at 176.4 and 192 kHz. A higher rate reuses its family's F and filter,
-so a 96 kHz file is exactly the 48 kHz file with the in-between samples filled
-in. Nothing trims or fades, only the low cut high-passes, and the whole filter
-tail is kept.
+Here y[n] is the voice at the internal rate F = 32 × base, where base is 44.1
+or 48 kHz, the family's (see family.py): the sources through the drive's
+curve, averaged around n / F so that it does not alias (see shaper.py). C is
+the optional low cut, Q the clipper. The decimation factor is K = F / rate:
+32 at the base rates, 16 at 88.2 and 96 kHz, 8 at 176.4 and 192 kHz. A higher
+rate reuses its family's F and filter, so a 96 kHz file is exactly the 48 kHz
+file with the in-between samples filled in. Nothing trims or fades, only the
+low cut high-passes, and the whole filter tail is kept.
 
 The internal signal is computed in blocks aligned to the trigger and
 decimated in parallel chunks. Every sample is a pure function of its time,
@@ -23,15 +23,12 @@ earlier samples.
 
 from __future__ import annotations
 
-import functools
-import hashlib
 import math
 import os
 import platform
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from importlib import resources
 from typing import TYPE_CHECKING, Any, override
 
 import numpy as np
@@ -40,41 +37,16 @@ from scipy.optimize import brentq
 from scipy.signal import resample_poly, sosfilt, upfirdn
 
 from . import __version__, noise, shaper, wav
+from .family import DECIMATORS, decimator, rates
 from .patch import Output, Patch, describe_tuning
 from .voice import Voice
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-OVERSAMPLING = 32  # the internal rate F is 32 × the base rate
 CHUNK = 2048  # decimator outputs per parallel chunk
-FAMILY = {44100: 44100, 88200: 44100, 176400: 44100, 48000: 48000, 96000: 48000, 192000: 48000}
-# One frozen minimum-phase FIR per family, shipped as data so the sound cannot drift with SciPy, and designed by
-# tools/decimators.py: flat to 0.001 dB up to 20 kHz, at least 110 dB down from base/2, taps summing to exactly 1.
-DECIMATORS = {
-    44100: ("decimator-44100x32.f64", "f74810b0e955e0aada486f9f064b82435ea11a64e155afd2905c29d99e662efd"),
-    48000: ("decimator-48000x32.f64", "229115e8e64a113a77c5c008c7cd2272c87431cd9b682007de8b21b47d24b41d"),
-}
 FORMATS = {"float32": None, "pcm24": 24, "pcm16": 16}  # the PCM bit depth of each export format
 POOL = ThreadPoolExecutor(os.cpu_count())  # upfirdn releases the GIL
-
-
-def rates(sample_rate: int) -> tuple[int, int, int]:
-    """Return the family's base rate, the internal rate F and the decimation factor K for an export rate."""
-    base = FAMILY[sample_rate]
-    internal = base * OVERSAMPLING
-    return base, internal, internal // sample_rate
-
-
-@functools.cache
-def decimator(base: int) -> NDArray[np.float64]:
-    """Load the family's frozen taps, refused unless they match their checksum."""
-    name, sha256 = DECIMATORS[base]
-    raw = resources.files("ballast_synth").joinpath("data", name).read_bytes()
-    if hashlib.sha256(raw).hexdigest() != sha256:
-        msg = f"{name} does not match its checksum"
-        raise RuntimeError(msg)
-    return np.frombuffer(raw, dtype="<f8")  # read-only, like the bytes it views
 
 
 def decimate(taps: NDArray[np.float64], y: NDArray[np.float64], factor: int) -> NDArray[np.float64]:

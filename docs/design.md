@@ -311,7 +311,8 @@ Audition reuses the renderer and adds four small parts:
 | `noise.py` | the seeded continuous-time noise, and the PCM dither |
 | `voice.py` | body, attack and saturator as pure functions of time, evaluated in blocks |
 | `shaper.py` | the drive's and the clipper's curves, anti-aliased by their antiderivatives |
-| `render.py` | rates, frozen decimators, parallel decimation, output stage, report, export |
+| `family.py` | the rate families: base and internal rates, and the frozen filters, checked by checksum |
+| `render.py` | low cut, clipper, parallel decimation, output stage, report, export |
 | `wav.py` | the RIFF writer, the chunk reader behind `extract`, and writing any file whole or not at all |
 | `audition.py` | hits, bed, watcher and playback |
 | `cli.py` | the commands |

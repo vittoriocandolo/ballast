@@ -10,7 +10,7 @@ import pytest
 from numpy.typing import NDArray
 from scipy.integrate import quad
 
-from ballast_synth import render, shaper
+from ballast_synth import family, render, shaper
 from ballast_synth.voice import drive_alpha
 
 DRIVES = [0.5, 6.0, 21.0, 48.0]
@@ -65,7 +65,7 @@ def test_the_drive_is_odd_and_exact_on_steady_inputs(db: float) -> None:
 @pytest.mark.parametrize("hz", [1000.0, 10000.0, 20000.0])
 def test_the_drive_is_flat_for_small_signals(hz: float) -> None:
     """Drive a tone 120 dB down, and find the curve's own small-signal gain within 0.00002 dB up to 20 kHz."""
-    _, rate, _ = render.rates(48000)
+    _, rate, _ = family.rates(48000)
     curve = shaper.Tanh(drive_alpha(21.0))
     level = 1e-6
     y = shaper.apply(curve, level * tone(hz, rate, 0.01))  # a whole number of periods
@@ -80,10 +80,10 @@ def test_the_worst_setting_aliases_at_least_104_db_down(base: int) -> None:
 
     The tone is 4 × 4999 Hz, so over a quarter of a second every alias lands on a 4 Hz bin of its own.
     """
-    _, rate, factor = render.rates(base)
+    _, rate, factor = family.rates(base)
     hz = 19996
     driven = shaper.apply(shaper.Tanh(drive_alpha(48.0)), tone(hz, rate, 0.27))
-    out = render.decimate(render.decimator(base), driven, factor)
+    out = render.decimate(family.decimator(base), driven, factor)
     spectrum = np.abs(np.fft.rfft(out[base // 50 : base // 50 + base // 4]))  # a steady quarter second
     f = 4 * np.arange(spectrum.size)
     band = (f >= BAND_HZ[0]) & (f <= BAND_HZ[1]) & (f % hz != 0)
@@ -125,7 +125,7 @@ def test_the_clipper_matches_quadrature_and_takes_exactly_its_db_off(knee_db: fl
 
 def worst_alias(hz: int, factor: int, base: int, signal: NDArray[np.float64]) -> float:
     """Return the strongest component of the band that is no harmonic of hz, in dB re hz, over a steady 1/4 s."""
-    out = render.decimate(render.decimator(base), signal, factor)
+    out = render.decimate(family.decimator(base), signal, factor)
     spectrum = np.abs(np.fft.rfft(out[base // 50 : base // 50 + base // 4]))
     f = 4 * np.arange(spectrum.size)
     band = (f >= BAND_HZ[0]) & (f <= BAND_HZ[1]) & (f % hz != 0)
@@ -135,7 +135,7 @@ def worst_alias(hz: int, factor: int, base: int, signal: NDArray[np.float64]) ->
 @pytest.mark.parametrize("base", [44100, 48000])
 def test_asymmetry_and_hard_clipping_alias_no_more_than_the_drive(base: int) -> None:
     """Drive a full-scale 20 kHz tone to the limit with full asymmetry, and hard-clip one by 12 dB: 104 dB down."""
-    _, rate, factor = render.rates(base)
+    _, rate, factor = family.rates(base)
     hz = 19996
     x = tone(hz, rate, 0.27)
     driven = shaper.apply(shaper.Tanh(drive_alpha(48.0), 0.5), x)

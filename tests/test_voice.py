@@ -9,10 +9,10 @@ import numpy as np
 import pytest
 from scipy.integrate import cumulative_simpson
 
-from ballast_synth import patch, render, voice
+from ballast_synth import family, patch, voice
 from ballast_synth.voice import Voice
 
-_, INTERNAL, _ = render.rates(48000)  # the internal rate of the 48 kHz family
+_, INTERNAL, _ = family.rates(48000)  # the internal rate of the 48 kHz family
 
 
 @pytest.mark.parametrize("db", [6.0, 48.0])

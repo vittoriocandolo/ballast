@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from scipy.io import wavfile
 
-from ballast_synth import patch, render, wav
+from ballast_synth import family, patch, render, wav
 
 RATE = 48000
 CD_RATE = 44100
@@ -62,7 +62,7 @@ def test_an_exported_render_carries_its_patch_and_root_note(tmp_path: Path, tigh
     meta = json.loads(found[wav.PRIVATE])
     assert meta["patch"] == text
     assert meta["pcm"]["bits"] == bits
-    assert meta["decimator"]["sha256"] == render.DECIMATORS[RATE][1]
+    assert meta["decimator"]["sha256"] == family.DECIMATORS[RATE][1]
     assert struct.unpack("<9I", found[b"smpl"])[3:5] == wav.root_note(55.0)
     rate, data = wavfile.read(tmp_path / "kick.wav")
     assert rate == RATE

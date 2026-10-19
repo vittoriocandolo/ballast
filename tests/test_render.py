@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from scipy.signal import sosfreqz, upfirdn
 
-from ballast_synth import patch, render
+from ballast_synth import family, patch, render
 
 PASSBAND_HZ = 20000
 RIPPLE_DB = 0.001  # the specified flatness of the passband
@@ -26,23 +26,23 @@ def with_output(p: patch.Patch, **values: object) -> patch.Patch:
 @pytest.mark.parametrize("base", [44100, 48000])
 def test_decimators_meet_their_specification(base: int) -> None:
     """Measure each frozen filter's gain at DC, its passband ripple and its stopband attenuation."""
-    taps = render.decimator(base)
+    taps = family.decimator(base)
     assert math.fsum(taps) == 1.0  # unity gain at DC, exactly
     n = 1 << 21
     db = 20 * np.log10(np.maximum(np.abs(np.fft.rfft(taps, n)), 1e-300))
-    f = np.fft.rfftfreq(n, 1 / (base * render.OVERSAMPLING))
+    f = np.fft.rfftfreq(n, 1 / (base * family.OVERSAMPLING))
     assert np.max(np.abs(db[f <= PASSBAND_HZ])) < RIPPLE_DB
     assert np.max(db[f >= base / 2]) < STOPBAND_DB
 
 
 def test_a_decimator_that_fails_its_checksum_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     """Refuse taps whose checksum is not the one the code expects."""
-    monkeypatch.setitem(render.DECIMATORS, 1, (render.DECIMATORS[48000][0], "0" * 64))
+    monkeypatch.setitem(family.DECIMATORS, 1, (family.DECIMATORS[48000][0], "0" * 64))
     with pytest.raises(RuntimeError, match="does not match its checksum"):
-        render.decimator(1)
+        family.decimator(1)
 
 
-@pytest.mark.parametrize("size", [1, 10, render.decimator(48000).size, 30_000])
+@pytest.mark.parametrize("size", [1, 10, family.decimator(48000).size, 30_000])
 @pytest.mark.parametrize("chunk", [1, 7, 2048])
 def test_parallel_decimation_matches_one_upfirdn_call_bit_for_bit(
     size: int,
@@ -51,7 +51,7 @@ def test_parallel_decimation_matches_one_upfirdn_call_bit_for_bit(
 ) -> None:
     """Decimate in chunks of three sizes, and compare every output with one call to upfirdn."""
     y = np.random.default_rng(size).standard_normal(size)
-    taps = render.decimator(48000)
+    taps = family.decimator(48000)
     monkeypatch.setattr(render, "CHUNK", chunk)
     for factor in (8, 16, 32):  # the factors of the three rates of a family
         assert np.array_equal(render.decimate(taps, y, factor), upfirdn(taps, y, down=factor))
@@ -60,7 +60,7 @@ def test_parallel_decimation_matches_one_upfirdn_call_bit_for_bit(
 def test_decimation_is_causal() -> None:
     """Decimate the start of a signal alone, and get the outputs that depend only on it unchanged."""
     y = np.random.default_rng(0).standard_normal(50_000)
-    taps = render.decimator(44100)
+    taps = family.decimator(44100)
     whole, part = render.decimate(taps, y, 32), render.decimate(taps, y[:20_000], 32)
     n = 20_000 // 32  # outputs whose inputs all lie in the first 20 000 samples
     assert np.array_equal(part[:n], whole[:n])
@@ -162,7 +162,7 @@ def test_true_peak_mode_reaches_its_target_within_the_pcm_ceiling(
 @pytest.mark.parametrize("hz", [10.0, 30.0, 1000.0])
 def test_the_low_cut_is_a_12_db_per_octave_butterworth_high_pass(hz: float) -> None:
     """Measure the low cut at its corner, a decade below it, and a decade above it and at 20 kHz."""
-    _, rate, _ = render.rates(48000)
+    _, rate, _ = family.rates(48000)
     _, h = sosfreqz(render.low_cut(hz, rate), worN=[hz / 10, hz, hz * 10, 20000.0], fs=rate)
     gain = 20 * np.log10(np.abs(h))
     assert gain[1] == pytest.approx(-3.0103, abs=1e-3)  # half power at the corner
