@@ -3,6 +3,7 @@
 
 """The command line: every command, its files, and its errors with their exit statuses."""
 
+import hashlib
 import io
 import json
 import runpy
@@ -22,6 +23,7 @@ from ballast_synth.cli import main
 
 BAD_INPUT = 2  # the exit status for input the command cannot use
 REFUSED = 1  # the exit status for a refusal or a failure
+CD_RATE = 44100
 INTERRUPTED = 130  # the exit status a shell expects after Ctrl+C
 
 type Run = Callable[..., tuple[int, str, str]]
@@ -373,3 +375,76 @@ def test_any_standard_output_will_do(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     monkeypatch.setattr(sys, "stdout", out)
     assert main(["init", "tight"]) == 0
     assert out.getvalue().startswith("schema = 3\n")
+
+
+def test_pack_writes_a_finished_kit_the_same_every_time(run: Run, tmp_path: Path) -> None:
+    """Pack two presets at two rates: a folder per rate, named by key or frequency, a manifest, and the same bytes."""
+    (tmp_path / "kicks").mkdir()
+    for name in ("house", "driven"):
+        run("init", name, "-o", f"kicks/{name}.toml")
+    status, out, err = run("pack", "kicks", "-o", "kit", "--rate", "44100", "--rate", "48000")
+    assert (status, err) == (0, "")
+    assert out.splitlines()[-1] == "wrote 4 kicks, their patches and the manifest to kit"
+    kit = tmp_path / "kit"
+    names = sorted(p.relative_to(kit).as_posix() for p in kit.rglob("*") if p.is_file())
+    assert names == [
+        "44100/driven-50Hz.toml",
+        "44100/driven-50Hz.wav",
+        "44100/house-A1.toml",
+        "44100/house-A1.wav",
+        "48000/driven-50Hz.toml",
+        "48000/driven-50Hz.wav",
+        "48000/house-A1.toml",
+        "48000/house-A1.wav",
+        "manifest.csv",
+        "manifest.json",
+    ]
+    manifest = json.loads((kit / "manifest.json").read_text(encoding="utf-8"))
+    rows = {row["file"]: row for row in manifest["kicks"]}
+    assert (rows["48000/house-A1.wav"]["format"], rows["48000/driven-50Hz.wav"]["cents"]) == ("pcm24", 35.0)
+    assert rows["44100/house-A1.wav"]["sha256"] == hashlib.sha256((kit / "44100/house-A1.wav").read_bytes()).hexdigest()
+    assert patch.loads((kit / "44100/house-A1.toml").read_text(encoding="utf-8")).output.sample_rate == CD_RATE
+    before = {p: p.read_bytes() for p in kit.rglob("*") if p.is_file()}
+    assert run("pack", "kicks", "-o", "kit", "--rate", "44100", "--rate", "48000")[0] == 0
+    assert {p: p.read_bytes() for p in kit.rglob("*") if p.is_file()} == before
+
+
+def test_pack_writes_nothing_unless_every_kick_passes_its_gates(run: Run, tmp_path: Path, gain_text: str) -> None:
+    """Pack a kick over full scale with a good one, and get both refused, every gate it fails listed."""
+    (tmp_path / "kicks").mkdir()
+    run("init", "tight", "-o", "kicks/good.toml")
+    loud = gain_text.replace("db          = -6.0", "db          = 12.0")
+    (tmp_path / "kicks" / "loud.toml").write_text(loud, encoding="utf-8")
+    status, out, err = run("pack", "kicks", "-o", "kit")
+    assert (status, out) == (REFUSED, "")
+    assert err.splitlines()[0] == "not written: these kicks fail the pack's gates"
+    assert "  loud-A1.wav: over the format's ceiling by" in err
+    assert "  loud-A1.wav: true peak +12.34 dBTP, above 0 dBTP" in err
+    assert not (tmp_path / "kit").exists()
+
+
+def test_pack_refuses_names_it_cannot_tell_apart(run: Run, tmp_path: Path) -> None:
+    """Refuse two patches of one name from two folders, and an empty folder."""
+    for folder, name in (("a", "tight"), ("b", "house")):
+        (tmp_path / folder).mkdir()
+        run("init", name, "-o", f"{folder}/kick.toml")
+    assert run("pack", "a", "b", "-o", "kit") == (BAD_INPUT, "", "two patches would share a name in the pack: kick\n")
+    (tmp_path / "empty").mkdir()
+    assert run("pack", "empty", "-o", "kit")[0] == BAD_INPUT
+
+
+def test_vary_writes_seeded_variations(run: Run, tmp_path: Path) -> None:
+    """Vary a patch twice with one seed and once with another: the same files, then other ones."""
+    run("init", "tight", "-o", "kick.toml")
+    status, out, _ = run("vary", "kick.toml", "-o", "a", "-n", "3", "--seed", "4")
+    assert status == 0
+    assert out.splitlines()[0].startswith("kick-v1.toml         punch ×")
+    run("vary", "kick.toml", "-o", "b", "-n", "3", "--seed", "4")
+    run("vary", "kick.toml", "-o", "c", "-n", "3", "--seed", "5")
+    for name in ("kick-v1.toml", "kick-v2.toml", "kick-v3.toml"):
+        assert (tmp_path / "a" / name).read_bytes() == (tmp_path / "b" / name).read_bytes()
+        assert (tmp_path / "a" / name).read_bytes() != (tmp_path / "c" / name).read_bytes()
+    for bad in (("-n", "0"), ("--seed", "-1")):
+        with pytest.raises(SystemExit) as caught:
+            run("vary", "kick.toml", "-o", "d", *bad)
+        assert caught.value.code == BAD_INPUT

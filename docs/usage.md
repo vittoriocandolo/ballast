@@ -74,6 +74,28 @@ section removes it.
 patch, with its standard comments: your own comments in the file are not
 kept.
 
+### `ballast vary PATCH -o DIR [-n N] [--seed SEED]`
+
+Writes N variations of a patch, 8 by default, into the folder `DIR`, as
+`kick-v1.toml`, `kick-v2.toml` and so on: patches near yours, to audition and
+keep. Each makes seven bounded moves, drawn from the seed:
+
+| Move | What changes | Reach |
+|---|---|---|
+| punch | the first pitch ratio | × 2^±0.5 |
+| snap | the pitch curve's times | × 2^±0.5 |
+| length | the body's shape after its peak | × 2^±0.4 |
+| click | the attack's level | ± 4 dB |
+| tone | the attack's tone | × 2^±0.5 |
+| drive | the drive | ± 4 dB |
+| bright | the body's brightness, when it has any | × 2^±1 |
+
+Each move stays within what the patch allows, and the tuning, the levels of
+the body, the sub and the transient, and the output stay as they were. The
+same seed gives the same variations on every computer and in every version
+of Ballast, and each line printed says what moved, such as `punch ×1.08,
+snap ×1.01, length ×1.222, …`. `ballast pack` renders the folder.
+
 ### `ballast render PATCH -o WAV [--format FORMAT] [--allow-over]`
 
 Renders to a mono WAV at the patch's sample rate, prints a report and writes
@@ -89,6 +111,30 @@ sampler then plays the patch as an instrument, at every pitch, with the real
 length and character of each note rather than a transposed copy, which is what
 an 808 bassline wants. Every note must be a valid tuning of the patch and fit
 full scale; otherwise nothing is written and every problem is listed.
+
+### `ballast pack PATCH... -o DIR [--rate RATE]... [--format FORMAT]`
+
+Renders patches, given as files or as folders of `.toml` files, into a
+finished kit in the folder `DIR`:
+
+- one WAV per patch, named after the patch and its key, such as
+  `house-A1.wav`, or its frequency, such as `driven-50Hz.wav`, when it is more
+  than half a cent off every note;
+- the patch it was rendered from beside each WAV;
+- `manifest.csv` and `manifest.json`, with each kick's sample rate, format,
+  tuning, key and cents, length, sample and true peaks, loudness, and the
+  SHA-256 of its WAV.
+
+`--format` is `pcm24` by default, as sample packs and samplers expect. Each
+patch renders at its own sample rate unless `--rate` says otherwise; given
+more than once, each rate gets a folder of its own, such as `44100/` and
+`48000/`. The manifest holds nothing of when or how fast the kit was made, so
+the same patches always make the same kit.
+
+Every kick must pass two gates: its true peak at or below 0 dBTP, with no
+sample over the format's ceiling, and its first and last samples below
+−90 dBFS, so no sampler clicks where the file starts or stops. If one fails,
+nothing is written and every failure is listed, as `multisample` does.
 
 ### `ballast audition PATCH [--watch] [--bpm BPM] [--with WAV]`
 

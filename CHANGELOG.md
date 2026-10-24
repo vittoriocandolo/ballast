@@ -43,10 +43,13 @@ The first public release.
   shapes to start from.
 - The report's loudness: the highest momentary loudness of EBU R128, slid
   sample by sample, K-weighted at every sample rate.
+- Kits: `ballast vary` writes seeded variations of a patch, the same in every
+  version, and `ballast pack` renders a folder of patches into a kit with a
+  manifest, refused whole unless every kick passes its gates.
 - The `ballast` command: `init` from the presets, `tune`, `stretch`,
-  `transient`, `render`, `multisample` for one sample per key with an SFZ map,
-  `audition` with live re-rendering, tempo, a bed and dropout warnings, and
-  `extract`.
+  `transient`, `vary`, `render`, `pack`, `multisample` for one sample per key
+  with an SFZ map, `audition` with live re-rendering, tempo, a bed and dropout
+  warnings, and `extract`.
 - Documentation with figures and sounds generated from the code: a figure for
   every stage of the signal path, a gallery of the presets with their sounds,
   curves, spectra and patches, and the sound of every design move in the usage

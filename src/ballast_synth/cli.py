@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Vittorio Candolo
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Command line: ballast init | tune | stretch | transient | render | multisample | audition | extract."""
+"""Command line: ballast init | tune | stretch | transient | vary | render | multisample | pack | audition | extract."""
 
 from __future__ import annotations
 
@@ -14,10 +14,12 @@ from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import __version__, wav
+from . import __version__, pack, vary, wav
 from .audition import AuditionError, Watcher, audition
 from .patch import (
     CURVES,
+    MAX_SEED,
+    SAMPLE_RATES,
     Patch,
     PatchError,
     Transient,
@@ -39,6 +41,7 @@ if TYPE_CHECKING:
     import numpy as np
     from numpy.typing import NDArray
 
+MAX_VARIATIONS = 999  # how many variations one run writes, at most
 PRESET_DIR = resources.files("ballast_synth").joinpath("data", "presets")
 PRESETS = sorted(f.name.removesuffix(".toml") for f in PRESET_DIR.iterdir() if f.name.endswith(".toml"))
 
@@ -144,6 +147,22 @@ def cmd_transient(a: argparse.Namespace) -> None:
     _emit(dumps(p), a.out)
 
 
+def cmd_vary(a: argparse.Namespace) -> None:
+    """Write seeded variations of a patch into a folder, each a patch of its own."""
+    _, p = _open(a.patch)
+    stem, folder = Path(a.patch).stem, Path(a.out)
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        for number in range(1, a.count + 1):
+            q, moves = vary.vary(p, a.seed, number)
+            name = f"{stem}-v{number}.toml"
+            wav.save(folder / name, dumps(q).encode("utf-8"))
+            sys.stdout.write(f"{name:<20} {', '.join(moves)}\n")
+    except OSError as e:
+        raise _os_error(e.filename or folder, e) from None
+    sys.stdout.write(f"wrote {a.count} variations of {a.patch}, seed {a.seed}, to {folder}\n")
+
+
 def cmd_render(a: argparse.Namespace) -> None:
     """Render a patch to WAV, unless it goes over the format's ceiling."""
     bits = FORMATS[a.format]
@@ -215,6 +234,39 @@ def cmd_multisample(a: argparse.Namespace) -> None:
     sys.stdout.write(f"wrote {len(kicks)} samples and {folder / stem}.sfz\n")
 
 
+def _patches(paths: list[str]) -> list[tuple[str, str, Patch]]:
+    """Read the patches a pack takes, as (name, text, patch): files, and the .toml files of folders, by name."""
+    files: list[Path] = []
+    for given in map(Path, paths):
+        files += sorted(given.glob("*.toml")) if given.is_dir() else [given]
+    if not files:
+        msg = "no patches: give patch files, or folders that hold .toml files"
+        raise CliError(msg)
+    names = [f.stem for f in files]
+    if twice := sorted({n for n in names if names.count(n) > 1}):
+        msg = f"two patches would share a name in the pack: {', '.join(twice)}"
+        raise CliError(msg)
+    return [(f.stem, *_open(str(f))) for f in files]
+
+
+def cmd_pack(a: argparse.Namespace) -> None:
+    """Render patches into a finished kit, writing nothing unless every kick passes the gates."""
+    bits = FORMATS[a.format]
+    kicks = pack.kicks(_patches(a.patches), a.rate or [], bits)  # every kick renders before any file is written
+    if refused := [(k, problems) for k in kicks if (problems := pack.gates(k))]:
+        lines = ["not written: these kicks fail the pack's gates"]
+        lines += [f"  {k.path}: {problem}" for k, problems in refused for problem in problems]
+        raise CliError("\n".join(lines), 1)
+    try:
+        pack.write(a.out, kicks, bits)
+    except OSError as e:
+        raise _os_error(e.filename or a.out, e) from None
+    for k in kicks:
+        r = k.report
+        sys.stdout.write(f"{k.path:<32} {db(r.true_peak):6.2f} dBTP {r.loudness:6.1f} LUFS\n")
+    sys.stdout.write(f"wrote {len(kicks)} kicks, their patches and the manifest to {a.out}\n")
+
+
 def cmd_audition(a: argparse.Namespace) -> None:
     """Play a patch in a loop, rendering it again on every edit when watching."""
     text, p = _open(a.patch)
@@ -248,6 +300,24 @@ def cmd_extract(a: argparse.Namespace) -> None:
     _emit(text, a.out)
 
 
+def count(text: str) -> int:
+    """Parse a number of variations: a whole number from 1 to MAX_VARIATIONS."""
+    value = int(text)
+    if not 1 <= value <= MAX_VARIATIONS:
+        msg = f"must be from 1 to {MAX_VARIATIONS}"
+        raise argparse.ArgumentTypeError(msg)
+    return value
+
+
+def seed(text: str) -> int:
+    """Parse a seed of variations: a whole number from 0 to 2**63 - 1, as a patch's seed."""
+    value = int(text)
+    if not 0 <= value <= MAX_SEED:
+        msg = "must be from 0 to 2**63 - 1"
+        raise argparse.ArgumentTypeError(msg)
+    return value
+
+
 def bpm(text: str) -> float:
     """Parse a tempo in beats per minute: a positive number."""
     value = float(text)
@@ -262,6 +332,13 @@ def _parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="ballast", description="A one-voice kick drum synthesizer, rendered to WAV.")
     ap.add_argument("--version", action="version", version=f"ballast {__version__}")
     sub = ap.add_subparsers(dest="command", required=True)
+    _patch_commands(sub)
+    _sound_commands(sub)
+    return ap
+
+
+def _patch_commands(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Add the commands that write patches."""
     output = argparse.ArgumentParser(add_help=False)
     output.add_argument("-o", "--out", metavar="FILE", help="write to FILE instead of standard output")
     note = "a note name such as F1 or C#2, or a frequency in Hz"
@@ -293,6 +370,18 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("wav", help="mono or stereo, at 44.1, 48, 88.2, 96, 176.4 or 192 kHz, ending by 1 s")
     command.set_defaults(run=cmd_transient)
 
+    command = sub.add_parser("vary", help="write seeded variations of a patch")
+    command.add_argument("patch")
+    command.add_argument("-o", "--out", required=True, metavar="DIR", help="the folder for the variations")
+    command.add_argument("-n", "--count", type=count, default=8, metavar="N", help="how many (default: 8)")
+    command.add_argument("--seed", type=seed, default=1, help="the same seed gives the same variations (default: 1)")
+    command.set_defaults(run=cmd_vary)
+
+
+def _sound_commands(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Add the commands that render, play or read sound."""
+    output = argparse.ArgumentParser(add_help=False)
+    output.add_argument("-o", "--out", metavar="FILE", help="write to FILE instead of standard output")
     command = sub.add_parser("render", help="render a patch to WAV")
     command.add_argument("patch")
     command.add_argument("-o", "--out", required=True, metavar="WAV")
@@ -313,6 +402,19 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--format", choices=FORMATS, default="float32", help="as for render")
     command.set_defaults(run=cmd_multisample)
 
+    command = sub.add_parser("pack", help="render patches into a finished kit, with a manifest")
+    command.add_argument("patches", nargs="+", metavar="PATCH", help="patch files, or folders of .toml files")
+    command.add_argument("-o", "--out", required=True, metavar="DIR", help="the folder for the kit")
+    command.add_argument(
+        "--rate",
+        type=int,
+        action="append",
+        choices=SAMPLE_RATES,
+        help="render at this sample rate, into a folder of its own when given more than once (default: each patch's)",
+    )
+    command.add_argument("--format", choices=FORMATS, default="pcm24", help="as for render, but 24-bit PCM by default")
+    command.set_defaults(run=cmd_pack)
+
     command = sub.add_parser("audition", help="play a patch in a loop")
     command.add_argument("patch")
     command.add_argument("--watch", action="store_true", help="re-render whenever the file changes")
@@ -328,7 +430,6 @@ def _parser() -> argparse.ArgumentParser:
     command = sub.add_parser("extract", parents=[output], help="recover the patch embedded in a rendered WAV")
     command.add_argument("wav")
     command.set_defaults(run=cmd_extract)
-    return ap
 
 
 def main(argv: Sequence[str] | None = None) -> int:

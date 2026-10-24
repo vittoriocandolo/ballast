@@ -395,6 +395,8 @@ Audition reuses the renderer and adds four small parts:
 | `shaper.py` | the drive's and the clipper's curves, anti-aliased by their antiderivatives |
 | `family.py` | the rate families: base and internal rates, and the frozen filters, checked by checksum |
 | `render.py` | EQ, low cut, clipper, parallel decimation, output stage, loudness, report, export |
+| `vary.py` | seeded variations, drawn from SHAKE-256 |
+| `pack.py` | kits: names by key, the gates, the manifest |
 | `wav.py` | the RIFF writer, the reader of beds and transients, the chunk reader behind `extract`, and writing any file whole or not at all |
 | `audition.py` | hits, bed, watcher and playback |
 | `cli.py` | the commands |
