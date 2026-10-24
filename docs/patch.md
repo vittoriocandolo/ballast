@@ -72,8 +72,8 @@ knee_db = 0.0               # 0 = hard … 6 = soft
 [output]
 sample_rate = 48000
 low_cut_hz  = 0.0           # high-pass, 12 dB/oct; 0 = off
-mode        = "gain"        # "gain" | "peak" | "true-peak"
-db          = -6.0          # gain in dB, or peak target
+mode        = "true-peak"   # "gain" | "peak" | "true-peak"
+db          = -1.0          # gain in dB, or peak target
 polarity    = 1
 ```
 

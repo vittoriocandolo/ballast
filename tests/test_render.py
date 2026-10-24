@@ -72,14 +72,14 @@ def test_decimation_is_causal() -> None:
 @pytest.mark.parametrize(("base", "high"), [(44100, 88200), (44100, 176400), (48000, 96000), (48000, 192000)])
 @pytest.mark.parametrize("low_cut", [0.0, 30.0])
 def test_a_high_rate_render_fills_in_between_the_base_rate_samples(
-    tight: patch.Patch,
+    gain: patch.Patch,
     base: int,
     high: int,
     low_cut: float,
 ) -> None:
     """Render at a high rate and at its base rate, and find every base-rate sample in the high-rate file."""
-    low, _ = render.render(with_output(tight, sample_rate=base, low_cut_hz=low_cut))
-    more, _ = render.render(with_output(tight, sample_rate=high, low_cut_hz=low_cut))
+    low, _ = render.render(with_output(gain, sample_rate=base, low_cut_hz=low_cut))
+    more, _ = render.render(with_output(gain, sample_rate=high, low_cut_hz=low_cut))
     assert np.array_equal(more[:: high // base][: low.size], low)
 
 
@@ -106,9 +106,9 @@ def test_polarity_inverts_exactly(tight: patch.Patch) -> None:
     assert np.array_equal(down, -up)
 
 
-def test_gain_mode_reports_overs_without_clipping(tight: patch.Patch) -> None:
+def test_gain_mode_reports_overs_without_clipping(gain: patch.Patch) -> None:
     """Render 12 dB too loud, and report the over instead of clipping it."""
-    audio, report = render.render(with_output(tight, db=12.0))
+    audio, report = render.render(with_output(gain, db=12.0))
     assert report.over
     assert report.over_db == pytest.approx(20 * math.log10(np.max(np.abs(audio))))
     assert np.max(np.abs(audio)) > 1  # nothing is ever clipped
@@ -132,9 +132,10 @@ def test_the_report(tight: patch.Patch) -> None:
     """Print the report of a render, line by line."""
     _, report = render.render(tight)
     lines = str(report).splitlines()
-    assert [line.split()[0] for line in lines] == ["tuning", "length", "peak", "render"]
+    assert [line.split()[0] for line in lines] == ["tuning", "length", "peak", "loudness", "render"]
     assert lines[0] == "tuning   55.000 Hz, A1 +0.0 cents"
     assert lines[1] == "length   240.0 ms source, 241.9 ms exported (11612 samples at 48000 Hz)"
+    assert lines[3] == f"loudness {report.loudness:.1f} LUFS momentary, at its loudest"
     assert report.true_peak >= report.peak
 
 
@@ -240,3 +241,28 @@ def test_a_bell_reaches_its_gain_at_its_frequency_and_off_designs_nothing(tight:
     assert render.eq(tight.eq, rate).shape == (0, 6)
     _, h = sosfreqz(render.eq(dataclasses.replace(tight.eq, bell_db=9.0), rate), worN=[200.0], fs=rate)
     assert 20 * math.log10(abs(h[0])) == pytest.approx(9.0, abs=1e-6)
+
+
+def test_k_weighting_matches_the_table_of_bs_1770_at_48_khz() -> None:
+    """Design the K-weighting at 48 kHz, and find the coefficients the standard gives."""
+    table = [
+        [1.53512485958697, -2.69169618940638, 1.19839281085285, 1.0, -1.69065929318241, 0.73248077421585],
+        [1.0, -2.0, 1.0, 1.0, -1.99004745483398, 0.99007225036621],
+    ]
+    assert np.allclose(render.k_weighting(48000), table, rtol=0, atol=1e-10)
+
+
+@pytest.mark.parametrize("rate", [44100, 48000, 96000, 192000])
+def test_a_full_scale_sine_at_997_hz_is_minus_3_lufs(rate: int) -> None:
+    """Measure a full-scale 997 Hz sine of 2 s: -3.01 LUFS, within the 0.1 LU EBU Tech 3341 allows, and silence."""
+    sine = np.sin(2 * math.pi * 997 * np.arange(2 * rate) / rate)
+    assert render.loudness(sine, rate) == pytest.approx(-3.01, abs=0.05)
+    assert render.loudness(np.zeros(100), rate) == -math.inf
+
+
+def test_the_loudest_moment_of_a_kick_counts_its_first_400_ms(gain: patch.Patch) -> None:
+    """Find a kick 6 dB louder at 6 dB more gain, and as loud however much silence follows it."""
+    audio, report = render.render(gain)
+    louder, _ = render.render(with_output(gain, db=0.0))
+    assert render.loudness(louder, 48000) == pytest.approx(report.loudness + 6.0, abs=1e-6)
+    assert render.loudness(np.concatenate((audio, np.zeros(48000))), 48000) == report.loudness

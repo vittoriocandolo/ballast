@@ -3,7 +3,7 @@
 A kick drum synthesizer that renders a short text patch to a WAV file, the same
 way every time.
 
-![Waveforms of the four presets, tight, driven, round and long, rendered at 48 kHz](docs/figures/presets.svg)
+![Waveforms of the seven presets, tech-house, tight, house, driven, trance, round and long, rendered at 48 kHz](docs/figures/presets.svg)
 
 Ballast synthesizes one voice: a tonal body with an exact pitch sweep, and a
 short attack of a tone, which can sweep too, and noise, with any sampled click
@@ -12,10 +12,12 @@ saturates their sum, and band-limits it once with a frozen minimum-phase
 filter. The files it writes keep every alias at least 104 dB down, are ready
 for any sampler, and carry the patch that made them.
 
-Listen to the presets: [tight](docs/audio/tight.wav) ·
-[driven](docs/audio/driven.wav) · [round](docs/audio/round.wav) ·
-[long](docs/audio/long.wav). The [preset gallery](docs/presets.md) shows each
-one's curves, spectrum and patch.
+Listen to the presets: [house](docs/audio/house.wav) ·
+[tech-house](docs/audio/tech-house.wav) · [trance](docs/audio/trance.wav) ·
+[tight](docs/audio/tight.wav) · [driven](docs/audio/driven.wav) ·
+[round](docs/audio/round.wav) · [long](docs/audio/long.wav). Each peaks at
+−1 dBTP, and the [preset gallery](docs/presets.md) shows its curves,
+spectrum, loudness and patch.
 
 ## Features
 
@@ -55,7 +57,8 @@ one's curves, spectrum and patch.
   exports use seeded TPDF dither that never clips. `ballast multisample`
   renders one sample per key with an SFZ map, to play an 808 bassline.
 - **Mastering-aware.** Normalize to a sample peak or to a true peak, clip
-  the transient for loudness, and high-pass the kick with an optional low cut.
+  the transient for loudness, high-pass the kick with an optional low cut, and
+  read every render's loudness: its loudest momentary moment, by EBU R128.
 
 ## Install
 
@@ -85,8 +88,9 @@ ballast multisample kick.toml C1 C2 -o kick     # one sample per key, with an SF
 ```
 tuning   43.654 Hz, F1 +0.0 cents
 length   240.0 ms source, 241.9 ms exported (11612 samples at 48000 Hz, 24-bit PCM)
-peak     -5.82 dBFS sample, -5.74 dBTP true
-render   52 ms
+peak     -1.08 dBFS sample, -1.00 dBTP true
+loudness -14.4 LUFS momentary, at its loudest
+render   66 ms
 wrote kick.wav
 ```
 
@@ -101,6 +105,7 @@ wrote kick.wav
 | Stopband | at least 116.4 dB down from half the base rate (specified 110 dB) |
 | Aliasing | at least 104 dB down for a full-scale tone at any frequency up to 20 kHz, at any drive and asymmetry, and through the clipper; more than 130 dB down with up to 24 dB of drive |
 | Levels | a gain, or a sample or true peak target; nothing is ever clipped |
+| Loudness | the highest momentary loudness, EBU R128's 400 ms window slid sample by sample, K-weighted at every rate |
 | PCM headroom | peaks stay 2 LSB below full scale, so dither never clips |
 | Low cut | optional 12 dB/octave Butterworth high-pass, 10 Hz – 1 kHz |
 | Tuning | 20 Hz – 1 kHz, by frequency or note name; the sweep spans 10 Hz – 20 kHz |

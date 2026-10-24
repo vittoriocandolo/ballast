@@ -216,20 +216,20 @@ def one_tick(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.usefixtures("device")
 def test_the_watch_loop_rerenders_every_edit(
     tmp_path: Path,
-    tight_text: str,
+    gain_text: str,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Save a valid edit, an invalid one, one too loud, one at another rate, and one saved again while it renders."""
     path = tmp_path / "kick.toml"
-    path.write_text(tight_text, encoding="utf-8")
+    path.write_text(gain_text, encoding="utf-8")
     last = 60.0
     versions = [
-        tight_text.replace("tune_hz   = 55.0", "tune_hz   = 49.0"),
-        tight_text.replace("h2        = 0.15", 'h2        = "x"'),
-        tight_text.replace("db          = -6.0", "db          = 12.0"),
-        tight_text.replace("sample_rate = 48000", "sample_rate = 96000"),
-        tight_text.replace("tune_hz   = 55.0", f"tune_hz   = {last}"),
+        gain_text.replace("tune_hz   = 55.0", "tune_hz   = 49.0"),
+        gain_text.replace("h2        = 0.15", 'h2        = "x"'),
+        gain_text.replace("db          = -6.0", "db          = 12.0"),
+        gain_text.replace("sample_rate = 48000", "sample_rate = 96000"),
+        gain_text.replace("tune_hz   = 55.0", f"tune_hz   = {last}"),
     ]
     stamp = [10**18]
 
@@ -243,7 +243,7 @@ def test_the_watch_loop_rerenders_every_edit(
     def saved_while_rendering(p: patch.Patch) -> tuple[NDArray[np.float32], Report]:
         result = render(p)
         if p.body.tune_hz == last:  # the last edit is saved again, changed, while it renders
-            save(tight_text.replace("tune_hz   = 55.0", "tune_hz   = 61.0"))
+            save(gain_text.replace("tune_hz   = 55.0", "tune_hz   = 61.0"))
         return result
 
     def sleep(_seconds: float) -> None:  # each tick of the play loop saves the next version, then stops the session
@@ -255,7 +255,7 @@ def test_the_watch_loop_rerenders_every_edit(
     monkeypatch.setattr(audition, "render", saved_while_rendering)
     monkeypatch.setattr(time, "sleep", sleep)
     with pytest.raises(KeyboardInterrupt):
-        audition.audition(patch.loads(tight_text), watch=Watcher(path, tight_text))
+        audition.audition(patch.loads(gain_text), watch=Watcher(path, gain_text))
     lines = [line for line in capsys.readouterr().out.splitlines() if line.startswith("[") or "Hz," in line]
     assert lines == [
         "tuning   55.000 Hz, A1 +0.0 cents",
@@ -356,7 +356,7 @@ def test_windows_without_wasapi_uses_the_default_device(
 @pytest.mark.parametrize(("level", "warned"), [(0.9, True), (0.1, False)])
 def test_a_bed_that_would_clip_under_the_hits_gets_a_warning(
     tmp_path: Path,
-    tight: patch.Patch,
+    gain: patch.Patch,
     capsys: pytest.CaptureFixture[str],
     *,
     level: float,
@@ -365,7 +365,7 @@ def test_a_bed_that_would_clip_under_the_hits_gets_a_warning(
     """Loop a loud bed and a quiet one under the hits, warning only when they would clip together."""
     bed = write_bed(tmp_path / "bed.wav", np.full((round(4 * RATE * 60 / 128.0), 2), level, np.float32))
     with pytest.raises(KeyboardInterrupt):
-        audition.audition(tight, bpm=128.0, bed=bed)
+        audition.audition(gain, bpm=128.0, bed=bed)
     out = capsys.readouterr().out
     assert ("warning: the hits over the bed peak at +3.0 dBFS, which the device will clip" in out) == warned
     played = FakeOutputStream.played

@@ -39,7 +39,11 @@ The first public release.
   stored in the patch as base64 float32, brought up by the family's frozen
   filter and played at any pitch and from either rate family within 140 dB of
   exact interpolation.
-- The `ballast` command: `init` from four presets, `tune`, `stretch`,
+- Seven presets at −1 dBTP: kicks for house, tech house and trance, and four
+  shapes to start from.
+- The report's loudness: the highest momentary loudness of EBU R128, slid
+  sample by sample, K-weighted at every sample rate.
+- The `ballast` command: `init` from the presets, `tune`, `stretch`,
   `transient`, `render`, `multisample` for one sample per key with an SFZ map,
   `audition` with live re-rendering, tempo, a bed and dropout warnings, and
   `extract`.

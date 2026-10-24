@@ -48,6 +48,21 @@ def tight(tight_text: str) -> patch.Patch:
 
 
 @pytest.fixture
+def gain_text(tight_text: str) -> str:
+    """Return the tight preset's text at a plain gain of -6 dB, for the behavior of gain mode."""
+    return tight_text.replace('mode        = "true-peak"', 'mode        = "gain"     ').replace(
+        "db          = -1.0",
+        "db          = -6.0",
+    )
+
+
+@pytest.fixture
+def gain(gain_text: str) -> patch.Patch:
+    """Return the tight preset at a plain gain of -6 dB."""
+    return patch.loads(gain_text)
+
+
+@pytest.fixture
 def raw(tight: patch.Patch) -> dict[str, Any]:
     """Return the tight preset as the plain data TOML parses to, ready to be broken on purpose."""
     return patch.to_dict(tight)

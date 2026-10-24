@@ -1,0 +1,64 @@
+schema = 3
+seed = 1
+
+[body]
+tune_hz   = 55.0
+level_db  = 0.0
+h2        = 0.1             # second harmonic, 0 … 0.5
+bright_hz = 0.0             # harmonics fade above; 0 = sine
+phase_deg = 0.0
+phase_ref = "onset"         # "onset" | "tail"
+pitch = [                   # ratio to tune_hz; starts at 0 ms, ends at 1
+  { ms = 0.0,  ratio = 5.0 },
+  { ms = 4.0,  ratio = 2.4 },
+  { ms = 14.0, ratio = 1.4 },
+  { ms = 45.0, ratio = 1.0 },
+]
+amp = [                     # shape: 0 at both ends, highest point exactly 1
+  { ms = 0.0,   gain = 0.0 },
+  { ms = 0.3,   gain = 1.0 },
+  { ms = 40.0,  gain = 0.85 },
+  { ms = 140.0, gain = 0.4 },
+  { ms = 260.0, gain = 0.1 },
+  { ms = 330.0, gain = 0.0 },
+]
+
+[attack]
+level_db      = -14.0
+tone_hz       = 2200.0
+noise_mix     = 0.6         # 0 = tone … 1 = noise
+noise_band_hz = [1500.0, 9000.0]
+pitch = [                   # ratio to tone_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
+amp = [
+  { ms = 0.0,  gain = 0.0 },
+  { ms = 0.06, gain = 1.0 },
+  { ms = 1.2,  gain = 0.4 },
+  { ms = 5.0,  gain = 0.0 },
+]
+
+[drive]
+db        = 14.0            # small-signal gain; 0 = bypass
+asymmetry = 0.4             # even harmonics, 0 … 1
+mix       = 1.0             # 0 = dry … 1 = driven
+
+[eq]
+low_hz  = 80.0              # low shelf
+low_db  = 0.0               # 0 = off
+bell_hz = 180.0             # bell
+bell_db = 2.0               # 0 = off
+bell_q  = 1.0               # 0.3 = wide … 10 = narrow
+high_hz = 8000.0            # high shelf
+high_db = 0.0               # 0 = off
+
+[clip]
+db      = 4.0               # off the peaks; 0 = off
+knee_db = 4.0               # 0 = hard … 6 = soft
+
+[output]
+sample_rate = 48000
+low_cut_hz  = 0.0           # high-pass, 12 dB/oct; 0 = off
+mode        = "true-peak"   # "gain" | "peak" | "true-peak"
+db          = -1.0          # gain in dB, or peak target
+polarity    = 1

@@ -41,7 +41,9 @@ what it redirects, so comments may not survive.
 
 ### `ballast init PRESET [--tune NOTE] [-o FILE]`
 
-Writes a complete patch from a preset: `driven`, `long`, `round` or `tight`.
+Writes a complete patch from a preset: `house`, `tech-house` or `trance`, or
+one of the four shapes `tight`, `driven`, `round` and `long`. Every preset
+peaks at −1 dBTP.
 `--tune` takes a note name such as `F1`, `C#2` or `Db2`, or a frequency in
 Hz. A note name sets `tune_hz` to its equal-tempered frequency (A4 = 440 Hz),
 rounded to 3 decimals.
@@ -153,8 +155,9 @@ float file with overs, for a DAW to bring down.
 ```
 tuning   43.654 Hz, F1 +0.0 cents
 length   240.0 ms source, 241.9 ms exported (11612 samples at 48000 Hz, 24-bit PCM)
-peak     -5.82 dBFS sample, -5.74 dBTP true
-render   52 ms
+peak     -1.08 dBFS sample, -1.00 dBTP true
+loudness -14.4 LUFS momentary, at its loudest
+render   66 ms
 ```
 
 - **tuning**: `tune_hz`, and the nearest note with its offset in cents.
@@ -163,6 +166,10 @@ render   52 ms
 - **peak**: the highest sample, and the true peak between samples, estimated
   with 4× oversampling. A render over full scale or over the PCM ceiling says
   by how much.
+- **loudness**: the highest momentary loudness, in LUFS: EBU R128's 400 ms
+  window, slid one sample at a time over the kick played once, with the
+  K-weighting of ITU-R BS.1770 derived for the file's sample rate. It
+  compares kicks as a loudness meter would, at their loudest moment.
 - **render**: the wall-clock time.
 
 ### What the file holds
@@ -277,8 +284,9 @@ they do.
   [Hear `drive.asymmetry = 1.0`](audio/tight-warm.wav).
 - **Loudness is the clipper.** `clip.db` takes exactly that many decibels off
   the kick's true peak and leaves everything below the knee alone; `knee_db`
-  softens the edge. In gain mode the kick just peaks lower, as here; with
-  `output.mode = "true-peak"`, the same decibels come back as loudness.
+  softens the edge. The presets normalize to −1 dBTP, so the decibels come
+  back as loudness: here `tight` goes from −13.4 to −11.4 LUFS. In gain
+  mode the kick just peaks lower.
   [Hear `clip.db = 4.0`](audio/tight-clip.wav).
 - **Long 808 tails want `phase_ref = "tail"`.** The tail is then exactly the
   sine at `tune_hz` with phase `phase_deg`, whatever the sweep does before it.
@@ -289,13 +297,15 @@ they do.
   report rather than the sample peak.
 - **Knock is a bell.** `eq.bell_db = 6.0` lifts 200 Hz by 6 dB, where the
   body sweeps through at full strength in its first milliseconds: the
-  tech house knock. It raises the kick's peak by over 5 dB, so lower
-  `output.db` or let the clipper take it back.
+  tech house knock. It raises the kick's peak more than its loudness, so at
+  −1 dBTP `tight` comes out quieter, −17.1 LUFS against −13.4; let the
+  clipper take that peak back, as `tech-house` does.
   [Hear the knock](audio/tight-knock.wav).
 - **Cut what you cannot hear.** `output.low_cut_hz = 30.0` high-passes the
   kick at 30 Hz with a 12 dB/octave Butterworth filter, which removes DC and
-  sub-sonic energy. The presets leave it off: they carry DC between 45 and 62
-  dB below their RMS level, and what you design is what you get.
+  sub-sonic energy. The presets leave it off, so what you design is what you
+  get: on a one-shot, a high-pass also shifts the body's phase and raises its
+  peak against its loudness.
   [Hear the low cut](audio/tight-cut.wav).
 - **Play it as an instrument.** `ballast multisample bass.toml E1 E2 -o bass`
   gives an 808 bassline a sample for every note.

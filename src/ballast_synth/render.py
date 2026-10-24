@@ -213,6 +213,38 @@ def true_peak(audio: NDArray[np.floating[Any]]) -> float:
     return max(float(np.max(np.abs(oversample(audio)))), float(np.max(np.abs(audio), initial=0.0)))
 
 
+def k_weighting(rate: int) -> NDArray[np.float64]:
+    """Design the K-weighting of ITU-R BS.1770 at `rate`, as two sections for sosfilt: a high shelf, then a high-pass.
+
+    BS.1770 gives the coefficients at 48 kHz only. These come from the analog parameters behind them, prewarped at
+    each rate, so they match the standard's table at 48 kHz and keep its response at every other rate.
+    """
+    k = math.tan(math.pi * 1681.974450955533 / rate)
+    q = 0.7071752369554196
+    high = 10.0 ** (3.999843853973347 / 20.0)
+    mid = high**0.4996667741545416
+    a0 = 1 + k / q + k * k
+    shelf = [(high + mid * k / q + k * k) / a0, 2 * (k * k - high) / a0, (high - mid * k / q + k * k) / a0]
+    shelf += [1.0, 2 * (k * k - 1) / a0, (1 - k / q + k * k) / a0]
+    k = math.tan(math.pi * 38.13547087602444 / rate)
+    q = 0.5003270373238773
+    a0 = 1 + k / q + k * k
+    return np.array([shelf, [1.0, -2.0, 1.0, 1.0, 2 * (k * k - 1) / a0, (1 - k / q + k * k) / a0]])
+
+
+def loudness(audio: NDArray[np.floating[Any]], rate: int) -> float:
+    """Measure the highest momentary loudness of a kick played once, in LUFS: EBU R128's 400 ms window, every sample.
+
+    The window slides one sample at a time over the K-weighted kick, with silence before and after it, so the
+    measure is exact and does not depend on where a meter's 100 ms steps would fall.
+    """
+    window = round(0.4 * rate)
+    y = sosfilt(k_weighting(rate), np.concatenate((audio.astype(float), np.zeros(window))))
+    energy = np.concatenate(([0.0], np.cumsum(y * y)))
+    mean = np.max(energy[window:] - energy[:-window], initial=0.0) / window
+    return -0.691 + 10 * math.log10(mean) if mean > 0 else -math.inf
+
+
 def db(x: float) -> float:
     """Return an amplitude in decibels; silence is -inf."""
     return 20 * math.log10(x) if x > 0 else -math.inf
@@ -234,6 +266,7 @@ class Report:
     bits: int | None  # PCM bit depth, None for float32
     peak: float
     true_peak: float
+    loudness: float  # the highest momentary loudness, LUFS
     ceiling: float
     over: bool  # a gain-mode peak above the format's ceiling
     render_s: float
@@ -266,6 +299,7 @@ class Report:
             ("tuning", f"{self.tune_hz:.3f} Hz, {describe_tuning(self.tune_hz)}"),
             ("length", length),
             ("peak", peak),
+            ("loudness", "silent" if self.peak == 0 else f"{self.loudness:.1f} LUFS momentary, at its loudest"),
             ("render", f"{1000 * self.render_s:.0f} ms"),
         )
         return "\n".join(row(label, text) for label, text in rows)
@@ -285,6 +319,7 @@ def render(p: Patch, bits: int | None = None) -> tuple[NDArray[np.float32], Repo
         bits=bits,
         peak=peak,
         true_peak=true_peak(audio),
+        loudness=loudness(audio, p.output.sample_rate),
         ceiling=ceiling,
         over=p.output.mode == "gain" and peak > ceiling,
         render_s=time.perf_counter() - start,

@@ -141,9 +141,9 @@ def test_an_invalid_patch_lists_every_problem(run: Run, tmp_path: Path, read_pre
     )
 
 
-def test_a_render_over_full_scale_is_not_written(run: Run, tmp_path: Path, read_preset: Callable[[str], str]) -> None:
+def test_a_render_over_full_scale_is_not_written(run: Run, tmp_path: Path, gain_text: str) -> None:
     """Render 12 dB too loud, which writes nothing, unless overs are allowed in a float file."""
-    loud = read_preset("tight").replace("db          = -6.0", "db          = 12.0")
+    loud = gain_text.replace("db          = -6.0", "db          = 12.0")
     (tmp_path / "loud.toml").write_text(loud, encoding="utf-8")
     status, out, err = run("render", "loud.toml", "-o", "loud.wav")
     assert status == REFUSED
@@ -188,9 +188,9 @@ def test_extract_needs_a_wav_with_an_embedded_patch(run: Run, tmp_path: Path) ->
     assert run("extract", "foreign.wav") == (BAD_INPUT, "", "foreign.wav: no embedded patch\n")
 
 
-def test_audition_refuses_a_render_over_full_scale(run: Run, tmp_path: Path, read_preset: Callable[[str], str]) -> None:
+def test_audition_refuses_a_render_over_full_scale(run: Run, tmp_path: Path, gain_text: str) -> None:
     """Refuse to audition a render over full scale, which the device would clip."""
-    loud = read_preset("tight").replace("db          = -6.0", "db          = 12.0")
+    loud = gain_text.replace("db          = -6.0", "db          = 12.0")
     (tmp_path / "loud.toml").write_text(loud, encoding="utf-8")
     status, _, err = run("audition", "loud.toml")
     assert status == REFUSED
@@ -254,10 +254,10 @@ def test_stretch_lists_every_problem_it_would_cause(run: Run) -> None:
 def test_a_pcm_render_over_its_ceiling_is_not_written(
     run: Run,
     tmp_path: Path,
-    read_preset: Callable[[str], str],
+    gain_text: str,
 ) -> None:
     """Render 16-bit PCM above its ceiling, which leaves room for dither, and write nothing."""
-    hot = read_preset("tight").replace("db          = -6.0", "db          = 0.6")
+    hot = gain_text.replace("db          = -6.0", "db          = 0.6")
     (tmp_path / "hot.toml").write_text(hot, encoding="utf-8")
     status, out, err = run("render", "hot.toml", "-o", "hot.wav", "--format", "pcm16")
     assert status == REFUSED
@@ -338,7 +338,7 @@ def test_multisample_renders_one_sample_per_key_with_an_sfz_map(run: Run, tmp_pa
 def test_multisample_writes_nothing_unless_every_note_works(
     run: Run,
     tmp_path: Path,
-    read_preset: Callable[[str], str],
+    gain_text: str,
 ) -> None:
     """Refuse notes that cannot be tuned, notes over the ceiling, and keys in the wrong order, writing nothing."""
     run("init", "long", "-o", "bass.toml")
@@ -348,7 +348,7 @@ def test_multisample_writes_nothing_unless_every_note_works(
         "  D0: body.tune_hz: 18.354 is outside 20 … 1000",
         "  D#0: body.tune_hz: 19.445 is outside 20 … 1000",
     ]
-    hot = read_preset("tight").replace("db          = -6.0", "db          = 0.0")
+    hot = gain_text.replace("db          = -6.0", "db          = 0.0")
     (tmp_path / "hot.toml").write_text(hot, encoding="utf-8")
     status, _, err = run("multisample", "hot.toml", "A1", "B1", "-o", "set")
     assert status == REFUSED
