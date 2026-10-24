@@ -30,7 +30,7 @@ from scipy.interpolate import CubicSpline
 from scipy.io import wavfile
 from scipy.signal import butter, fftconvolve, sosfilt, sosfreqz
 
-from ballast_synth import audition, family, noise, patch, render, room, shaper
+from ballast_synth import audition, family, grit, noise, patch, render, room, shaper
 from ballast_synth.voice import Voice, drive_alpha
 
 if TYPE_CHECKING:
@@ -435,6 +435,7 @@ def design_moves(tight: Kick) -> list[tuple[str, Kick]]:
         ("tight-sample", "ballast transient kick.toml click.wav", patch.edit(p, "transient", CLICK)),
         ("tight-sub", "[sub]: -6 dB, out to 400 ms", patch.edit(p, "sub", SUB)),
         ("tight-room", "[room]: -12 dB, 600 ms", patch.edit(p, "room", ROOM)),
+        ("tight-grit", "[grit]: 26.04 kHz, 12 bits", patch.edit(p, "grit", GRIT)),
         ("tight-drive", "drive.db = 18.0", patch.edit(p, "drive.db", 18.0)),
         ("tight-knock", "eq.bell_db = 6.0", patch.edit(p, "eq.bell_db", 6.0)),
         ("tight-dark", "eq.cutoff_hz = 1200.0", patch.edit(p, "eq.cutoff_hz", 1200.0)),
@@ -556,7 +557,9 @@ def figure_pipeline() -> str:
     body.append(box(470, cy - 32, 110, "EQ", ("label", "low, bell, high"), ("label", "0 dB: off")))
     body.append(box(372, top + 196, 140, "Room", ("label", "a seeded tail"), ("label", "darker as it fades")))
     body.append(arrow(f"M462,{cy}V{top + 194}"))
-    body.append(arrow(f"M512,{top + 228}H525V{cy + 34}"))
+    body.append(arrow(f"M512,{top + 228}H526"))
+    body.append(box(528, top + 196, 120, "Grit", ("label", "a vintage sampler"), ("label", "aliasing on purpose")))
+    body.append(arrow(f"M560,{top + 194}V{cy + 34}"))
     body.append(arrow(f"M456,{cy}H468"))
     body.append(box(600, cy - 32, 110, "Low cut", ("label", "12 dB/octave"), ("label", "0 Hz: off")))
     body.append(arrow(f"M580,{cy}H598"))
@@ -1265,6 +1268,57 @@ def figure_room(k: Kick) -> str:
     return svg(fit(decay, 1), "The room", subtitle, "".join(body), description)
 
 
+GRIT = patch.Grit(26040.0, 12, 6.0)  # the usage guide's sampler: 26.04 kHz, 12 bits, driven 6 dB
+
+
+def figure_grit(k: Kick) -> str:
+    """Draw a 15 kHz tone's alias and image through the sampler against the hold's sinc, and tight's top end."""
+    _, rate, factor = family.rates(RATE)
+    t = np.arange(round(0.6 * rate)) / rate
+    sampler = patch.Grit(GRIT.rate_hz, 16, 0.0)
+    out = render.decimate(
+        family.decimator(RATE),
+        grit.apply(np.sin(2 * math.pi * 15000 * t), sampler, RATE, rate),
+        factor,
+    )
+    steady = out[RATE // 10 : RATE // 10 + RATE // 4]
+    level = 20 * np.log10(np.abs(np.fft.rfft(steady)) / (steady.size / 2) + 1e-12)
+    f = 4.0 * np.arange(level.size)
+    tone = Panel(LEFT, Axis(0, 20000), Axis(-120, 3))
+    keep = f <= tone.xs.hi
+    sinc = np.linspace(1, 20000, 400)
+    body = [
+        tone.frame(
+            Ticks((0, 5000, 10000, 15000, 20000), hz, "frequency, Hz"),
+            Ticks((-120, -80, -40, 0), num, "Level, dB"),
+        ),
+        tone.clip("grit", tone.line("s1", f[keep], level[keep])),
+        tone.line("ref", sinc, 20 * np.log10(np.abs(np.sinc(sinc / GRIT.rate_hz)))),
+    ]
+    gritty = kick("tight-grit", patch.dumps(patch.edit(k.p, "grit", GRIT)))
+    n = 1 << 15
+    top = Panel(RIGHT, Axis(1000, 20000, log=True), Axis(-100, 3))
+    g = np.fft.rfftfreq(n, 1 / RATE)
+    band = (g >= top.xs.lo) & (g <= top.xs.hi)
+    body.append(
+        top.frame(Ticks((1000, 2000, 5000, 10000, 20000), hz, "frequency, Hz"), Ticks((-80, -40, 0), num, "Level, dB")),
+    )
+    reference = np.max(np.abs(np.fft.rfft(k.audio[:n].astype(float), n)))
+    for cls, kk in (("ref", k), ("s1", gritty)):
+        spectrum = 20 * np.log10(np.abs(np.fft.rfft(kk.audio[:n].astype(float), n)) / reference + 1e-12)
+        body.append(top.clip("top", top.line(cls, g[band], spectrum[band])))
+    keys = [
+        ("kref", f"the hold's sinc at {num(GRIT.rate_hz / KILO)} kHz; tight"),
+        ("key1", f"15 kHz through it; tight through {num(GRIT.rate_hz / KILO)} kHz, {GRIT.bits} bits"),
+    ]
+    body.append(legend(below(tone), keys))
+    subtitle = "With no filter against aliasing, 15 kHz returns at 11.04 and 15 kHz, as the staircase predicts"
+    description = (
+        "A 15 kHz tone through a 26.04 kHz sampler against the hold's sinc, and the tight preset's top end through it"
+    )
+    return svg(fit(tone, 2), "Grit", subtitle, "".join(body), description)
+
+
 SHELVES = (("o1", -12.0), ("o2", -6.0), ("o3", 6.0), ("o4", 12.0))
 WIDTHS = (("o1", 0.3), ("o3", 1.0), ("o4", 4.0))
 
@@ -1649,6 +1703,7 @@ def main() -> None:
         "asymmetry": figure_asymmetry(),
         "clipper": figure_clipper(kicks["tight"]),
         "room": figure_room(kicks["tight"]),
+        "grit": figure_grit(kicks["tight"]),
         "eq": figure_eq(tight),
         "low-cut": figure_low_cut(),
         "decimator": figure_decimator(),

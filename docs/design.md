@@ -3,10 +3,10 @@
 Ballast computes one kick as a pure function of time, at 32 times the sample
 rate, and band-limits it once.
 
-    x(t) = b(t) + a(t) + v(t),    z = Q(C(E(W(D(x) + s)))),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
+    x(t) = b(t) + a(t) + v(t),    z = Q(C(E(G(W(D(x) + s))))),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
 
 Here b is the body, a the attack, v the optional transient, D the drive, s
-the optional sub, W the optional room, E the EQ, C the optional low cut and Q
+the optional sub, W the optional room, G the optional grit, E the EQ, C the optional low cut and Q
 the optional clipper, all at the internal rate F; h is the frozen decimator of
 the sample rate's family, K the decimation factor, g_out the output gain and p
 the polarity.
@@ -20,6 +20,7 @@ the polarity.
 - [The saturator](#the-saturator)
 - [The sub](#the-sub)
 - [The room](#the-room)
+- [Grit](#grit)
 - [The EQ](#the-eq)
 - [The low cut](#the-low-cut)
 - [The clipper](#the-clipper)
@@ -276,6 +277,33 @@ EQ and the clipper, so they shape the whole sound and its exact true peak.
 
 ![The room's energy decay in three third octaves against their designed times, and the tight preset in a room and without](figures/room.svg)
 
+## Grit
+
+Ballast never aliases, except here, on purpose and by name. The optional
+`[grit]` section models the samplers that drum machines and early house were
+made on. The sampler hears the kick band-limited to 20 kHz, as an analog
+source would be: the frozen filter takes it down to the base rate and back
+up. It samples that signal at `rate_hz`, reading it between internal
+samples by 6-point Lagrange interpolation, with no filter against aliasing,
+so everything above half its rate folds back down. It rounds each sample to
+`bits`, without dither, clipping at its full scale after `input_db`, and
+plays the samples back through a zero-order hold: the staircase its
+converter made, whose images reach up into the audio band, and whose sinc
+envelope dulls the top.
+
+Its aliasing and its staircase are the sound, so Ballast must not add its
+own. Each internal sample is the staircase's exact average under the triangle
+from one sample before to one after, the drive's kernel, with the same 3-tap
+correction; the steps lie at least two samples apart, so a triangle meets at
+most one, and the average is a closed form. Sampled at 26.04 kHz, a 15 kHz
+tone comes back as its alias at 11.04 kHz and its image at 15 kHz, each
+within 0.01 dB of the hold's sinc, and nothing else above the converter's own
+rounding, 110 dB down. `input_db` is undone at the output, so it changes the
+grit, not the level. The EQ's low-pass, after it, plays the sampler's output
+filter.
+
+![A 15 kHz tone through a 26.04 kHz sampler against the hold's sinc, and the tight preset's top end through it](figures/grit.svg)
+
 ## The EQ
 
 `[eq]` has three bands after the drive, the sub and the room: a low shelf for
@@ -445,6 +473,7 @@ Audition reuses the renderer and adds four small parts:
 | `render.py` | EQ, low cut, clipper, parallel decimation, output stage, loudness, report, export |
 | `vary.py` | seeded variations, drawn from SHAKE-256, and grids along axes |
 | `pack.py` | kits: names by key, the gates, the manifest |
+| `grit.py` | the vintage sampler: its band-limited input, converter and exact staircase |
 | `room.py` | the seeded tail of the room, and its convolution |
 | `wav.py` | the RIFF writer, the reader of beds and transients, the chunk reader behind `extract`, and writing any file whole or not at all |
 | `audition.py` | hits, bed, watcher and playback |

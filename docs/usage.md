@@ -278,11 +278,11 @@ patch's sample rate.
 
 ## Designing a kick
 
-Fifteen of the moves below are made on the `tight` preset, each with a link
+Sixteen of the moves below are made on the `tight` preset, each with a link
 to its sound, to compare with [tight itself](audio/tight.wav); the figure
 shows what they do.
 
-![The tight preset and fifteen moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a brighter body, a zap, a sampled click, a sub, a room, more drive, a knock, a low-pass, a low cut, warmth and clipping](figures/design.svg)
+![The tight preset and sixteen moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a brighter body, a zap, a sampled click, a sub, a room, grit, more drive, a knock, a low-pass, a low cut, warmth and clipping](figures/design.svg)
 
 - **Tune it to the track.** A kick in the key of the bass sits in the mix. Use
   `ballast tune kick.toml E1`, or `--tune` with `init`.
@@ -392,6 +392,19 @@ shows what they do.
   −1 dBTP `tight` comes out quieter, −17.1 LUFS against −13.4; let the
   clipper take that peak back, as `tech-house` does.
   [Hear the knock](audio/tight-knock.wav).
+- **Grit is a vintage sampler.** A `[grit]` section samples the kick as the
+  drum samplers of the 1980s did, at a low rate with no filter against
+  aliasing, in 12 bits, through their staircase. Pair it with the EQ's
+  low-pass, which plays their output filter:
+
+  ```toml
+  [grit]
+  rate_hz  = 26040.0          # no filter against aliasing
+  bits     = 12               # no dither
+  input_db = 6.0              # into the converter, and back
+  ```
+
+  [Hear the grit](audio/tight-grit.wav).
 - **Dark is a low-pass.** `eq.cutoff_hz = 1200.0` closes the kick down
   above 1.2 kHz at 12 dB per octave: the filtered thud of a sampled disco
   kick. `eq.resonance` above 0.707 rings at the corner, as an analog filter

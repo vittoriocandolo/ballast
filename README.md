@@ -9,8 +9,9 @@ Ballast synthesizes one voice: a tonal body with an exact pitch sweep, and a
 short attack of a tone, which can sweep too, and noise, with any sampled click
 layered over them. It computes them at 32 times the sample rate,
 saturates their sum, and band-limits it once with a frozen minimum-phase
-filter. The files it writes keep every alias at least 104 dB down, are ready
-for any sampler, and carry the patch that made them.
+filter. The files it writes keep every alias at least 104 dB down, unless you
+ask for a vintage sampler's grit, are ready for any sampler, and carry the
+patch that made them.
 
 Listen to the presets: [house](docs/audio/house.wav) ·
 [tech-house](docs/audio/tech-house.wav) · [trance](docs/audio/trance.wav) ·
@@ -21,6 +22,9 @@ spectrum, loudness and patch.
 
 ## Features
 
+- **Grit by name.** `[grit]` models a vintage drum sampler, aliasing and
+  staircase included, computed exactly: the only place Ballast aliases, and
+  only when asked.
 - **Clean at any drive.** Synthesis runs at 1.4112 or 1.536 MHz, and the
   drive and the clipper average their curves around each sample, by
   second-order antiderivative anti-aliasing, so even a full-scale 20 kHz tone
@@ -113,7 +117,7 @@ wrote kick.wav
 | Internal rate | 32 × the base rate: 1411.2 or 1536 kHz |
 | Passband | 0–20 kHz within ±0.000014 dB (specified ±0.001 dB) |
 | Stopband | at least 116.4 dB down from half the base rate (specified 110 dB) |
-| Aliasing | at least 104 dB down for a full-scale tone at any frequency up to 20 kHz, at any drive and asymmetry, and through the clipper; more than 130 dB down with up to 24 dB of drive |
+| Aliasing | at least 104 dB down for a full-scale tone at any frequency up to 20 kHz, at any drive and asymmetry, and through the clipper; more than 130 dB down with up to 24 dB of drive. `[grit]` aliases on purpose, as the sampler it models |
 | Levels | a gain, or a sample or true peak target; nothing is ever clipped |
 | Loudness | the highest momentary loudness, EBU R128's 400 ms window slid sample by sample, K-weighted at every rate |
 | PCM headroom | peaks stay 2 LSB below full scale, so dither never clips |

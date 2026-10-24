@@ -2,8 +2,8 @@
 
 A patch is a complete TOML description of one kick. Every field is required
 and the renderer has no defaults, so a future default can never change an old
-patch. The sections a patch may leave out are its layers, `[sub]`, `[room]`
-and `[transient]`: without one, the patch has none. The parser rejects anything outside the valid domain, reports every
+patch. The sections a patch may leave out are `[sub]`, `[room]`, `[grit]` and
+`[transient]`: without one, the patch has none. The parser rejects anything outside the valid domain, reports every
 problem with its field path, and never clamps or repairs.
 
 ![The tight preset's pitch, body and attack curves through their knots, and the first 60 ms of its output](figures/anatomy-tight.svg)
@@ -153,6 +153,22 @@ the EQ, the low cut and the clipper. The kick runs on for the whole tail:
 | `damping_hz` | number | 200 Hz – 20 kHz | Where the tail fades twice as fast as at its lowest frequencies. |
 | `predelay_ms` | number | 0 – 200 ms | How long after the kick the tail begins: the distance to the walls. |
 
+### `[grit]`: a vintage sampler
+
+Optional: a patch without this section has no grit. The kick is sampled as
+the samplers of the 1980s sampled it: band-limited to 20 kHz like an analog
+source, then sampled at `rate_hz` with no filter against aliasing, rounded to
+`bits` without dither, and played back through a zero-order hold. Its
+aliasing and its staircase are the point, and are computed exactly. It comes
+after the room and before the EQ, whose low-pass then plays the sampler's
+output filter.
+
+| Field | Type | Range | Meaning |
+|---|---|---|---|
+| `rate_hz` | number | 4000 – 48000 Hz | The sampler's rate: 26040 Hz for the grittiest drum machines, 40000 for later ones. Whatever lies above half of it folds back down. |
+| `bits` | integer | 4 – 16 | How finely each sample is rounded: 12 for the classic drum samplers, fewer for crunch. |
+| `input_db` | number | −24 – +24 dB | How hot the converter runs: higher clips its full scale and lifts the kick over its rounding. The output is brought back by as much, so the level stays put. |
+
 ### `[eq]`: three bands
 
 After the drive, the sub and the room, before the low cut. Each band at 0 dB,
@@ -257,11 +273,11 @@ and a renderer refuses a schema it does not know rather than guess.
 
 - **Schema 3**, the current one, adds `body.bright_hz`, `body.modes`, `attack.pitch`, `drive.asymmetry`,
   `drive.mix`, the `[eq]` and `[clip]` sections, and the optional `[sub]`,
-  `[room]` and `[transient]`.
+  `[room]`, `[grit]` and `[transient]`.
 - **Schema 2** adds `output.low_cut_hz` to schema 1.
 - **Schema 1** has no low cut.
 
 Ballast still reads schemas 1 and 2 and renders them exactly as they always
 sounded: what they lack is off, with a sine body without modes, a fixed tone, no asymmetry, all of the
-drive, and no EQ, clipper, low cut, sub, room or transient. `tune` and `stretch` write them back as schema 3 with
+drive, and no EQ, clipper, low cut, sub, room, grit or transient. `tune` and `stretch` write them back as schema 3 with
 those values, which sound the same.

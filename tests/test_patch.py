@@ -521,12 +521,14 @@ def test_transient_rules(layered: patch.Patch, field: str, value: object, messag
 
 
 def test_an_older_schema_cannot_have_a_layer(raw: dict[str, Any], layered: patch.Patch) -> None:
-    """Refuse a sub, a room and a transient in a schema 2 patch, which could have none of them."""
+    """Refuse a sub, a room, grit and a transient in a schema 2 patch, which could have none of them."""
     raw = older(raw, 2)
     raw["sub"] = patch.to_dict(patch.edit(layered, "sub", SUB))["sub"]
     raw["room"] = {"level_db": -10.0, "decay_ms": 600.0, "damping_hz": 4000.0, "predelay_ms": 8.0}
+    raw["grit"] = {"rate_hz": 26040.0, "bits": 12, "input_db": 0.0}
     raw["transient"] = patch.to_dict(layered)["transient"]
-    assert problems(raw) == ["sub: unknown field", "room: unknown field", "transient: unknown field"]
+    expected = ["sub: unknown field", "room: unknown field", "grit: unknown field", "transient: unknown field"]
+    assert problems(raw) == expected
 
 
 def test_a_room_reads_back_between_the_sub_and_the_eq(tight: patch.Patch) -> None:

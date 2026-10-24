@@ -36,7 +36,7 @@ import scipy
 from scipy.optimize import brentq
 from scipy.signal import resample_poly, sosfilt, upfirdn
 
-from . import __version__, noise, room, shaper, wav
+from . import __version__, grit, noise, room, shaper, wav
 from .family import DECIMATORS, decimator, rates
 from .patch import EQ, Output, Patch, describe_tuning
 from .voice import Voice
@@ -130,6 +130,8 @@ def synthesize(p: Patch) -> NDArray[np.float64]:
     y = Voice(p, rate).samples()
     if p.room is not None and p.room.level_db != -math.inf:
         y = room.add(y, p.room, p.seed, base, rate)
+    if p.grit is not None:
+        y = grit.apply(y, p.grit, base, rate)
     bands = eq(p.eq, rate)
     if bands.size:
         y = sosfilt(bands, y)

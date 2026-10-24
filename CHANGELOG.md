@@ -35,6 +35,9 @@ The first public release.
   after the drive.
 - A room: a seeded tail of noise whose every frequency fades on its own clock,
   after the drive.
+- Grit: a vintage sampler modeled on purpose, at its own rate without a filter
+  against aliasing, its bits without dither, and its staircase, averaged
+  exactly so that Ballast adds no aliasing of its own.
 - A three-band EQ after the drive, low shelf, bell and high shelf, within
   0.004 dB of its analog prototypes up to 20 kHz, and a static resonant
   low-pass within 0.012 dB of its own.

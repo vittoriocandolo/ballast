@@ -5,7 +5,7 @@
 
 Every field is required and the renderer holds no defaults, so a future
 default can never change an old patch. The sections a patch may leave out are
-the layers [sub], [room] and [transient]: without one, the patch has none. Each
+[sub], [room], [grit] and [transient]: without one, the patch has none. Each
 field declares its rule and its comment in the canonical TOML once, on its
 dataclass, and parsing, dumping and editing all work from those
 declarations. The parser rejects anything outside the valid domain, reporting
@@ -176,6 +176,21 @@ def number(
     def parse(path: str, raw: object, problems: list[str], section: dict[str, Any]) -> float | None:
         top = hi(section) if callable(hi) else hi
         return _number(path, raw, problems, _Bounds(lo, top, below=below), off=off)
+
+    return _rule(parse, note)
+
+
+def integer(lo: int, hi: int, note: str = "") -> int:
+    """Declare a whole number in lo … hi: an integer, not a float such as 12.0."""
+
+    def parse(path: str, raw: object, problems: list[str], _section: dict[str, Any]) -> int | None:
+        if isinstance(raw, bool) or not isinstance(raw, int):
+            problems.append(f"{path}: expected an integer, found {_kind(raw)}")
+            return None
+        if not lo <= raw <= hi:
+            problems.append(f"{path}: {raw} is outside {lo} … {hi}")
+            return None
+        return raw
 
     return _rule(parse, note)
 
@@ -503,6 +518,15 @@ class Room:
 
 
 @dataclass(frozen=True)
+class Grit:
+    """A vintage sampler after the room: its rate, without a filter against aliasing, its bits, and how hot it runs."""
+
+    rate_hz: float = number(4000.0, 48000.0, "no filter against aliasing")
+    bits: int = integer(4, 16, "no dither")
+    input_db: float = number(-24.0, 24.0, "into the converter, and back")
+
+
+@dataclass(frozen=True)
 class Transient:
     """A sampled transient, layered with the attack: its level, start, pitch and polarity, and its samples."""
 
@@ -533,7 +557,7 @@ class Transient:
 
 @dataclass(frozen=True)
 class Patch:
-    """One kick: the seed of its noise and dither, its six sections, and its sub, room and transient, if any."""
+    """One kick: the seed of its noise and dither, its six sections, and its sub, room, grit and transient, if any."""
 
     seed: int
     body: Body
@@ -544,6 +568,7 @@ class Patch:
     output: Output
     sub: Sub | None
     room: Room | None
+    grit: Grit | None
     transient: Transient | None
 
     @property
@@ -557,7 +582,7 @@ class Patch:
         return max(ends) + (0.0 if self.room is None else self.room.tail_ms)
 
 
-type Section = Body | Attack | Drive | Sub | Room | EQ | Clip | Output | Transient
+type Section = Body | Attack | Drive | Sub | Room | Grit | EQ | Clip | Output | Transient
 
 SECTIONS: dict[str, type[Section]] = {
     "body": Body,
@@ -565,12 +590,13 @@ SECTIONS: dict[str, type[Section]] = {
     "drive": Drive,
     "sub": Sub,
     "room": Room,
+    "grit": Grit,
     "eq": EQ,
     "clip": Clip,
     "output": Output,
     "transient": Transient,  # last, since its samples run long
 }
-OPTIONAL = ("sub", "room", "transient")  # the sections a patch may leave out: layers it then does not have
+OPTIONAL = ("sub", "room", "grit", "transient")  # the sections a patch may leave out: layers it then does not have
 FIXED_TONE = ((0.0, 1.0),)  # a pitch curve of one knot: the attack's tone holds tone_hz
 EQ_OFF = {  # every band at 0 dB
     "low_hz": 80.0,
@@ -595,6 +621,7 @@ ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
         "output": {"low_cut_hz": 0.0},
         "sub": None,
         "room": None,
+        "grit": None,
         "transient": None,
     },
     2: {
@@ -605,6 +632,7 @@ ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
         "eq": EQ_OFF,
         "sub": None,
         "room": None,
+        "grit": None,
         "transient": None,
     },
     SCHEMA: {},
@@ -677,7 +705,7 @@ def from_dict(data: object) -> Patch:
             sections[name] = _section(name, cls, data[name], problems, new or {})
     if problems:
         raise PatchError(problems)
-    sub, room, transient = sections.get("sub"), sections.get("room"), sections.get("transient")
+    sub, room, grit, transient = (sections.get(name) for name in OPTIONAL)
     return Patch(
         data["seed"],
         Body(**sections["body"]),
@@ -688,6 +716,7 @@ def from_dict(data: object) -> Patch:
         Output(**sections["output"]),
         None if sub is None else Sub(**sub),
         None if room is None else Room(**room),
+        None if grit is None else Grit(**grit),
         None if transient is None else Transient(**transient),
     )
 
