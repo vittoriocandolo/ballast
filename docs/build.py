@@ -30,7 +30,7 @@ from scipy.interpolate import CubicSpline
 from scipy.io import wavfile
 from scipy.signal import butter, fftconvolve, sosfilt, sosfreqz
 
-from ballast_synth import audition, family, grit, noise, patch, render, room, shaper
+from ballast_synth import audition, family, grit, noise, pack, patch, render, room, shaper
 from ballast_synth.voice import Voice, drive_alpha
 
 if TYPE_CHECKING:
@@ -1319,6 +1319,34 @@ def figure_grit(k: Kick) -> str:
     return svg(fit(tone, 2), "Grit", subtitle, "".join(body), description)
 
 
+PLAY = patch.Play(-18.0, -6.0, 0.6, 0.5)  # the usage guide's played kit
+LAYERS = (("o1", 1), ("o3", 2), ("o4", 3))
+
+
+def figure_play(house: Kick) -> str:
+    """Draw a played kit of the house preset: its three layers, and two repeats of its hardest hit."""
+    kit = pack.kicks([("house", "", patch.edit(house.p, "play", PLAY))], [], 16, 3, 2)
+    ms = 60
+    layers = Panel(LEFT, Axis(0, ms), Axis(-1.05, 1.05))
+    body = [layers.frame(Ticks((0, 20, 40, 60), num, "ms"), Ticks((-1, 0, 1), num, "Three layers, first 60 ms"))]
+    for cls, j in LAYERS:
+        hit = kit[2 * (j - 1)]
+        body.append(layers.line(cls, *trace(hit.audio, ms, round(layers.w))))
+    near = 8
+    repeats = Panel(RIGHT, Axis(0, near), Axis(-1.05, 1.05))
+    body.append(repeats.frame(Ticks((0, 2, 4, 6, 8), num, "ms"), Ticks((-1, 0, 1), num, "The hardest hit, twice")))
+    for cls, hit in (("ref", kit[4]), ("s1", kit[5])):
+        body.append(repeats.line(cls, *trace(hit.audio, near, round(repeats.w))))
+    keys = [(f"k{cls}", f"layer {j}: {num(round(kit[2 * (j - 1)].report.loudness, 1))} LUFS") for cls, j in LAYERS]
+    keys += [("kref", "first repeat"), ("key1", "second, its own noise")]
+    body.append(legend_row(below(layers), keys))
+    subtitle = (
+        "Softer layers lose level, click and punch as [play] says; each repeat draws its own noise and moves a little"
+    )
+    description = "The house preset played in three velocity layers, and two repeats of its hardest hit"
+    return svg(fit(layers, 1), "Played", subtitle, "".join(body), description)
+
+
 SHELVES = (("o1", -12.0), ("o2", -6.0), ("o3", 6.0), ("o4", 12.0))
 WIDTHS = (("o1", 0.3), ("o3", 1.0), ("o4", 4.0))
 
@@ -1704,6 +1732,7 @@ def main() -> None:
         "clipper": figure_clipper(kicks["tight"]),
         "room": figure_room(kicks["tight"]),
         "grit": figure_grit(kicks["tight"]),
+        "play": figure_play(kicks["house"]),
         "eq": figure_eq(tight),
         "low-cut": figure_low_cut(),
         "decimator": figure_decimator(),

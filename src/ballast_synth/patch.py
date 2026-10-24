@@ -5,9 +5,9 @@
 
 Every field is required and the renderer holds no defaults, so a future
 default can never change an old patch. The sections a patch may leave out are
-[sub], [room], [grit] and [transient]: without one, the patch has none. Each
-field declares its rule and its comment in the canonical TOML once, on its
-dataclass, and parsing, dumping and editing all work from those
+[sub], [room], [grit], [play] and [transient]: without one, the patch has
+none. Each field declares its rule and its comment in the canonical TOML
+once, on its dataclass, and parsing, dumping and editing all work from those
 declarations. The parser rejects anything outside the valid domain, reporting
 every problem with its field path, and never clamps or repairs.
 """
@@ -527,6 +527,16 @@ class Grit:
 
 
 @dataclass(frozen=True)
+class Play:
+    """How the kick is played: what its softest hit becomes, the patch itself being its hardest, and its repeats."""
+
+    soft_db: float = number(-40.0, 0.0, "the softest hit's level")
+    soft_click_db: float = number(-24.0, 0.0, "and its click's, further")
+    soft_punch: float = number(0.0, 1.0, "of the pitch drop it keeps")
+    spread: float = number(0.0, 1.0, "how much each repeat differs")
+
+
+@dataclass(frozen=True)
 class Transient:
     """A sampled transient, layered with the attack: its level, start, pitch and polarity, and its samples."""
 
@@ -557,7 +567,7 @@ class Transient:
 
 @dataclass(frozen=True)
 class Patch:
-    """One kick: the seed of its noise and dither, its six sections, and its sub, room, grit and transient, if any."""
+    """One kick: the seed of its noise and dither, its six sections, and the optional ones it has."""
 
     seed: int
     body: Body
@@ -569,6 +579,7 @@ class Patch:
     sub: Sub | None
     room: Room | None
     grit: Grit | None
+    play: Play | None
     transient: Transient | None
 
     @property
@@ -582,7 +593,7 @@ class Patch:
         return max(ends) + (0.0 if self.room is None else self.room.tail_ms)
 
 
-type Section = Body | Attack | Drive | Sub | Room | Grit | EQ | Clip | Output | Transient
+type Section = Body | Attack | Drive | Sub | Room | Grit | EQ | Clip | Output | Play | Transient
 
 SECTIONS: dict[str, type[Section]] = {
     "body": Body,
@@ -594,9 +605,10 @@ SECTIONS: dict[str, type[Section]] = {
     "eq": EQ,
     "clip": Clip,
     "output": Output,
+    "play": Play,
     "transient": Transient,  # last, since its samples run long
 }
-OPTIONAL = ("sub", "room", "grit", "transient")  # the sections a patch may leave out: layers it then does not have
+OPTIONAL = ("sub", "room", "grit", "play", "transient")  # the sections a patch may leave out, and then has none
 FIXED_TONE = ((0.0, 1.0),)  # a pitch curve of one knot: the attack's tone holds tone_hz
 EQ_OFF = {  # every band at 0 dB
     "low_hz": 80.0,
@@ -622,6 +634,7 @@ ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
         "sub": None,
         "room": None,
         "grit": None,
+        "play": None,
         "transient": None,
     },
     2: {
@@ -633,6 +646,7 @@ ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
         "sub": None,
         "room": None,
         "grit": None,
+        "play": None,
         "transient": None,
     },
     SCHEMA: {},
@@ -705,7 +719,7 @@ def from_dict(data: object) -> Patch:
             sections[name] = _section(name, cls, data[name], problems, new or {})
     if problems:
         raise PatchError(problems)
-    sub, room, grit, transient = (sections.get(name) for name in OPTIONAL)
+    sub, room, grit, play, transient = (sections.get(name) for name in OPTIONAL)
     return Patch(
         data["seed"],
         Body(**sections["body"]),
@@ -717,6 +731,7 @@ def from_dict(data: object) -> Patch:
         None if sub is None else Sub(**sub),
         None if room is None else Room(**room),
         None if grit is None else Grit(**grit),
+        None if play is None else Play(**play),
         None if transient is None else Transient(**transient),
     )
 

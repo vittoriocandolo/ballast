@@ -29,7 +29,7 @@ import platform
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, NamedTuple, override
 
 import numpy as np
 import scipy
@@ -121,11 +121,26 @@ def _shelf(hz: float, db: float, rate: int, *, high: bool) -> list[float]:
     ]
 
 
-def synthesize(p: Patch) -> NDArray[np.float64]:
-    """Compute the decimated signal at unity gain: everything before the output stage.
+class Synthesis(NamedTuple):
+    """A kick at unity gain, before the output stage: its signal, its clipper's threshold, and when it began."""
 
-    The low cut and the clipper work on the internal signal, so every rate of a family still shares it.
+    signal: NDArray[np.float64]
+    threshold: float | None
+    start: float  # time.perf_counter() as its render began
+
+
+def synthesize(p: Patch) -> NDArray[np.float64]:
+    """Compute the decimated signal at unity gain: everything before the output stage."""
+    return synthesized(p).signal
+
+
+def synthesized(p: Patch, threshold: float | None = None) -> Synthesis:
+    """Compute the decimated signal at unity gain, and the clipper's threshold, solved for or as given.
+
+    The low cut and the clipper work on the internal signal, so every rate of a family still shares it. A given
+    threshold plays this kick through a clipper set for another, as the hits of one kit share one clipper.
     """
+    start = time.perf_counter()
     base, rate, factor = rates(p.output.sample_rate)
     y = Voice(p, rate).samples()
     if p.room is not None and p.room.level_db != -math.inf:
@@ -138,12 +153,27 @@ def synthesize(p: Patch) -> NDArray[np.float64]:
     if p.output.low_cut_hz != 0.0:
         y = sosfilt(low_cut(p.output.low_cut_hz, rate), y)
     if p.clip.db != 0.0:
-        y = clip(y, p.clip.db, p.clip.knee_db, base, factor)
-    return decimate(decimator(base), y, factor)
+        if threshold is None:
+            threshold = clip_threshold(y, p.clip.db, p.clip.knee_db, base, factor)
+        if threshold is not None:
+            y = clipped(y, threshold, p.clip.knee_db)
+    return Synthesis(decimate(decimator(base), y, factor), threshold, start)
+
+
+def clipped(y: NDArray[np.float64], threshold: float, knee_db: float) -> NDArray[np.float64]:
+    """Clip the internal signal at `threshold`, anti-aliased, with silence beyond either end."""
+    out: NDArray[np.float64] = threshold * shaper.apply(shaper.Clip(knee_db), np.pad(y, 2) / threshold)
+    return out
 
 
 def clip(y: NDArray[np.float64], db: float, knee_db: float, base: int, factor: int) -> NDArray[np.float64]:
-    """Clip the internal signal so that the file's true peak comes down by exactly db, and nothing below the knee.
+    """Clip the internal signal so that the file's true peak comes down by exactly db, and nothing below the knee."""
+    threshold = clip_threshold(y, db, knee_db, base, factor)
+    return y if threshold is None else clipped(y, threshold, knee_db)
+
+
+def clip_threshold(y: NDArray[np.float64], db: float, knee_db: float, base: int, factor: int) -> float | None:
+    """Solve for the threshold that brings the file's true peak down by exactly db; None for silence.
 
     The threshold follows the kick's own true peak, as the output stage's peak modes do, so the same setting clips
     every kick and every key by the same amount. The decimator's phase rebuilds part of a clipped peak, so the
@@ -152,7 +182,7 @@ def clip(y: NDArray[np.float64], db: float, knee_db: float, base: int, factor: i
     """
     peak = float(np.max(np.abs(y), initial=0.0))
     if peak == 0.0:
-        return y
+        return None
     taps, curve, padded = decimator(base), shaper.Clip(knee_db), np.pad(y, 2)  # silent beyond either end
     plain = decimate(taps, y, factor)
     between = np.abs(oversample(plain))  # the unclipped kick between its samples, 4 to each
@@ -184,26 +214,26 @@ def clip(y: NDArray[np.float64], db: float, knee_db: float, base: int, factor: i
     low = math.log(peak / curve.ratio(db))
     while miss(low) > 0:
         low -= math.log(2)
-    threshold = math.exp(brentq(miss, low, top, xtol=1e-7))  # to within 1e-6 dB
-    return threshold * shaper.apply(curve, padded / threshold)
+    return math.exp(brentq(miss, low, top, xtol=1e-7))  # to within 1e-6 dB
 
 
-def output_stage(out: NDArray[np.float64], o: Output, ceiling: float) -> NDArray[np.float32]:
-    """Scale by the output gain, or to a sample or true peak target, apply the polarity, and convert once to float32.
-
-    In either peak mode, the highest sample stays at or below the format's `ceiling`.
-    """
+def output_gain(out: NDArray[np.float64], o: Output, ceiling: float) -> float:
+    """Return the output gain: `db` itself, or what brings the sample or true peak to it, within the `ceiling`."""
     peak = float(np.max(np.abs(out), initial=0.0))
     target: float = 10.0 ** (o.db / 20.0)
     if o.mode == "gain":
-        scaled = out * target
-    elif peak == 0:
-        scaled = out.copy()
-    elif o.mode == "peak":
-        scaled = out * (min(target, ceiling) / peak)
-    else:  # true-peak: the estimate is linear, so scaling the signal scales it alike
-        scaled = out * min(target / true_peak(out), ceiling / peak)
-    if o.polarity < 0:
+        return target
+    if peak == 0:
+        return 1.0
+    if o.mode == "peak":
+        return min(target, ceiling) / peak
+    return min(target / true_peak(out), ceiling / peak)  # true-peak: the estimate is linear, so it scales alike
+
+
+def output_stage(out: NDArray[np.float64], gain: float, polarity: int) -> NDArray[np.float32]:
+    """Scale by the output gain, apply the polarity, and convert once to float32."""
+    scaled = out * gain
+    if polarity < 0:
         scaled = -scaled
     return scaled.astype(np.float32)
 
@@ -277,7 +307,9 @@ class Report:
     true_peak: float
     loudness: float  # the highest momentary loudness, LUFS
     ceiling: float
-    over: bool  # a gain-mode peak above the format's ceiling
+    over: bool  # a peak above the format's ceiling, at a gain set rather than solved for
+    gain: float  # the output gain it was scaled by
+    threshold: float | None  # the clipper's threshold, when it clips
     render_s: float
 
     @property
@@ -314,11 +346,31 @@ class Report:
         return "\n".join(row(label, text) for label, text in rows)
 
 
+def ceiling_of(bits: int | None) -> float:
+    """Return the highest sample a format allows: full scale for float32, 2 LSB under it for PCM, for dither."""
+    return 1.0 if bits is None else 1.0 - 2.0 ** (2 - bits)
+
+
 def render(p: Patch, bits: int | None = None) -> tuple[NDArray[np.float32], Report]:
     """Render the float32 audio and its report, for export as float32 or, with `bits`, as PCM of that depth."""
-    start = time.perf_counter()
-    ceiling = 1.0 if bits is None else 1.0 - 2.0 ** (2 - bits)  # PCM keeps 2 LSB of headroom, so dither never clips
-    audio = output_stage(synthesize(p), p.output, ceiling)
+    s = synthesized(p)
+    return finish(p, s, bits, output_gain(s.signal, p.output, ceiling_of(bits)), solved=True)
+
+
+def finish(
+    p: Patch,
+    s: Synthesis,
+    bits: int | None,
+    gain: float,
+    *,
+    solved: bool,
+) -> tuple[NDArray[np.float32], Report]:
+    """Scale a synthesized kick by `gain`, and report it; `solved` when the gain is its own output stage's.
+
+    A gain set for another kick, as for the hits of a played kit, reports an over in any output mode.
+    """
+    ceiling = ceiling_of(bits)
+    audio = output_stage(s.signal, gain, p.output.polarity)
     peak = float(np.max(np.abs(audio), initial=0.0))
     return audio, Report(
         tune_hz=p.body.tune_hz,
@@ -330,8 +382,10 @@ def render(p: Patch, bits: int | None = None) -> tuple[NDArray[np.float32], Repo
         true_peak=true_peak(audio),
         loudness=loudness(audio, p.output.sample_rate),
         ceiling=ceiling,
-        over=p.output.mode == "gain" and peak > ceiling,
-        render_s=time.perf_counter() - start,
+        over=(p.output.mode == "gain" or not solved) and peak > ceiling,
+        gain=gain,
+        threshold=s.threshold,
+        render_s=time.perf_counter() - s.start,
     )
 
 

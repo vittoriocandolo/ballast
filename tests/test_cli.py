@@ -463,3 +463,17 @@ def test_vary_along_axes_writes_every_combination(run: Run, tmp_path: Path) -> N
     status, _, err = run("vary", "kick.toml", "-o", "x", "--along", "drive.db", "6,60")
     assert (status, err.splitlines()[1]) == (BAD_INPUT, "  drive.db 60: drive.db: 60 is outside 0 … 48")
     assert not (tmp_path / "x").exists()
+
+
+def test_pack_plays_a_kit_with_layers_and_repeats(run: Run, tmp_path: Path, read_preset: Callable[[str], str]) -> None:
+    """Pack a patch with [play] in two layers and two repeats, with its SFZ map, and refuse one without [play]."""
+    play = "\n[play]\nsoft_db       = -18.0\nsoft_click_db = -6.0\nsoft_punch    = 0.6\nspread        = 0.5\n"
+    (tmp_path / "kick.toml").write_text(read_preset("house") + play, encoding="utf-8")
+    status, out, err = run("pack", "kick.toml", "-o", "kit", "--velocities", "2", "--round-robins", "2")
+    assert (status, err) == (0, "")
+    assert out.splitlines()[-1] == "wrote 4 kicks, their patches and the manifest to kit"
+    assert (tmp_path / "kit" / "kick-A1.sfz").read_text(encoding="utf-8").startswith("// kick-A1: 2 velocity layers")
+    assert (tmp_path / "kit" / "kick-A1-v1-rr2.wav").exists()
+    run("init", "tight", "-o", "plain.toml")
+    status, _, err = run("pack", "plain.toml", "-o", "kit2", "--velocities", "2")
+    assert (status, err) == (BAD_INPUT, "plain: velocity layers and round robins need a [play] section\n")

@@ -25,6 +25,7 @@ the polarity.
 - [The low cut](#the-low-cut)
 - [The clipper](#the-clipper)
 - [Rates and the decimator](#rates-and-the-decimator)
+- [Played kits](#played-kits)
 - [The output stage](#the-output-stage)
 - [Evaluation](#evaluation)
 - [Reproducibility](#reproducibility)
@@ -394,6 +395,27 @@ The file keeps the whole filter tail: a render is N internal samples, with N
 the number of n such that n / F ≤ T, the patch's length, and out has
 ⌊(N + L − 2) / K⌋ + 1 samples for L taps.
 
+## Played kits
+
+A drum played by a person never sounds the same twice, and sounds different
+hit softer, not just quieter. `[play]` describes both, and `ballast pack`
+renders them. A softer hit, at x from 1, the patch itself, down to 0, the
+softest, loses (1 − x) of what `[play]` says the softest loses: level before
+the drive, so softer hits also come out cleaner; more of its click; and part
+of its pitch drop, every pitch ratio becoming 1 + (r − 1)(1 − (1 −
+`soft_punch`)(1 − x)). A repeat redraws the attack's noise from a seed of its
+own and moves level, punch, length and click by small amounts, drawn from
+SHAKE-256 under `ballast/play/v1`, so every repeat is the same in every
+version.
+
+The hits of a kit go through one chain. Its clipper takes `clip.db` off the
+hardest hit's peak, and every other hit meets that same threshold, rather
+than one solved for its own peak, which would make every repeat clip
+differently: a repeat whose noise happened to peak higher would lose body.
+The output gain is the smallest any hit needs, so the kit's loudest hit,
+whichever it is, sits at the target, and every other keeps its level against
+it.
+
 ## The output stage
 
 In `gain` mode the output is multiplied by 10^(db/20). In `peak` mode it is
@@ -472,7 +494,8 @@ Audition reuses the renderer and adds four small parts:
 | `family.py` | the rate families: base and internal rates, and the frozen filters, checked by checksum |
 | `render.py` | EQ, low cut, clipper, parallel decimation, output stage, loudness, report, export |
 | `vary.py` | seeded variations, drawn from SHAKE-256, and grids along axes |
-| `pack.py` | kits: names by key, the gates, the manifest |
+| `play.py` | softer hits and repeats, as `[play]` describes them |
+| `pack.py` | kits: names by key, played layers and repeats with their SFZ map, the gates, the manifest |
 | `grit.py` | the vintage sampler: its band-limited input, converter and exact staircase |
 | `room.py` | the seeded tail of the room, and its convolution |
 | `wav.py` | the RIFF writer, the reader of beds and transients, the chunk reader behind `extract`, and writing any file whole or not at all |

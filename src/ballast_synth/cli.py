@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 MAX_VARIATIONS = 999  # how many variations one run writes, at most
+MAX_LAYERS = 16  # how many velocity layers, or round robins, a played kit has at most
 PRESET_DIR = resources.files("ballast_synth").joinpath("data", "presets")
 PRESETS = sorted(f.name.removesuffix(".toml") for f in PRESET_DIR.iterdir() if f.name.endswith(".toml"))
 
@@ -269,7 +270,10 @@ def _patches(paths: list[str]) -> list[tuple[str, str, Patch]]:
 def cmd_pack(a: argparse.Namespace) -> None:
     """Render patches into a finished kit, writing nothing unless every kick passes the gates."""
     bits = FORMATS[a.format]
-    kicks = pack.kicks(_patches(a.patches), a.rate or [], bits)  # every kick renders before any file is written
+    try:  # every kick renders before any file is written
+        kicks = pack.kicks(_patches(a.patches), a.rate or [], bits, a.velocities, a.round_robins)
+    except ValueError as e:
+        raise CliError(str(e)) from None
     if refused := [(k, problems) for k in kicks if (problems := pack.gates(k))]:
         lines = ["not written: these kicks fail the pack's gates"]
         lines += [f"  {k.path}: {problem}" for k, problems in refused for problem in problems]
@@ -322,6 +326,15 @@ def count(text: str) -> int:
     value = int(text)
     if not 1 <= value <= MAX_VARIATIONS:
         msg = f"must be from 1 to {MAX_VARIATIONS}"
+        raise argparse.ArgumentTypeError(msg)
+    return value
+
+
+def layers(text: str) -> int:
+    """Parse a number of velocity layers or round robins: a whole number from 1 to MAX_LAYERS."""
+    value = int(text)
+    if not 1 <= value <= MAX_LAYERS:
+        msg = f"must be from 1 to {MAX_LAYERS}"
         raise argparse.ArgumentTypeError(msg)
     return value
 
@@ -437,6 +450,8 @@ def _sound_commands(sub: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         help="render at this sample rate, into a folder of its own when given more than once (default: each patch's)",
     )
     command.add_argument("--format", choices=FORMATS, default="pcm24", help="as for render, but 24-bit PCM by default")
+    command.add_argument("--velocities", type=layers, default=1, metavar="N", help="velocity layers, from [play]")
+    command.add_argument("--round-robins", type=layers, default=1, metavar="M", help="repeats of each hit, from [play]")
     command.set_defaults(run=cmd_pack)
 
     command = sub.add_parser("audition", help="play a patch in a loop")

@@ -126,7 +126,7 @@ length and character of each note rather than a transposed copy, which is what
 an 808 bassline wants. Every note must be a valid tuning of the patch and fit
 full scale; otherwise nothing is written and every problem is listed.
 
-### `ballast pack PATCH... -o DIR [--rate RATE]... [--format FORMAT]`
+### `ballast pack PATCH... -o DIR [--rate RATE]... [--format FORMAT] [--velocities N] [--round-robins M]`
 
 Renders patches, given as files or as folders of `.toml` files, into a
 finished kit in the folder `DIR`:
@@ -144,6 +144,19 @@ patch renders at its own sample rate unless `--rate` says otherwise; given
 more than once, each rate gets a folder of its own, such as `44100/` and
 `48000/`. The manifest holds nothing of when or how fast the kit was made, so
 the same patches always make the same kit.
+
+`--velocities` and `--round-robins` play each patch as a drum, for patches
+with a `[play]` section: N velocity layers, softest to hardest, each in M
+repeats, named such as `house-A1-v2-rr3.wav`, and an SFZ map per patch, such
+as `house-A1.sfz`, on key 36, General MIDI's bass drum, whose groups split
+the velocities among the layers and whose regions take the repeats in turn.
+The levels are in the samples, so the map tells the sampler not to scale
+them again. The hits of a kit go through one chain, as a drum's do: its
+hardest hit sets the clipper's threshold, and its loudest hit, whichever it
+is, sets the gain they all share, so a soft hit stays soft after the output
+stage and every repeat keeps its own small difference.
+
+![The house preset played in three velocity layers, and two repeats of its hardest hit](figures/play.svg)
 
 Every kick must pass two gates: its true peak at or below 0 dBTP, with no
 sample over the format's ceiling, and its first and last samples below
@@ -415,6 +428,20 @@ shows what they do.
   get: on a one-shot, a high-pass also shifts the body's phase and raises its
   peak against its loudness.
   [Hear the low cut](audio/tight-cut.wav).
+- **Play it like a drum.** A `[play]` section says how the kick sounds hit
+  softer, and how much each repeat differs; `ballast pack` then writes
+  velocity layers and round robins, with an SFZ map:
+
+  ```toml
+  [play]
+  soft_db       = -18.0       # the softest hit's level
+  soft_click_db = -6.0        # and its click's, further
+  soft_punch    = 0.6         # of the pitch drop it keeps
+  spread        = 0.5         # how much each repeat differs
+  ```
+
+  `ballast pack kick.toml -o kit --velocities 4 --round-robins 3` writes 12
+  hits and `kick-A1.sfz` in `kit`.
 - **Play it as an instrument.** `ballast multisample bass.toml E1 E2 -o bass`
   gives an 808 bassline a sample for every note.
 

@@ -61,7 +61,9 @@ spectrum, loudness and patch.
   and `ballast pack` renders a folder of patches
   into a kit: WAVs named by key, their patches beside them, a manifest of
   tuning, peaks and loudness, and nothing written unless every kick passes
-  its gates.
+  its gates. With `[play]`, it plays each kick like a drum: velocity layers
+  that lose level, click and punch, and round robins that never repeat
+  exactly, with an SFZ map.
 - **Live audition.** Plays the exact render buffer, renders again on every
   save, and loops your bass line under the hits in tempo, without resampling.
 - **Sampler-ready.** The root key sits in the `smpl` chunk; 16- and 24-bit

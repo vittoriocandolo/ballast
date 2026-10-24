@@ -2,8 +2,8 @@
 
 A patch is a complete TOML description of one kick. Every field is required
 and the renderer has no defaults, so a future default can never change an old
-patch. The sections a patch may leave out are `[sub]`, `[room]`, `[grit]` and
-`[transient]`: without one, the patch has none. The parser rejects anything outside the valid domain, reports every
+patch. The sections a patch may leave out are `[sub]`, `[room]`, `[grit]`,
+`[play]` and `[transient]`: without one, the patch has none. The parser rejects anything outside the valid domain, reports every
 problem with its field path, and never clamps or repairs.
 
 ![The tight preset's pitch, body and attack curves through their knots, and the first 60 ms of its output](figures/anatomy-tight.svg)
@@ -193,6 +193,21 @@ and the low-pass at 0 Hz, is not there at all.
 | `db` | number | 0 – 12 dB | How far the clipper brings the file's true peak down, exactly; what lies below its knee is untouched. 0 is off. With a peak target in `[output]`, these decibels come back as loudness. |
 | `knee_db` | number | 0 – 6 dB | How far below the threshold the clipper starts to bend: 0 is a hard clip, 6 the softest. |
 
+### `[play]`: how the kick is played
+
+Optional: only `ballast pack --velocities` and `--round-robins` read it, to
+play the kick as a drummer would. The patch itself is the hardest hit, and
+these fields say what the softest becomes; the layers between lose part of
+it, in proportion. The levels change before the drive, so softer hits also
+come out cleaner.
+
+| Field | Type | Range | Meaning |
+|---|---|---|---|
+| `soft_db` | number | −40 – 0 dB | The softest hit's level, against the hardest: the body, the sub, the attack and the transient. |
+| `soft_click_db` | number | −24 – 0 dB | How much further its click drops: the attack and the transient, since a soft beater barely clicks. |
+| `soft_punch` | number | 0 – 1 | How much of the pitch drop it keeps: every pitch ratio's distance from 1, scaled by it, since a soft hit bends the head less. |
+| `spread` | number | 0 – 1 | How much each repeat differs. Each draws the attack's noise from a seed of its own, and moves its level by up to ±1 dB, its punch and length by ±4% and its click by ±2 dB, all times `spread`. |
+
 ### `[transient]`: a sampled click
 
 Optional: a patch without this section has no transient.
@@ -273,11 +288,11 @@ and a renderer refuses a schema it does not know rather than guess.
 
 - **Schema 3**, the current one, adds `body.bright_hz`, `body.modes`, `attack.pitch`, `drive.asymmetry`,
   `drive.mix`, the `[eq]` and `[clip]` sections, and the optional `[sub]`,
-  `[room]`, `[grit]` and `[transient]`.
+  `[room]`, `[grit]`, `[play]` and `[transient]`.
 - **Schema 2** adds `output.low_cut_hz` to schema 1.
 - **Schema 1** has no low cut.
 
 Ballast still reads schemas 1 and 2 and renders them exactly as they always
 sounded: what they lack is off, with a sine body without modes, a fixed tone, no asymmetry, all of the
-drive, and no EQ, clipper, low cut, sub, room, grit or transient. `tune` and `stretch` write them back as schema 3 with
+drive, and no EQ, clipper, low cut, sub, room, grit, playing or transient. `tune` and `stretch` write them back as schema 3 with
 those values, which sound the same.
