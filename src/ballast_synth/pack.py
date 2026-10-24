@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import __version__, play, render, wav
-from .patch import Patch, dumps, edit, midi_pitch, note_name
+from .patch import Patch, PatchError, dumps, edit, midi_pitch, note_name
 
 if TYPE_CHECKING:
     import numpy as np
@@ -129,15 +129,22 @@ def kicks(
 
 def _kit(p: Patch, stem: str, bits: int | None, layers: int, robins: int) -> list[Kick]:
     """Render every layer and repeat of a played patch through one chain, its loudest hit at the patch's level."""
-    hardest = render.synthesized(p)  # the kit's clipper, set by its hardest hit
-    hits = []
+    played, problems = [], []  # every hit is made before any renders, so that every problem is listed at once
     for j, velocity in enumerate(velocities(layers)):
         x = j / (layers - 1) if layers > 1 else 1.0
         for k in range(robins):
-            hit = play.again(play.softer(p, x), k)
-            s = hardest if hit is p else render.synthesized(hit, hardest.threshold)
             path = f"{stem}{f'-v{j + 1}' if layers > 1 else ''}{f'-rr{k + 1}' if robins > 1 else ''}.wav"
-            hits.append((path, hit, s, velocity, k + 1))
+            try:
+                played.append((path, play.again(play.softer(p, x), k), velocity, k + 1))
+            except PatchError as e:
+                problems += [f"{path}: {problem}" for problem in e.problems]
+    if problems:
+        raise PatchError(problems)
+    hardest = render.synthesized(p)  # the kit's clipper, set by its hardest hit
+    hits = []
+    for path, hit, velocity, robin in played:
+        s = hardest if hit is p else render.synthesized(hit, hardest.threshold)
+        hits.append((path, hit, s, velocity, robin))
     ceiling = render.ceiling_of(bits)
     gain = min(render.output_gain(s.signal, p.output, ceiling) for _, _, s, _, _ in hits)
     kicks = []

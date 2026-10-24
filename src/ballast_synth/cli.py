@@ -272,6 +272,9 @@ def cmd_pack(a: argparse.Namespace) -> None:
     bits = FORMATS[a.format]
     try:  # every kick renders before any file is written
         kicks = pack.kicks(_patches(a.patches), a.rate or [], bits, a.velocities, a.round_robins)
+    except PatchError as e:
+        msg = "not written: these hits cannot be played"
+        raise _listing(msg, e) from None
     except ValueError as e:
         raise CliError(str(e)) from None
     if refused := [(k, problems) for k in kicks if (problems := pack.gates(k))]:

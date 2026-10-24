@@ -10,8 +10,8 @@ drop of its click, since a soft beater barely clicks, and part of its pitch
 drop, since a soft hit bends the head less, every pitch ratio r becoming
 1 + (r - 1) · (1 - (1 - soft_punch)(1 - x)).
 
-Each repeat after the first is the same hit played again: its attack's noise
-is drawn from a seed of its own, the greatest difference between two real
+Each repeat after the first is the same hit played again, unless the spread
+is 0: its attack's noise is drawn from a seed of its own, the greatest difference between two real
 hits, and its level, pitch drop, length and click move by small amounts,
 drawn from SHAKE-256 under `ballast/play/v1`, the patch's seed and the
 repeat's number:
@@ -73,8 +73,11 @@ def draws(seed: int, number: int) -> tuple[int, list[float]]:
 
 
 def again(p: Patch, number: int) -> Patch:
-    """Return repeat `number` of the hit: 0 is the hit itself, every other one the same hit played again."""
-    if p.play is None or number == 0:
+    """Return repeat `number` of the hit: 0 is the hit itself, every other one the same hit played again.
+
+    At a spread of 0, every repeat is the hit itself, as a programmed kick repeats.
+    """
+    if p.play is None or number == 0 or p.play.spread == 0.0:
         return p
     spread = p.play.spread
     seed, (level, punch, length, click) = draws(p.seed, number)

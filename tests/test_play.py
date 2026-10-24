@@ -76,3 +76,17 @@ def test_a_kit_maps_its_layers_and_repeats_for_samplers(played: patch.Patch) -> 
         "<region> sample=kick-A1-v2-rr1.wav seq_position=1",
         "<region> sample=kick-A1-v2-rr2.wav seq_position=2",
     ]
+
+
+def test_a_spread_of_zero_repeats_the_hit_exactly(played: patch.Patch) -> None:
+    """Play a kick with no spread, whose every repeat is the hit itself, noise and all."""
+    still = patch.edit(played, "play.spread", 0.0)
+    assert play.again(still, 1) is still
+
+
+def test_a_kit_refuses_hits_that_no_patch_can_hold(played: patch.Patch) -> None:
+    """Play the softest hit so soft that its click falls below -60 dB, and get that problem, named by its file."""
+    soft = patch.edit(patch.edit(played, "play.soft_db", -40.0), "play.soft_click_db", -24.0)
+    with pytest.raises(patch.PatchError) as caught:
+        pack.kicks([("kick", "", soft)], [], 24, 3, 1)
+    assert caught.value.problems == ["kick-A1-v1.wav: attack.level_db: -80 is outside -60 … 24 (or -inf)"]

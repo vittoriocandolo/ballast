@@ -199,14 +199,15 @@ Optional: only `ballast pack --velocities` and `--round-robins` read it, to
 play the kick as a drummer would. The patch itself is the hardest hit, and
 these fields say what the softest becomes; the layers between lose part of
 it, in proportion. The levels change before the drive, so softer hits also
-come out cleaner.
+come out cleaner. A kit whose softest hit would take a level below −60 dB is
+refused, with every such problem named.
 
 | Field | Type | Range | Meaning |
 |---|---|---|---|
 | `soft_db` | number | −40 – 0 dB | The softest hit's level, against the hardest: the body, the sub, the attack and the transient. |
 | `soft_click_db` | number | −24 – 0 dB | How much further its click drops: the attack and the transient, since a soft beater barely clicks. |
 | `soft_punch` | number | 0 – 1 | How much of the pitch drop it keeps: every pitch ratio's distance from 1, scaled by it, since a soft hit bends the head less. |
-| `spread` | number | 0 – 1 | How much each repeat differs. Each draws the attack's noise from a seed of its own, and moves its level by up to ±1 dB, its punch and length by ±4% and its click by ±2 dB, all times `spread`. |
+| `spread` | number | 0 – 1 | How much each repeat differs. Each draws the attack's noise from a seed of its own, and moves its level by up to ±1 dB, its punch and length by ±4% and its click by ±2 dB, all times `spread`. At 0, every repeat is the same hit, as a programmed kick repeats. |
 
 ### `[transient]`: a sampled click
 
