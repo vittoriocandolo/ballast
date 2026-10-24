@@ -4,15 +4,18 @@
 """The patch: a complete, readable description of one kick.
 
 Every field is required and the renderer holds no defaults, so a future
-default can never change an old patch. Each field declares its rule and its
-comment in the canonical TOML once, on its dataclass, and parsing, dumping
-and editing all work from those declarations. The parser rejects anything
-outside the valid domain, reporting every problem with its field path, and
-never clamps or repairs.
+default can never change an old patch. The one section a patch may leave out
+is [transient], a layer of its own: without it, the patch has none. Each
+field declares its rule and its comment in the canonical TOML once, on its
+dataclass, and parsing, dumping and editing all work from those
+declarations. The parser rejects anything outside the valid domain, reporting
+every problem with its field path, and never clamps or repairs.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import codecs
 import dataclasses
 import datetime as dt
@@ -24,9 +27,13 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
+import numpy as np
+
 if TYPE_CHECKING:
     import os
     from collections.abc import Callable, Collection, Iterable
+
+    from numpy.typing import NDArray
 
 type Knots = tuple[tuple[float, float], ...]  # a curve's (ms, value) knots
 
@@ -67,9 +74,15 @@ def _kind(v: object) -> str:
     return _KINDS.get(type(v), type(v).__name__)
 
 
-def _keys(problems: list[str], prefix: str, table: dict[str, Any], expected: Collection[str]) -> bool:
-    """Report unknown and missing keys; True when none is missing."""
-    problems += [f"{prefix}{key}: unknown field" for key in table if key not in expected]
+def _keys(
+    problems: list[str],
+    prefix: str,
+    table: dict[str, Any],
+    expected: Collection[str],
+    optional: Collection[str] = (),
+) -> bool:
+    """Report unknown keys, and missing ones of those expected; True when none is missing."""
+    problems += [f"{prefix}{key}: unknown field" for key in table if key not in expected and key not in optional]
     missing = [key for key in expected if key not in table]
     problems += [f"{prefix}{key}: missing" for key in missing]
     return not missing
@@ -129,16 +142,21 @@ def _toml(v: object) -> str:
 # Field declarations. Each carries `parse(path, raw, problems, section)`, which
 # appends any problems and returns the normalized value or None; `section` holds
 # the fields of the same section parsed before it. `key` names the value of each
-# knot in a curve. A declaration is typed as the value its field holds, as
-# dataclasses.field is.
+# knot in a curve, and `dump`, if any, writes the value in the canonical TOML. A
+# declaration is typed as the value its field holds, as dataclasses.field is.
 
 if TYPE_CHECKING:
     type Parse[T] = Callable[[str, Any, list[str], dict[str, Any]], T | None]
     type Check = Callable[[str, Knots, list[str], dict[str, Any]], None]
 
 
-def _rule[T](parse: Parse[T], note: str = "", key: str | None = None) -> T:
-    return cast("T", field(metadata={"parse": parse, "note": note, "key": key}))
+def _rule[T](
+    parse: Parse[T],
+    note: str = "",
+    key: str | None = None,
+    dump: Callable[[T], str] | None = None,
+) -> T:
+    return cast("T", field(metadata={"parse": parse, "note": note, "key": key, "dump": dump}))
 
 
 def number(
@@ -224,6 +242,53 @@ def knots(key: str, count: tuple[int, int], max_ms: float, check: Check, note: s
         return curve
 
     return _rule(parse, note, key)
+
+
+def encode(samples: NDArray[np.floating[Any]]) -> str:
+    """Write samples as a transient stores them: little-endian float32, in base64."""
+    return base64.b64encode(samples.astype("<f4").tobytes()).decode("ascii")
+
+
+def decode(text: str) -> NDArray[np.float32]:
+    """Read the samples of a transient's base64 text (read-only)."""
+    return np.frombuffer(base64.b64decode(text), dtype="<f4")
+
+
+def _wrapped(text: str) -> str:
+    """Write base64 as a TOML multi-line string of 64 characters a line, each line break escaped away."""
+    return '"""\n' + "".join(f"{text[i : i + 64]}\\\n" for i in range(0, len(text), 64)) + '"""'
+
+
+def sampled(note: str = "") -> str:
+    """Declare a transient's samples: base64 of little-endian float32, peaking at exactly 1, ending by 1 s."""
+
+    def parse(path: str, raw: object, problems: list[str], section: dict[str, Any]) -> str | None:
+        if not isinstance(raw, str):
+            problems.append(f"{path}: expected base64 text, found {_kind(raw)}")
+            return None
+        try:
+            data = base64.b64decode(raw, validate=True)
+        except binascii.Error:
+            problems.append(f"{path}: is not base64")
+            return None
+        if not data or len(data) % 4:
+            problems.append(f"{path}: needs whole float32 samples, at least one, found {len(data)} bytes")
+            return None
+        samples = np.frombuffer(data, dtype="<f4")
+        if not np.all(np.isfinite(samples)):
+            problems.append(f"{path}: every sample must be finite")
+            return None
+        peak = float(np.max(np.abs(samples)))
+        if peak != 1.0:
+            problems.append(f"{path}: the samples must peak at exactly 1, found {peak!r}; level_db sets the level")
+        rate, start, pitch = section["rate"], section["start_ms"], section["pitch"]
+        if rate is not None and start is not None and pitch is not None:
+            end = start + 1000 * samples.size / (rate * pitch)
+            if end > MAX_ATTACK_MS:
+                problems.append(f"{path}: the transient ends at {end:g} ms, after {MAX_ATTACK_MS:g} ms")
+        return base64.b64encode(data).decode("ascii")  # canonical, so that equal samples make equal patches
+
+    return _rule(parse, note, dump=_wrapped)
 
 
 def _spacing(path: str, curve: Knots, problems: list[str]) -> None:
@@ -343,8 +408,37 @@ class Output:
 
 
 @dataclass(frozen=True)
+class Transient:
+    """A sampled transient, layered with the attack: its level, start, pitch and polarity, and its samples."""
+
+    level_db: float = number(-60.0, 24.0, "its peak", off=-math.inf)
+    start_ms: float = number(0.0, MAX_ATTACK_MS, "after the trigger")
+    pitch: float = number(0.25, 4.0, "playback ratio, 0.25 … 4")
+    polarity: int = choice((1, -1))
+    rate: int = choice(SAMPLE_RATES, "of the samples, float32 in base64")
+    samples: str = sampled()
+
+    @classmethod
+    def of(cls, samples: NDArray[np.floating[Any]], rate: int) -> Transient:
+        """Take mono samples at `rate` as they sound: stored to peak at exactly 1, with their own peak as the level."""
+        peak = float(np.max(np.abs(samples), initial=0.0))
+        if not math.isfinite(peak):
+            msg = "every sample must be finite"
+            raise ValueError(msg)
+        if peak == 0.0:
+            msg = "the samples are silent"
+            raise ValueError(msg)
+        return cls(round(20 * math.log10(peak), 2), 0.0, 1.0, 1, rate, encode(samples / peak))
+
+    @property
+    def end_ms(self) -> float:
+        """When its last sample ends, after the trigger."""
+        return self.start_ms + 1000 * decode(self.samples).size / (self.rate * self.pitch)
+
+
+@dataclass(frozen=True)
 class Patch:
-    """One kick: the seed of its noise and dither, and its four sections."""
+    """One kick: the seed of its noise and dither, its five sections, and its transient, if it has one."""
 
     seed: int
     body: Body
@@ -352,14 +446,18 @@ class Patch:
     drive: Drive
     clip: Clip
     output: Output
+    transient: Transient | None
 
     @property
     def length_ms(self) -> float:
-        """The source length: the later of the two amplitude shapes' last knots."""
-        return max(self.body.amp[-1][0], self.attack.amp[-1][0])
+        """The source length: the end of the latest source, the amplitude shapes' last knots or the transient."""
+        ends = [self.body.amp[-1][0], self.attack.amp[-1][0]]
+        if self.transient is not None:
+            ends.append(self.transient.end_ms)
+        return max(ends)
 
 
-type Section = Body | Attack | Drive | Clip | Output
+type Section = Body | Attack | Drive | Clip | Output | Transient
 
 SECTIONS: dict[str, type[Section]] = {
     "body": Body,
@@ -367,17 +465,26 @@ SECTIONS: dict[str, type[Section]] = {
     "drive": Drive,
     "clip": Clip,
     "output": Output,
+    "transient": Transient,  # last, since its samples run long
 }
+OPTIONAL = ("transient",)  # the sections a patch may leave out
 FIXED_TONE = ((0.0, 1.0),)  # a pitch curve of one knot: the attack's tone holds tone_hz
-# What each older schema lacks, with the values that render its patches exactly as they always sounded.
-ADDED: dict[int, dict[str, dict[str, Any]]] = {
+# What each older schema lacks, with the values that render its patches exactly as they always sounded; None for
+# an optional section it could not have, so that its patches have none.
+ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
     1: {
         "attack": {"pitch": FIXED_TONE},
         "drive": {"asymmetry": 0.0, "mix": 1.0},
         "clip": {"db": 0.0, "knee_db": 0.0},
         "output": {"low_cut_hz": 0.0},
+        "transient": None,
     },
-    2: {"attack": {"pitch": FIXED_TONE}, "drive": {"asymmetry": 0.0, "mix": 1.0}, "clip": {"db": 0.0, "knee_db": 0.0}},
+    2: {
+        "attack": {"pitch": FIXED_TONE},
+        "drive": {"asymmetry": 0.0, "mix": 1.0},
+        "clip": {"db": 0.0, "knee_db": 0.0},
+        "transient": None,
+    },
     SCHEMA: {},
 }
 CURVES = tuple(f"{name}.{f.name}" for name, cls in SECTIONS.items() for f in fields(cls) if f.metadata["key"])
@@ -393,6 +500,17 @@ def _schema(data: dict[str, Any]) -> int:
     if schema not in ADDED:
         raise PatchError([f"schema: unsupported version {schema}; this renderer reads schemas 1 to {SCHEMA}"])
     return schema
+
+
+def _seed(data: dict[str, Any], problems: list[str]) -> None:
+    """Check the seed, if there is one: a missing seed is reported with the other missing keys."""
+    if "seed" not in data:
+        return
+    seed = data["seed"]
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        problems.append(f"seed: expected an integer, found {_kind(seed)}")
+    elif not 0 <= seed <= MAX_SEED:
+        problems.append(f"seed: {seed} is outside 0 … 2**63 - 1")
 
 
 def _section(
@@ -416,28 +534,28 @@ def from_dict(data: object) -> Patch:
     if not isinstance(data, dict):
         raise PatchError(["expected a table"])
     added = ADDED[_schema(data)]
-    whole = {name for name, cls in SECTIONS.items() if added.get(name, {}).keys() >= {f.name for f in fields(cls)}}
+    every = {name: {f.name for f in fields(cls)} for name, cls in SECTIONS.items()}
+    # The sections the patch's schema did not have at all, which ADDED fills, or leaves out with None.
+    whole = {name for name, new in added.items() if new is None or new.keys() >= every[name]}
     problems: list[str] = []
-    _keys(problems, "", data, ("schema", "seed", *(name for name in SECTIONS if name not in whole)))
-    seed = data.get("seed")
-    if "seed" in data:
-        if isinstance(seed, bool) or not isinstance(seed, int):
-            problems.append(f"seed: expected an integer, found {_kind(seed)}")
-        elif not 0 <= seed <= MAX_SEED:
-            problems.append(f"seed: {seed} is outside 0 … 2**63 - 1")
+    required = [name for name in SECTIONS if name not in whole and name not in OPTIONAL]
+    _keys(problems, "", data, ("schema", "seed", *required), [name for name in OPTIONAL if name not in whole])
+    _seed(data, problems)
     sections: dict[str, dict[str, Any]] = {}
     for name, cls in SECTIONS.items():
-        if name in whole:  # a section the patch's schema did not have at all
-            sections[name] = dict(added[name])
+        new = added.get(name)
+        if name in whole:
+            if new is not None:
+                sections[name] = dict(new)
+        elif name not in data:  # reported as missing above, unless the section is optional
             continue
-        if name not in data:  # reported as missing above
-            continue
-        if not isinstance(data[name], dict):
+        elif not isinstance(data[name], dict):
             problems.append(f"{name}: expected a table, found {_kind(data[name])}")
-            continue
-        sections[name] = _section(name, cls, data[name], problems, added.get(name, {}))
+        else:
+            sections[name] = _section(name, cls, data[name], problems, new or {})
     if problems:
         raise PatchError(problems)
+    transient = sections.get("transient")
     return Patch(
         data["seed"],
         Body(**sections["body"]),
@@ -445,6 +563,7 @@ def from_dict(data: object) -> Patch:
         Drive(**sections["drive"]),
         Clip(**sections["clip"]),
         Output(**sections["output"]),
+        None if transient is None else Transient(**transient),
     )
 
 
@@ -453,7 +572,8 @@ def to_dict(p: Patch) -> dict[str, Any]:
     data: dict[str, Any] = {"schema": SCHEMA, "seed": p.seed}
     for name, cls in SECTIONS.items():
         section = getattr(p, name)
-        data[name] = {f.name: _plain(getattr(section, f.name), f.metadata["key"]) for f in fields(cls)}
+        if section is not None:  # an optional section the patch leaves out
+            data[name] = {f.name: _plain(getattr(section, f.name), f.metadata["key"]) for f in fields(cls)}
     return data
 
 
@@ -486,12 +606,14 @@ def dumps(p: Patch) -> str:
     lines = [f"schema = {SCHEMA}", f"seed = {p.seed}"]
     for name, cls in SECTIONS.items():
         section = getattr(p, name)
+        if section is None:  # an optional section the patch leaves out
+            continue
         rows: list[tuple[str, str, str]] = []
         curves: list[str] = []
         for f in fields(cls):
             meta, value = f.metadata, getattr(section, f.name)
             if meta["key"] is None:
-                rows.append((f.name, _toml(value), meta["note"]))
+                rows.append((f.name, (meta["dump"] or _toml)(value), meta["note"]))
                 continue
             times = [f"{ms!r}," for ms, _ in value]  # with their commas, so that the values after them line up
             width = max(map(len, times))
@@ -511,10 +633,18 @@ def _note(line: str, note: str) -> str:
 
 
 def edit(p: Patch, path: str, value: object) -> Patch:
-    """Return the patch with one field, such as "body.tune_hz", replaced, and validated like any patch."""
-    section, name = path.split(".")
-    part = dataclasses.replace(getattr(p, section), **{name: value})
-    return from_dict(to_dict(dataclasses.replace(p, **{section: part})))
+    """Return the patch with one field, such as "body.tune_hz", or one section replaced, validated like any patch.
+
+    A section's path is its name, such as "transient", and an optional one's value may be None, to leave it out.
+    """
+    section, _, name = path.partition(".")
+    new: Any = value
+    if name:
+        part = getattr(p, section)
+        if part is None:
+            raise PatchError([f"{section}: the patch has none"])
+        new = dataclasses.replace(part, **{name: value})
+    return from_dict(to_dict(dataclasses.replace(p, **{section: new})))
 
 
 def stretch(p: Patch, curve: str, factor: float, anchor_ms: float | None = None) -> Patch:

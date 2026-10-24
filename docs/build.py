@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 from scipy.interpolate import CubicSpline
+from scipy.io import wavfile
 from scipy.signal import fftconvolve, sosfreqz
 
 from ballast_synth import audition, family, noise, patch, render, shaper
@@ -425,6 +426,7 @@ def design_moves(tight: Kick) -> list[tuple[str, Kick]]:
         ("tight-long", "ballast stretch kick.toml body.amp 1.5", patch.stretch(p, "body.amp", 1.5)),
         ("tight-click", "attack.level_db = -8.0", patch.edit(p, "attack.level_db", -8.0)),
         ("tight-zap", "attack.pitch: 4 to 1 in 2 ms", patch.edit(p, "attack.pitch", ZAP)),
+        ("tight-sample", "ballast transient kick.toml click.wav", patch.edit(p, "transient", CLICK)),
         ("tight-drive", "drive.db = 18.0", patch.edit(p, "drive.db", 18.0)),
         ("tight-cut", "output.low_cut_hz = 30.0", patch.edit(p, "output.low_cut_hz", 30.0)),
         ("tight-warm", "drive.asymmetry = 1.0", patch.edit(p, "drive.asymmetry", 1.0)),
@@ -500,16 +502,16 @@ def figure_presets(kicks: dict[str, Kick]) -> str:
 
 def figure_pipeline() -> str:
     """Draw the functional block diagram: from patch to file."""
-    top = 76
-    cy = top + 98
+    top, zone = 76, 276
+    cy = top + 148
     body = [
         (
             '<defs><marker id="pipeline-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" '
             'orient="auto-start-reverse"><path class="head" d="M0,1L10,5L0,9Z"/></marker></defs>'
         ),
-        f'<rect class="zone" x="16" y="{top}" width="928" height="196" rx="8"/>',
+        f'<rect class="zone" x="16" y="{top}" width="928" height="{zone}" rx="8"/>',
         f'<text class="label" x="32" y="{top + 22}">32 × the base rate: 1411.2 or 1536 kHz</text>',
-        f'<text class="label" x="944" y="{top + 228}" text-anchor="end">at the file\'s sample rate</text>',
+        f'<text class="label" x="944" y="{top + zone + 32}" text-anchor="end">at the file\'s sample rate</text>',
     ]
 
     def box(x: float, y: float, w: float, title: str, *lines: tuple[str, str], h: float = 64) -> str:
@@ -523,20 +525,22 @@ def figure_pipeline() -> str:
         return f'<path class="flow" d="{d}" marker-end="url(#pipeline-head)"/>'
 
     body.append(box(32, top + 36, 150, "Body", ("math", "sin φ + h₂ sin 2φ"), ("label", "pitch curve to phase")))
-    body.append(box(32, top + 116, 150, "Attack", ("math", "tone + noise"), ("label", "seeded, band-limited")))
+    body.append(box(32, top + 116, 150, "Attack", ("math", "swept tone + noise"), ("label", "seeded, band-limited")))
+    body.append(box(32, top + 196, 150, "Transient", ("label", "a sampled click"), ("label", "read at any pitch")))
     body.append(
         f'<circle class="box" cx="214" cy="{cy}" r="14"/>'
         f'<text class="boxtitle" x="214" y="{cy + 5}" text-anchor="middle">+</text>',
     )
-    body.append(arrow(f"M182,{top + 68}C192,{top + 68} 204,{cy - 30} 208,{cy - 15}"))
-    body.append(arrow(f"M182,{top + 148}C192,{top + 148} 204,{cy + 30} 208,{cy + 15}"))
+    body.append(arrow(f"M182,{top + 68}C192,{top + 68} 204,{cy - 50} 208,{cy - 15}"))
+    body.append(arrow(f"M182,{cy}H198"))
+    body.append(arrow(f"M182,{top + 228}C192,{top + 228} 204,{cy + 50} 208,{cy + 15}"))
     body.append(box(246, cy - 32, 190, "Drive", ("math", "tanh(αx)/tanh α + even"), ("label", "mixed with the dry")))
     body.append(arrow(f"M228,{cy}H244"))
     body.append(box(462, cy - 32, 140, "Low cut", ("label", "12 dB/octave"), ("label", "0 Hz: off")))
     body.append(arrow(f"M436,{cy}H460"))
     body.append(box(628, cy - 32, 180, "Clipper", ("label", "true peak down by db"), ("label", "knee: hard to soft")))
     body.append(arrow(f"M602,{cy}H626"))
-    low = top + 244
+    low = top + zone + 48
     body.append(box(628, low, 180, "Decimator", ("math", "↓32, ↓16 or ↓8"), ("label", "minimum phase")))
     body.append(arrow(f"M718,{cy + 32}V{low - 2}"))
     body.append(box(426, low, 160, "Output", ("label", "gain or peak target"), ("label", "polarity")))
@@ -755,6 +759,19 @@ def figure_attack(p: patch.Patch) -> str:
 ZAP = ((0.0, 4.0), (2.0, 1.0))  # the usage guide's zap: two octaves down into tone_hz, in 2 ms
 
 
+def click(rate: int) -> NDArray[np.float64]:
+    """Make the click the usage guide layers: three decaying modes of a struck block, 30 ms long, at -12 dBFS."""
+    t = np.arange(round(0.03 * rate)) / rate
+    x = np.zeros_like(t)
+    for hz, ms, amplitude in ((1730.0, 3.0, 1.0), (4210.0, 1.2, 0.6), (7650.0, 0.6, 0.35)):
+        x += amplitude * np.exp(-1000 * t / ms) * np.sin(2 * math.pi * hz * t)
+    x *= 10 ** (-12 / 20) / float(np.max(np.abs(x)))
+    return x
+
+
+CLICK = patch.Transient.of(click(RATE), RATE)  # as `ballast transient` takes the click
+
+
 def centroid(v: Voice) -> float:
     """Measure the spectral centroid of the attack's tone under its shape, in Hz, rounded to 0.1 kHz."""
     n = np.arange(round(v.attack_amp.t[-1] * INTERNAL) + 1)
@@ -792,6 +809,40 @@ def figure_zap(p: patch.Patch) -> str:
     subtitle = "attack.pitch sweeps the click's tone into tone_hz, its phase integrated exactly, as the body's is"
     description = "A zap: the tone's frequency falling from 10 kHz into 2.5 kHz in 2 ms, and the tone it makes"
     return svg(fit(pitch, 1), "A zap", subtitle, "".join(body), description)
+
+
+PITCHES = (("o1", 0.5), ("o3", 1.0), ("o4", 2.0))
+
+
+def figure_transient(k: Kick) -> str:
+    """Draw the click alone at three pitches, and the tight preset's opening with the click layered and without."""
+    alone = patch.edit(patch.edit(k.p, "body.level_db", -math.inf), "attack.level_db", -math.inf)
+    alone = patch.edit(patch.edit(patch.edit(alone, "drive.db", 0.0), "output.db", 0.0), "transient", CLICK)
+    ms = 15
+    pitches = Panel(LEFT, Axis(0, ms), Axis(-0.3, 0.3))
+    body = [
+        pitches.frame(
+            Ticks((0, 5, 10, 15), num, "ms"),
+            Ticks((-0.25, 0, 0.25), num, "The click alone, as the file has it"),
+        ),
+    ]
+    for cls, pitch in PITCHES:
+        audio, _ = render.render(patch.edit(alone, "transient.pitch", pitch))
+        body.append(pitches.line(cls, *trace(audio, ms, round(pitches.w))))
+    layered = kick("tight-sample", patch.dumps(patch.edit(k.p, "transient", CLICK)))
+    ms = 12
+    wave = Panel(RIGHT, Axis(0, ms), Axis(-0.6, 0.6))
+    body += [
+        wave.frame(Ticks((0, 3, 6, 9, 12), num, "ms"), Ticks((-0.5, 0, 0.5), num, "The tight preset, first 12 ms")),
+        wave.line("ref", *trace(k.audio, ms, round(wave.w))),
+        wave.line("s1", *trace(layered.audio, ms, round(wave.w))),
+    ]
+    keys = [(f"k{cls}", f"pitch {num(pitch)}") for cls, pitch in PITCHES]
+    keys += [("kref", "tight"), ("key1", "with the click at pitch 1")]
+    body.append(legend_row(below(pitches), keys))
+    subtitle = "A sampled click plays at any pitch, and sums with the body and the attack before the drive"
+    description = "A click of three decaying modes at pitches 0.5, 1 and 2, and the tight preset with it layered"
+    return svg(fit(pitches, 1), "The transient", subtitle, "".join(body), description)
 
 
 DRIVES = (("o1", 6.0), ("o2", 12.0), ("o3", 21.0), ("o4", 48.0))
@@ -1292,6 +1343,7 @@ def main() -> None:
     figures, audio = DOCS / "figures", DOCS / "audio"
     figures.mkdir(exist_ok=True)
     audio.mkdir(exist_ok=True)
+    wavfile.write(audio / "click.wav", RATE, click(RATE).astype(np.float32))  # a WAV from elsewhere, to layer
     for k in [*kicks.values(), *(k for _, k in moves[1:])]:
         render.export(audio / f"{k.name}.wav", k.p, k.text, k.audio, 16)
         summary = str(k.report).replace("\n", " | ")
@@ -1304,6 +1356,7 @@ def main() -> None:
         "curves": figure_curves(tight),
         "attack": figure_attack(tight),
         "zap": figure_zap(tight),
+        "transient": figure_transient(kicks["tight"]),
         "saturator": figure_saturator(),
         "aliasing": figure_aliasing(),
         "asymmetry": figure_asymmetry(),

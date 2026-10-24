@@ -6,7 +6,8 @@ way every time.
 ![Waveforms of the four presets, tight, driven, round and long, rendered at 48 kHz](docs/figures/presets.svg)
 
 Ballast synthesizes one voice: a tonal body with an exact pitch sweep, and a
-short attack of a tone, which can sweep too, and noise. It computes them at 32 times the sample rate,
+short attack of a tone, which can sweep too, and noise, with any sampled click
+layered over them. It computes them at 32 times the sample rate,
 saturates their sum, and band-limits it once with a frozen minimum-phase
 filter. The files it writes keep every alias at least 104 dB down, are ready
 for any sampler, and carry the patch that made them.
@@ -30,6 +31,10 @@ one's curves, spectrum and patch.
   Loudness is the clipper: `clip.db` takes exactly that many decibels off the
   file's true peak, from a hard to a soft knee. A zap is `attack.pitch`: the
   click's tone dives into its own frequency.
+- **Sampled transients.** `ballast transient` layers any short WAV over the
+  attack, stored inside the patch. The same frozen filter brings it up to the
+  internal rate, it plays at any pitch and from either rate family within 140
+  dB of exact interpolation, and the drive glues it to the body.
 - **Exact pitch.** Pitch curves are integrated exactly into phase. With
   `phase_ref = "tail"`, an 808-style tail meets the free-running sine at its
   note exactly, whatever the sweep did before.
@@ -95,7 +100,7 @@ wrote kick.wav
 | PCM headroom | peaks stay 2 LSB below full scale, so dither never clips |
 | Low cut | optional 12 dB/octave Butterworth high-pass, 10 Hz – 1 kHz |
 | Tuning | 20 Hz – 1 kHz, by frequency or note name; the sweep spans 10 Hz – 20 kHz |
-| Length | body up to 8 s, attack up to 1 s |
+| Length | body up to 8 s, attack and transient up to 1 s |
 | Render time | about 60 ms for a 240 ms kick, about 0.25 s for a 1.45 s one, on a 12-core laptop; the clipper adds up to half a second |
 
 ## Documentation

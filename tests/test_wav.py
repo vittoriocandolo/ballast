@@ -45,6 +45,24 @@ def test_pcm_samples_read_back_exactly(tmp_path: Path, bits: int) -> None:
     assert np.array_equal(data.astype(np.int64), q << (8 * data.dtype.itemsize - bits))
 
 
+@pytest.mark.parametrize("bits", [None, 24, 16])
+def test_read_gives_floats_with_full_scale_at_one(tmp_path: Path, bits: int | None) -> None:
+    """Write samples from full scale to full scale in each format Ballast writes, and read them back as floats."""
+    full_scale = 1.0 if bits is None else 2.0 ** (bits - 1)
+    steps = np.array([-full_scale, -full_scale / 2, 0.0, full_scale / 4, full_scale - 1])
+    samples = steps.astype(np.float32) if bits is None else steps.astype(np.int32)
+    wav.write(tmp_path / "x.wav", samples, wav.Format(CD_RATE, bits), ROOT, {})
+    rate, frames = wav.read(tmp_path / "x.wav")
+    assert (rate, frames.shape, frames.dtype) == (CD_RATE, (5, 1), np.dtype(np.float64))
+    assert np.array_equal(frames[:, 0], steps / full_scale)
+
+
+def test_read_keeps_the_channels_of_each_frame(tmp_path: Path) -> None:
+    """Read a stereo file of 8-bit PCM, one row per frame, with the channels in order."""
+    wavfile.write(tmp_path / "x.wav", RATE, np.array([[0, 255], [128, 192]], dtype=np.uint8))
+    assert np.array_equal(wav.read(tmp_path / "x.wav")[1], [[-1.0, 127 / 128], [0.0, 0.5]])
+
+
 def test_pcm_out_of_range_is_refused(tmp_path: Path) -> None:
     """Refuse a sample one step beyond the 16-bit range."""
     with pytest.raises(ValueError, match="out of range"):

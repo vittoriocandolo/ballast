@@ -14,6 +14,7 @@ from typing import NoReturn
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 from scipy.io import wavfile
 
 from ballast_synth import __version__, cli, patch, wav
@@ -74,6 +75,55 @@ def test_render_then_extract_gives_back_the_exact_text(
     assert out.splitlines()[-1] == "wrote kick.wav"
     assert "24-bit PCM" in out
     assert run("extract", "kick.wav") == (0, text, "")
+
+
+def test_transient_layers_a_wav_as_it_sounds(run: Run, tmp_path: Path, click: NDArray[np.float64]) -> None:
+    """Layer a mono WAV, and a stereo one of the same click, which both give the click at its own level."""
+    wavfile.write(tmp_path / "click.wav", 48000, click.astype(np.float32))
+    wavfile.write(tmp_path / "wide.wav", 48000, np.stack([click, click], axis=1).astype(np.float32))
+    run("init", "tight", "-o", "kick.toml")
+    status, out, err = run("transient", "kick.toml", "click.wav")
+    assert (status, err) == (0, "")
+    t = patch.loads(out).transient
+    assert t is not None
+    assert (t.level_db, t.rate, patch.decode(t.samples).size) == (-12.0, 48000, click.size)
+    assert run("transient", "kick.toml", "wide.wav") == (0, out, "")
+
+
+@pytest.mark.parametrize(
+    ("frames", "rate", "err"),
+    [
+        (np.ones((10, 3)), 48000, "click.wav: 3 channels; a transient must be mono or stereo\n"),
+        (
+            np.ones(10),
+            32000,
+            (
+                "click.wav: cannot layer it on kick.toml\n"
+                "  transient.rate: expected one of 44100, 48000, 88200, 96000, 176400, 192000, found 32000\n"
+            ),
+        ),
+        (np.zeros(10), 48000, "click.wav: cannot layer it on kick.toml\n  the samples are silent\n"),
+        (
+            np.ones(48000 + 1),
+            48000,
+            (
+                "click.wav: cannot layer it on kick.toml\n"
+                "  transient.samples: the transient ends at 1000.02 ms, after 1000 ms\n"
+            ),
+        ),
+    ],
+)
+def test_transient_refuses_what_it_cannot_layer(
+    run: Run,
+    tmp_path: Path,
+    frames: NDArray[np.float64],
+    rate: int,
+    err: str,
+) -> None:
+    """Refuse more than two channels, a rate no family has, silence, and a transient that ends after 1 s."""
+    wavfile.write(tmp_path / "click.wav", rate, frames.astype(np.float32))
+    run("init", "tight", "-o", "kick.toml")
+    assert run("transient", "kick.toml", "click.wav") == (BAD_INPUT, "", err)
 
 
 def test_an_invalid_patch_lists_every_problem(run: Run, tmp_path: Path, read_preset: Callable[[str], str]) -> None:

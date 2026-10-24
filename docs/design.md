@@ -3,9 +3,9 @@
 Ballast computes one kick as a pure function of time, at 32 times the sample
 rate, and band-limits it once.
 
-    x(t) = b(t) + a(t),    z = Q(C(D(x))),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
+    x(t) = b(t) + a(t) + v(t),    z = Q(C(D(x))),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
 
-Here b is the body, a the attack, D the drive, C the optional low cut and Q
+Here b is the body, a the attack, v the optional transient, D the drive, C the optional low cut and Q
 the optional clipper, all at the internal rate F; h is the frozen decimator of
 the sample rate's family, K the decimation factor, g_out the output gain and p
 the polarity.
@@ -15,6 +15,7 @@ the polarity.
 - [The body](#the-body)
 - [Curves](#curves)
 - [The attack](#the-attack)
+- [The transient](#the-transient)
 - [The saturator](#the-saturator)
 - [The low cut](#the-low-cut)
 - [The clipper](#the-clipper)
@@ -107,6 +108,38 @@ Because the noise is a function of t, it is the same signal at every sample
 rate, and because the shaping only reweights components, editing the band
 keeps the same noise. It repeats every second, so Ballast computes one second
 of it per internal rate with a single inverse real FFT.
+
+## The transient
+
+A patch may layer a sampled click, or any short sound, over the attack. The
+optional `[transient]` section holds its samples, at any of the six sample
+rates, and plays them from t₀ = `start_ms`, ρ = `pitch` times as fast, at the
+level g_v of `level_db` and with the polarity p_v:
+
+    v(t) = p_v · g_v · U(ρ (t − t₀) F_t)
+
+U reads u, the samples brought up to F_t, the internal rate of their own
+family, by the family's frozen filter: the one that brings the kick down. Each
+sample is followed by K − 1 zeros, and the result goes through K times the
+filter, so the transient is flat to 20 kHz within ±0.000014 dB on the way up,
+and again on the way down; its images stay at least 116 dB down; and nothing
+rings before its onset, which the filter delays by 0.07 to 0.08 ms below 5
+kHz.
+
+The voice reads u at q = ρ (n − n₀) F_t / F, with n₀ = t₀ F. When the samples
+share the patch's family, the pitch is 1 and the start falls on a sample, q is
+whole and the voice takes u's own samples. Otherwise it reads between them, by
+the Lagrange polynomial through the six nearest. At 32 times the base rate
+those six are so close together that the read stays within 140 dB of exact
+interpolation, below the filter's own floor: a 44.1 kHz click plays in a 48
+kHz patch, and at any pitch, with no filter designed while rendering.
+
+The samples are stored as little-endian float32 in base64 and peak at exactly
+1, so `level_db` is the transient's peak level. It sums with the body and the
+attack before the drive, which glues it to them, and the render runs on until
+its interpolation has rung out.
+
+![A click of three decaying modes at pitches 0.5, 1 and 2, and the tight preset's opening with it layered and without](figures/transient.svg)
 
 ## The saturator
 
@@ -261,7 +294,8 @@ removes DC.
 The internal signal is computed in blocks of 2¹⁵ samples aligned to the
 trigger, which bounds memory; each source is evaluated only over its own
 support, and the two samples either side of a block that the drive averages
-over are computed again rather than carried. The decimator then runs in
+over are computed again rather than carried. A transient is read once, over
+its whole support, and each block adds its share. The decimator then runs in
 parallel chunks of 2048 outputs. Each output of the decimator is one fixed sum
 over its own inputs, and each chunk starts on the factor's grid with every
 input its outputs need, so the chunks match a single pass bit for bit. Neither
@@ -306,14 +340,14 @@ Audition reuses the renderer and adds four small parts:
 
 | Module | Responsibility |
 |---|---|
-| `patch.py` | the schema, declared once on the dataclass fields; parsing, canonical TOML, edits, tuning |
+| `patch.py` | the schema, declared once on the dataclass fields; parsing, canonical TOML, edits, tuning, transients' samples |
 | `curve.py` | monotone cubic Hermite curves with exact integrals |
 | `noise.py` | the seeded continuous-time noise, and the PCM dither |
-| `voice.py` | body, attack and saturator as pure functions of time, evaluated in blocks |
+| `voice.py` | body, attack, transient and saturator as pure functions of time, evaluated in blocks |
 | `shaper.py` | the drive's and the clipper's curves, anti-aliased by their antiderivatives |
 | `family.py` | the rate families: base and internal rates, and the frozen filters, checked by checksum |
 | `render.py` | low cut, clipper, parallel decimation, output stage, report, export |
-| `wav.py` | the RIFF writer, the chunk reader behind `extract`, and writing any file whole or not at all |
+| `wav.py` | the RIFF writer, the reader of beds and transients, the chunk reader behind `extract`, and writing any file whole or not at all |
 | `audition.py` | hits, bed, watcher and playback |
 | `cli.py` | the commands |
 | `data/` | the two decimators and the four presets |

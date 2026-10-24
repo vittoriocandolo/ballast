@@ -1,9 +1,9 @@
 # Copyright (C) 2026 Vittorio Candolo
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Body, attack and drive as pure functions of time.
+"""Body, attack, transient and drive as pure functions of time.
 
-    x(t) = b(t) + a(t),    y[n] = the drive's curve S_α, averaged around t_n = n / F
+    x(t) = b(t) + a(t) + v(t),    y[n] = the drive's curve S_α, averaged around t_n = n / F
 
 Nothing here keeps state: sample n at rate F is computed from x at t_(n-2) … t_(n+2)
 alone, so a block boundary, a longer render or another rate of the same family
@@ -18,17 +18,20 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from scipy.optimize import brentq
+from scipy.signal import upfirdn
 
-from . import noise, shaper
+from . import family, noise, shaper
 from .curve import Curve
+from .patch import decode
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from .patch import Knots, Patch
+    from .patch import Knots, Patch, Transient
 
 # Samples per block. Blocks bound the size of the temporaries; threads would only contend for the GIL.
 BLOCK = 2**15
+NODES = range(-2, 4)  # where the 6-point interpolation of a transient reads it, around each position
 
 
 def drive_alpha(db: float) -> float:
@@ -65,16 +68,52 @@ def _curve(knots: Knots, **ends: float) -> Curve:
     return Curve([ms / 1000 for ms, _ in knots], [v for _, v in knots], **ends)
 
 
+def lagrange(u: NDArray[np.float64], q: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Read u at positions q by the Lagrange polynomial through u[⌊q⌋ − 2] … u[⌊q⌋ + 3], with silence beyond u.
+
+    Each q must lie within −3 < q < u.size + 2, where the result can differ from 0. On a whole position the weights
+    are exactly 1 and 0, so the result is u itself.
+    """
+    whole = np.floor(q)
+    f = q - whole
+    padded = np.pad(u, 6)  # silence, as far as any node reaches
+    i = whole.astype(np.int64) + 6
+    out = np.zeros_like(q)
+    for j in NODES:
+        weight = np.ones_like(f)
+        for m in NODES:
+            if m != j:
+                weight *= (f - m) / (j - m)
+        out += weight * padded[i + j]
+    return out
+
+
+def place(t: Transient, rate: int) -> tuple[int, NDArray[np.float64]]:
+    """Place a transient at internal rate F: the first sample n_1 it can reach, and v(n / F) from there on.
+
+    The frozen filter of the samples' own family brings them up to that family's internal rate F_t, as u, and the
+    voice reads u at q = ρ (n − n_0) F_t / F, where ρ is the pitch and n_0 = start × F. That is u's own samples
+    when the families match, the pitch is 1 and the start falls on a sample, and lagrange() between them otherwise.
+    """
+    base, internal, factor = family.rates(t.rate)
+    u: NDArray[np.float64] = upfirdn(factor * family.decimator(base), decode(t.samples).astype(float), up=factor)
+    step = t.pitch * internal / rate
+    start = t.start_ms * rate / 1000
+    first = math.floor(start - 3 / step) + 1
+    n = np.arange(first, math.ceil(start + (u.size + 2) / step), dtype=float)
+    return first, t.polarity * 10.0 ** (t.level_db / 20.0) * lagrange(u, (n - start) * step)
+
+
 def _support(t: NDArray[np.float64], curve: Curve) -> slice:
     """Return the slice of the times t within an amplitude shape's knots, outside which its source is silent."""
     return slice(np.searchsorted(t, curve.t[0], "left"), np.searchsorted(t, curve.t[-1], "right"))
 
 
 class Voice:
-    """The patch at internal rate F: y[n], the drive's curve averaged around n / F over x(t) = b(t) + a(t)."""
+    """The patch at internal rate F: y[n], the drive's curve averaged around n / F over x(t) = b(t) + a(t) + v(t)."""
 
     def __init__(self, p: Patch, rate: int) -> None:
-        """Prepare the patch's curves, gains, noise and drive for synthesis at `rate`."""
+        """Prepare the patch's curves, gains, noise, transient and drive for synthesis at `rate`."""
         b, a = p.body, p.attack
         self.rate = rate
         self.f0, self.h2, self.phi0, self.tail = b.tune_hz, b.h2, math.radians(b.phase_deg), b.phase_ref == "tail"
@@ -95,6 +134,10 @@ class Voice:
         self.curve = shaper.Tanh(self.alpha, p.drive.asymmetry / 2) if self.alpha != 0.0 else None
         self.mix = p.drive.mix
         self.count = sample_count(p.length_ms / 1000, rate)
+        self.transient = None if p.transient is None else place(p.transient, rate)
+        if self.transient is not None:  # the samples' interpolation rings on past their end
+            first, v = self.transient
+            self.count = max(self.count, first + v.size)
 
     def samples(self) -> NDArray[np.float64]:
         """Compute y[n] for 0 ≤ n < N, in blocks aligned to the trigger."""
@@ -111,7 +154,7 @@ class Voice:
         return (1 - self.mix) * x[2:-2] + self.mix * driven  # dry and driven line up: the drive adds no delay
 
     def sources(self, n0: int, n1: int) -> NDArray[np.float64]:
-        """Compute x[n] = b(n / F) + a(n / F) for n0 ≤ n < n1, each source only over its support."""
+        """Compute x[n] = b(n / F) + a(n / F) + v(n / F) for n0 ≤ n < n1, each source only over its support."""
         n = np.arange(n0, n1)
         t = n / self.rate
         x = np.zeros(n1 - n0)
@@ -121,6 +164,11 @@ class Voice:
         if self.attack_gain != 0.0:
             s = _support(t, self.attack_amp)
             x[s] += self.attack(t[s], n[s])
+        if self.transient is not None:
+            first, v = self.transient
+            lo, hi = max(n0, first), min(n1, first + v.size)
+            if lo < hi:
+                x[lo - n0 : hi - n0] += v[lo - first : hi - first]
         return x
 
     def body(self, t: NDArray[np.float64]) -> NDArray[np.float64]:

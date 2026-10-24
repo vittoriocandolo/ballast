@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Vittorio Candolo
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Command line: ballast init | tune | stretch | render | multisample | audition | extract."""
+"""Command line: ballast init | tune | stretch | transient | render | multisample | audition | extract."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from .patch import (
     CURVES,
     Patch,
     PatchError,
+    Transient,
     dumps,
     edit,
     loads,
@@ -118,6 +119,27 @@ def cmd_stretch(a: argparse.Namespace) -> None:
         p = stretch(p, a.curve, a.factor, a.after)
     except ValueError as e:
         msg = f"{a.patch}: cannot stretch {a.curve} by {a.factor:g}"
+        raise _listing(msg, e) from None
+    _emit(dumps(p), a.out)
+
+
+def cmd_transient(a: argparse.Namespace) -> None:
+    """Layer a WAV over the attack as the patch's transient, as it sounds: at its own rate and level."""
+    _, p = _open(a.patch)
+    try:
+        rate, frames = wav.read(a.wav)
+    except OSError as e:
+        raise _os_error(a.wav, e) from None
+    except ValueError as e:
+        msg = f"{a.wav}: {e}"
+        raise CliError(msg) from None
+    if frames.shape[1] not in wav.LAYOUTS:
+        msg = f"{a.wav}: {frames.shape[1]} channels; a transient must be mono or stereo"
+        raise CliError(msg)
+    try:
+        p = edit(p, "transient", Transient.of(frames.mean(axis=1), rate))  # stereo as its mid, (L + R) / 2
+    except ValueError as e:
+        msg = f"{a.wav}: cannot layer it on {a.patch}"
         raise _listing(msg, e) from None
     _emit(dumps(p), a.out)
 
@@ -265,6 +287,11 @@ def _parser() -> argparse.ArgumentParser:
         help="keep knots up to this time (default: the peak of an amplitude shape, 0 ms for pitch)",
     )
     command.set_defaults(run=cmd_stretch)
+
+    command = sub.add_parser("transient", parents=[output], help="layer a WAV over the attack, as the transient")
+    command.add_argument("patch")
+    command.add_argument("wav", help="mono or stereo, at 44.1, 48, 88.2, 96, 176.4 or 192 kHz, ending by 1 s")
+    command.set_defaults(run=cmd_transient)
 
     command = sub.add_parser("render", help="render a patch to WAV")
     command.add_argument("patch")

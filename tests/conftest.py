@@ -1,16 +1,21 @@
 # Copyright (C) 2026 Vittorio Candolo
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Shared fixtures: the shipped presets, as text, as patches and as plain TOML data."""
+"""Shared fixtures: the shipped presets, as text, as patches and as plain TOML data, and a click to layer."""
 
+import math
 from collections.abc import Callable
 from importlib import resources
 from typing import Any
 
+import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from ballast_synth import patch
 from ballast_synth.cli import PRESETS
+
+CLICK_RATE = 48000
 
 
 def preset_text(name: str) -> str:
@@ -46,3 +51,20 @@ def tight(tight_text: str) -> patch.Patch:
 def raw(tight: patch.Patch) -> dict[str, Any]:
     """Return the tight preset as the plain data TOML parses to, ready to be broken on purpose."""
     return patch.to_dict(tight)
+
+
+@pytest.fixture
+def click() -> NDArray[np.float64]:
+    """Return a click to layer, at 48 kHz: three decaying modes of a struck block, 30 ms long, peaking at -12 dBFS."""
+    t = np.arange(round(0.03 * CLICK_RATE)) / CLICK_RATE
+    x = np.zeros_like(t)
+    for hz, ms, amplitude in ((1730.0, 3.0, 1.0), (4210.0, 1.2, 0.6), (7650.0, 0.6, 0.35)):
+        x += amplitude * np.exp(-1000 * t / ms) * np.sin(2 * math.pi * hz * t)
+    x *= 10 ** (-12 / 20) / float(np.max(np.abs(x)))
+    return x
+
+
+@pytest.fixture
+def layered(tight: patch.Patch, click: NDArray[np.float64]) -> patch.Patch:
+    """Return the tight preset with the click layered as its transient."""
+    return patch.edit(tight, "transient", patch.Transient.of(click, CLICK_RATE))

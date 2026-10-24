@@ -177,3 +177,14 @@ def test_the_low_cut_removes_dc_and_off_changes_nothing(tight: patch.Patch) -> N
     assert abs(np.mean(cut)) < abs(np.mean(plain)) / 20
     zero = patch.edit(tight, "output.low_cut_hz", 0.0)
     assert np.array_equal(render.render(zero)[0], plain)
+
+
+@pytest.mark.parametrize("rate", patch.SAMPLE_RATES)
+def test_a_transient_passes_flat_to_20_khz(tight: patch.Patch, rate: int) -> None:
+    """Render an impulse as the only source, at its own rate, through the interpolation and the decimation."""
+    alone = patch.edit(patch.edit(tight, "body.level_db", -math.inf), "attack.level_db", -math.inf)
+    impulse = patch.Transient.of(np.array([1.0]), rate)
+    p = patch.edit(patch.edit(with_output(alone, sample_rate=rate), "drive.db", 0.0), "transient", impulse)
+    n = 1 << 18
+    passband = np.abs(np.fft.rfft(render.synthesize(p), n))[np.fft.rfftfreq(n, 1 / rate) <= PASSBAND_HZ]
+    assert np.max(np.abs(20 * np.log10(passband))) < 2 * 0.0000135  # the filter's ripple, once up and once down

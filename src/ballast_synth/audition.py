@@ -27,14 +27,13 @@ from __future__ import annotations
 import importlib
 import sys
 import time
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from scipy.io import wavfile
 
+from . import wav
 from .patch import Patch, PatchError, loads, read_text
 from .render import db, render, row
 
@@ -48,7 +47,6 @@ GAP_S = 0.5  # the silence between hits without a tempo
 POLL_S = 0.1  # how often the play loop looks at the device and the watched file
 BEATS_PER_BAR = 4
 BAR_TOLERANCE_S = 0.001  # how far a bed may be from a whole number of bars
-LAYOUTS = {1: "mono", 2: "stereo"}  # the channel counts a bed may have
 
 
 class AuditionError(Exception):
@@ -71,24 +69,15 @@ class Bed:
 def load_bed(path: str | os.PathLike[str], rate: int, bpm: float) -> Bed:
     """Load a mono or stereo WAV at the patch's rate, lasting a whole number of bars at `bpm`."""
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", wavfile.WavFileWarning)  # chunks it does not know
-            file_rate, data = wavfile.read(path)
+        file_rate, frames = wav.read(path)
     except (OSError, ValueError) as e:
         msg = f"{path}: {e}"
         raise AuditionError(msg) from None
     if file_rate != rate:
         msg = f"{path}: {file_rate} Hz, but the patch renders at {rate} Hz; audition never resamples"
         raise AuditionError(msg)
-    if data.dtype == np.uint8:
-        frames = (data.astype(float) - 128.0) / 128.0
-    elif data.dtype.kind == "i":  # 16-bit, and 24- or 32-bit left-justified in int32
-        frames = data.astype(float) / float(2 ** (8 * data.dtype.itemsize - 1))
-    else:
-        frames = data.astype(float)
-    frames = frames[:, None] if frames.ndim == 1 else frames
     channels = frames.shape[1]
-    if channels not in LAYOUTS:
+    if channels not in wav.LAYOUTS:
         msg = f"{path}: {channels} channels; a bed must be mono or stereo"
         raise AuditionError(msg)
     bar = rate * BEATS_PER_BAR * 60 / bpm
@@ -96,7 +85,7 @@ def load_bed(path: str | os.PathLike[str], rate: int, bpm: float) -> Bed:
     if bars < 1 or abs(len(frames) - bars * bar) > BAR_TOLERANCE_S * rate:
         msg = f"{path}: {len(frames) / bar:.3f} bars at {bpm:g} bpm; a bed must be a whole number of bars"
         raise AuditionError(msg)
-    summary = f"{path}: {bars} bar{'s' if bars > 1 else ''} at {bpm:g} bpm, {LAYOUTS[channels]}"
+    summary = f"{path}: {bars} bar{'s' if bars > 1 else ''} at {bpm:g} bpm, {wav.LAYOUTS[channels]}"
     sys.stdout.write(row("bed", summary) + "\n")
     return Bed(frames.astype(np.float32), BEATS_PER_BAR * bars)
 

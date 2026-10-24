@@ -34,8 +34,8 @@ back, so a folder of rendered kicks is also a library of patches.
 
 ## Commands
 
-Every command prints `--help`. `init`, `tune`, `stretch` and `extract` print
-the patch unless given `-o FILE`, which writes it as UTF-8 with plain
+Every command prints `--help`. `init`, `tune`, `stretch`, `transient` and
+`extract` print the patch unless given `-o FILE`, which writes it as UTF-8 with plain
 newlines. On Windows, prefer `-o` to shell redirection: PowerShell re-encodes
 what it redirects, so comments may not survive.
 
@@ -59,8 +59,18 @@ put; by default, that is the peak of an amplitude shape, so the rise keeps its
 shape, and 0 ms for a pitch curve. Times are rounded to 1 µs, and the result is checked like
 any patch.
 
-`init`, `tune` and `stretch` write the canonical form of the patch, with its
-standard comments: your own comments in the file are not kept.
+### `ballast transient PATCH WAV [-o FILE]`
+
+Layers a WAV over the attack as the patch's `[transient]`, replacing any it
+had. The WAV must be mono, or stereo, which is taken as its mid, (L + R) / 2,
+at one of the six sample rates, and end within 1 s. It goes in as it sounds:
+at its own rate, with its own peak as `level_db`, from the trigger, at pitch 1.
+Then `start_ms`, `pitch`, `level_db` and `polarity` place it; deleting the
+section removes it.
+
+`init`, `tune`, `stretch` and `transient` write the canonical form of the
+patch, with its standard comments: your own comments in the file are not
+kept.
 
 ### `ballast render PATCH -o WAV [--format FORMAT] [--allow-over]`
 
@@ -201,11 +211,11 @@ patch's sample rate.
 
 ## Designing a kick
 
-Nine of the moves below are made on the `tight` preset, each with a link to its
+Ten of the moves below are made on the `tight` preset, each with a link to its
 sound, to compare with [tight itself](audio/tight.wav); the figure shows what
 they do.
 
-![The tight preset and nine moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a zap, more drive, a low cut, warmth and clipping](figures/design.svg)
+![The tight preset and ten moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a zap, a sampled click, more drive, a low cut, warmth and clipping](figures/design.svg)
 
 - **Tune it to the track.** A kick in the key of the bass sits in the mix. Use
   `ballast tune kick.toml E1`, or `--tune` with `init`.
@@ -227,6 +237,12 @@ they do.
   dives into `tone_hz` and brightens the click:
   `pitch = [{ ms = 0.0, ratio = 4.0 }, { ms = 2.0, ratio = 1.0 }]` dives two
   octaves, from 10 kHz, in 2 ms. [Hear the zap](audio/tight-zap.wav).
+- **Layer a sampled click.** `ballast transient kick.toml click.wav` layers
+  any short WAV over the attack, before the drive, which glues it to the body.
+  Try it with [this click](audio/click.wav), three decaying modes of a struck
+  block. `transient.pitch` tunes it as a sampler would, `start_ms` places it,
+  and `polarity = -1` flips it if it fights the body's first swing.
+  [Hear it layered](audio/tight-sample.wav).
 - **Weight is the drive.** `drive.db` adds odd harmonics and density while
   full scale stays at full scale; `h2` adds the even second harmonic.
   `drive.db = 18.0`, up from 6, squares the body off.

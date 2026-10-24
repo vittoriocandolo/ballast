@@ -30,9 +30,14 @@ The first public release.
   16-bit PCM with seeded TPDF dither, normalized to a gain, a sample peak or a
   true peak, with the root key in a `smpl` chunk and the patch and its
   provenance in a `blst` chunk. Every file is written whole or not at all.
+- Sampled transients: `ballast transient` layers a short WAV over the attack,
+  stored in the patch as base64 float32, brought up by the family's frozen
+  filter and played at any pitch and from either rate family within 140 dB of
+  exact interpolation.
 - The `ballast` command: `init` from four presets, `tune`, `stretch`,
-  `render`, `multisample` for one sample per key with an SFZ map, `audition`
-  with live re-rendering, tempo, a bed and dropout warnings, and `extract`.
+  `transient`, `render`, `multisample` for one sample per key with an SFZ map,
+  `audition` with live re-rendering, tempo, a bed and dropout warnings, and
+  `extract`.
 - Documentation with figures and sounds generated from the code: a figure for
   every stage of the signal path, a gallery of the presets with their sounds,
   curves, spectra and patches, and the sound of every design move in the usage

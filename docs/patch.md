@@ -2,7 +2,8 @@
 
 A patch is a complete TOML description of one kick. Every field is required
 and the renderer has no defaults, so a future default can never change an old
-patch. The parser rejects anything outside the valid domain, reports every
+patch. The one section a patch may leave out is `[transient]`, a sampled layer
+of its own: without it, the patch has none. The parser rejects anything outside the valid domain, reports every
 problem with its field path, and never clamps or repairs.
 
 ![The tight preset's pitch, body and attack curves through their knots, and the first 60 ms of its output](figures/anatomy-tight.svg)
@@ -116,6 +117,21 @@ as Windows PowerShell writes.
 | `db` | number | 0 – 12 dB | How far the clipper brings the file's true peak down, exactly; what lies below its knee is untouched. 0 is off. With a peak target in `[output]`, these decibels come back as loudness. |
 | `knee_db` | number | 0 – 6 dB | How far below the threshold the clipper starts to bend: 0 is a hard clip, 6 the softest. |
 
+### `[transient]`: a sampled click
+
+Optional: a patch without this section has no transient.
+[`ballast transient`](usage.md#ballast-transient-patch-wav--o-file) writes it
+from a WAV, and it comes last in the file, since its samples run long.
+
+| Field | Type | Range | Meaning |
+|---|---|---|---|
+| `level_db` | number | −60 – +24 dB, or `-inf` | The transient's peak level; `-inf` silences it. |
+| `start_ms` | number | 0 – 1000 ms | When its first sample plays, after the trigger. |
+| `pitch` | number | 0.25 – 4 | How fast, and so how high, it plays: 2 is an octave up and half as long. |
+| `polarity` | integer | 1 or −1 | −1 inverts it against the body and the attack. |
+| `rate` | integer | 44100, 48000, 88200, 96000, 176400 or 192000 | The sample rate of its samples. A transient of either family plays in a patch of either. |
+| `samples` | base64 | at least one sample | Little-endian float32, peaking at exactly 1, so that `level_db` alone sets the level. Played from `start_ms` at `pitch`, they must end by 1 s, like the attack. |
+
 ### `[output]`
 
 | Field | Type | Range | Meaning |
@@ -144,7 +160,8 @@ a pitch curve, `gain` for an amplitude shape.
 - **Pitch curves** end flat on ratio 1, so the body lands on its note, and
   the attack's tone on `tone_hz`, without a kink.
 
-The kick lasts until the later of the two amplitude shapes' last knots.
+The kick lasts until the latest of the amplitude shapes' last knots and the
+transient's end.
 
 ## Validation
 
@@ -162,9 +179,11 @@ silently. A TOML syntax error is reported with its line and column.
 
 ## Canonical form
 
-`ballast init`, `tune` and `stretch` write the canonical form: every field in
-the order of this reference, with numbers as Python writes them, so they read
-back exactly, and the standard comments shown above. Reading a canonical patch
+`ballast init`, `tune`, `stretch` and `transient` write the canonical form:
+every field in the order of this reference, with numbers as Python writes
+them, so they read back exactly, and the standard comments shown above. A
+transient's samples are one TOML string written 64 base64 characters a line,
+with every line break escaped away. Reading a canonical patch
 and writing it again gives the same text.
 
 `ballast render` embeds the patch file as you wrote it, comments included, and
@@ -176,11 +195,11 @@ A patch states its schema, so a later renderer can read it as it was meant,
 and a renderer refuses a schema it does not know rather than guess.
 
 - **Schema 3**, the current one, adds `attack.pitch`, `drive.asymmetry`,
-  `drive.mix` and the `[clip]` section.
+  `drive.mix`, the `[clip]` section and the optional `[transient]`.
 - **Schema 2** adds `output.low_cut_hz` to schema 1.
 - **Schema 1** has no low cut.
 
 Ballast still reads schemas 1 and 2 and renders them exactly as they always
 sounded: what they lack is off, with a fixed tone, no asymmetry, all of the
-drive, and no clipper or low cut. `tune` and `stretch` write them back as schema 3 with
+drive, and no clipper, low cut or transient. `tune` and `stretch` write them back as schema 3 with
 those values, which sound the same.

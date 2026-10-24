@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Vittorio Candolo
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""A small RIFF writer for mono WAV: IEEE float32, or PCM at 24 or 16 bits.
+"""WAV files: a small RIFF writer for mono IEEE float32 or PCM at 24 or 16 bits, and a reader for any WAV.
 
 Files carry fmt, fact (float only), smpl (so samplers map the root key), a
 private chunk with the patch text and provenance, and data. PCM uses the
@@ -16,11 +16,13 @@ import json
 import math
 import os
 import struct
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
+from scipy.io import wavfile
 
 from .patch import midi_pitch
 
@@ -30,6 +32,7 @@ if TYPE_CHECKING:
 FLOAT = 3  # WAVE_FORMAT_IEEE_FLOAT
 PCM = 1  # WAVE_FORMAT_PCM
 PRIVATE = b"blst"  # the chunk that holds the patch text and provenance
+LAYOUTS = {1: "mono", 2: "stereo"}  # the channel counts of the WAVs Ballast takes in
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,23 @@ def write(
     chunks += _chunk(PRIVATE, json.dumps(meta, ensure_ascii=False, indent=1).encode("utf-8"))
     chunks += _chunk(b"data", data)
     save(path, b"RIFF" + struct.pack("<I", 4 + len(chunks)) + b"WAVE" + chunks)
+
+
+def read(path: str | os.PathLike[str]) -> tuple[int, NDArray[np.float64]]:
+    """Read a WAV file's sample rate and its frames, one row per frame, as floats with full scale at ±1.
+
+    It may hold PCM of 8 to 32 bits, or floats, as SciPy reads them.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", wavfile.WavFileWarning)  # chunks it does not know
+        rate, data = wavfile.read(path)
+    if data.dtype == np.uint8:
+        frames = (data.astype(float) - 128.0) / 128.0
+    elif data.dtype.kind == "i":  # 16-bit, and 24- or 32-bit left-justified in int32
+        frames = data.astype(float) / float(2 ** (8 * data.dtype.itemsize - 1))
+    else:
+        frames = data.astype(float)
+    return rate, frames[:, None] if frames.ndim == 1 else frames
 
 
 def chunks(path: str | os.PathLike[str]) -> dict[bytes, bytes]:

@@ -7,12 +7,15 @@ import math
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 from scipy.integrate import cumulative_simpson
+from scipy.signal import upfirdn
 
 from ballast_synth import family, patch, voice
 from ballast_synth.voice import Voice
 
 _, INTERNAL, _ = family.rates(48000)  # the internal rate of the 48 kHz family
+EXACT_DB = -140  # how close a transient read between its samples comes to exact interpolation, re its peak
 
 
 @pytest.mark.parametrize("db", [6.0, 48.0])
@@ -139,6 +142,68 @@ def test_the_tone_sweeps_along_its_pitch_curve(tight: patch.Patch) -> None:
     assert v.tone_pitch(np.array([0.0, 0.002, 0.004])).tolist() == [4.0, 1.0, 1.0]
     tone = v.attack(t, np.arange(t.size)) / (v.attack_gain * v.tone_weight)
     assert np.allclose(tone, v.attack_amp(t) * np.sin(phase), rtol=0, atol=1e-9)
+
+
+def reconstruction(t: patch.Transient) -> NDArray[np.float64]:
+    """Bring a transient's samples up to its family's internal rate, with the family's frozen filter."""
+    base, _, factor = family.rates(t.rate)
+    u: NDArray[np.float64] = upfirdn(factor * family.decimator(base), patch.decode(t.samples).astype(float), up=factor)
+    return u
+
+
+def read_exactly(u: NDArray[np.float64], up: int, down: int) -> NDArray[np.float64]:
+    """Read u at the positions n · down / up by its trigonometric interpolation, padded far enough not to wrap."""
+    n = down * -(-4 * u.size // down)
+    m = n * up // down
+    out: NDArray[np.float64] = np.fft.irfft(np.fft.rfft(u, n)[: m // 2 + 1], m) * up / down
+    return out
+
+
+def test_a_transient_in_its_own_family_is_its_reconstruction_exactly(layered: patch.Patch) -> None:
+    """Place the click at pitch 1 from the trigger, where the voice reads its reconstruction sample for sample."""
+    t = layered.transient
+    assert t is not None
+    first, v = voice.place(t, INTERNAL)
+    assert first == voice.NODES.start  # the interpolation could reach back that far, where it is silent
+    assert np.array_equal(v, 10 ** (t.level_db / 20) * np.pad(reconstruction(t), 2))
+
+
+@pytest.mark.parametrize(("base", "pitch", "up", "down"), [(44100, 1.0, 147, 160), (48000, 1.5, 2, 3)])
+def test_a_transient_read_between_its_samples_is_exact_to_140_db(
+    layered: patch.Patch,
+    *,
+    base: int,
+    pitch: float,
+    up: int,
+    down: int,
+) -> None:
+    """Read the 48 kHz click in the 44.1 kHz family, and 1.5 times as fast in its own, against exact interpolation."""
+    t = layered.transient
+    assert t is not None
+    _, rate, _ = family.rates(base)
+    first, v = voice.place(patch.edit(layered, "transient.pitch", pitch).transient or t, rate)
+    exact = 10 ** (t.level_db / 20) * read_exactly(reconstruction(t), up, down)
+    n = np.arange(max(first, 0), first + v.size)
+    error = np.max(np.abs(v[n - first] - exact[n])) / np.max(np.abs(exact))
+    assert 20 * math.log10(error) < EXACT_DB
+
+
+def test_blocks_never_change_a_sample_of_a_transient(layered: patch.Patch, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Synthesize a transient read between its samples in three block sizes, and compare every sample."""
+    moved = patch.edit(patch.edit(layered, "transient.pitch", 1.5), "transient.start_ms", 0.3)
+    whole = Voice(moved, INTERNAL).samples()
+    for block in (999, 4096, 2**18):
+        monkeypatch.setattr(voice, "BLOCK", block)
+        assert np.array_equal(Voice(moved, INTERNAL).samples(), whole)
+
+
+def test_the_voice_runs_on_until_a_late_transient_has_rung_out(layered: patch.Patch) -> None:
+    """End the transient after the body, and synthesize until its interpolation's ring has died away."""
+    late = patch.edit(layered, "transient.start_ms", 250.0)
+    v = Voice(late, INTERNAL)
+    assert v.transient is not None
+    first, values = v.transient
+    assert v.count == first + values.size > voice.sample_count(late.length_ms / 1000, INTERNAL)
 
 
 @pytest.mark.parametrize("db", [5e-324, 1e-300, 1e-16])

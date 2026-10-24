@@ -10,7 +10,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from ballast_synth import patch
 from ballast_synth.patch import PatchError
@@ -383,6 +385,93 @@ def test_an_older_schema_refuses_what_it_did_not_have(raw: dict[str, Any]) -> No
     raw["clip"] = {"db": 3.0, "knee_db": 0.0}
     raw["attack"]["pitch"] = [{"ms": 0.0, "ratio": 1.0}]
     assert problems(raw) == ["clip: unknown field", "attack.pitch: unknown field"]
+
+
+def test_a_patch_may_leave_out_its_transient_and_then_has_none(tight: patch.Patch, raw: dict[str, Any]) -> None:
+    """Read a patch without a transient section, which has none and writes none."""
+    assert tight.transient is None
+    assert "transient" not in raw
+    assert "[transient]" not in patch.dumps(tight)
+
+
+def test_a_transient_reads_back_from_its_canonical_text(layered: patch.Patch) -> None:
+    """Write a patch with a transient, its base64 in lines of 64 characters, and read the same patch back."""
+    text = patch.dumps(layered)
+    assert text.endswith('"""\n')
+    lines = text[text.index('samples  = """\n') + 15 : text.rindex('"""')].splitlines()
+    assert all(line.endswith("\\") for line in lines)
+    assert {len(line) for line in lines[:-1]} == {65}
+    assert patch.loads(text) == layered
+    assert patch.edit(layered, "transient", None) == patch.loads(text.split("\n[transient]")[0] + "\n")
+
+
+def test_a_transient_keeps_its_level_apart_from_its_samples(click: NDArray[np.float64]) -> None:
+    """Take a click as it sounds: samples that peak at exactly 1, and the click's own peak as the level."""
+    t = patch.Transient.of(click, 48000)
+    samples = patch.decode(t.samples)
+    assert float(np.max(np.abs(samples))) == 1.0
+    assert (t.level_db, t.start_ms, t.pitch, t.polarity, t.rate) == (-12.0, 0.0, 1.0, 1, 48000)
+    assert np.allclose(samples.astype(float) * 10 ** (t.level_db / 20), click, rtol=2**-23, atol=0)  # float32
+
+
+@pytest.mark.parametrize(
+    ("samples", "message"),
+    [
+        (np.zeros(3), "the samples are silent"),
+        (np.array([1.0, math.inf]), "every sample must be finite"),
+    ],
+)
+def test_a_transient_needs_samples_it_can_hold(samples: NDArray[np.float64], message: str) -> None:
+    """Refuse silence, which has no level, and samples that are not finite."""
+    with pytest.raises(ValueError, match=message):
+        patch.Transient.of(samples, 48000)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("samples", 1.0, "transient.samples: expected base64 text, found a float"),
+        ("samples", "not base64!", "transient.samples: is not base64"),
+        ("samples", "AAAA", "transient.samples: needs whole float32 samples, at least one, found 3 bytes"),
+        ("samples", "", "transient.samples: needs whole float32 samples, at least one, found 0 bytes"),
+        ("samples", patch.encode(np.array([1.0, math.nan])), "transient.samples: every sample must be finite"),
+        (
+            "samples",
+            patch.encode(np.array([0.5, -0.25])),
+            "transient.samples: the samples must peak at exactly 1, found 0.5; level_db sets the level",
+        ),
+        ("start_ms", 990.0, "transient.samples: the transient ends at 1020 ms, after 1000 ms"),
+        ("start_ms", -1.0, "transient.start_ms: -1 is outside 0 … 1000"),
+        ("pitch", 5.0, "transient.pitch: 5 is outside 0.25 … 4"),
+        ("polarity", 0, "transient.polarity: expected one of 1, -1, found 0"),
+        ("rate", 32000, f"transient.rate: expected one of {RATES}, found 32000"),
+    ],
+)
+def test_transient_rules(layered: patch.Patch, field: str, value: object, message: str) -> None:
+    """Break one rule of the transient, and get exactly that problem."""
+    raw = patch.to_dict(layered)
+    raw["transient"][field] = value
+    assert problems(raw) == [message]
+
+
+def test_an_older_schema_cannot_have_a_transient(raw: dict[str, Any], layered: patch.Patch) -> None:
+    """Refuse a transient in a schema 2 patch, which could not have one."""
+    raw = older(raw, 2)
+    raw["transient"] = patch.to_dict(layered)["transient"]
+    assert problems(raw) == ["transient: unknown field"]
+
+
+def test_a_missing_transient_has_no_field_to_edit(tight: patch.Patch) -> None:
+    """Refuse to edit a field of a transient the patch does not have."""
+    with pytest.raises(PatchError, match="transient: the patch has none"):
+        patch.edit(tight, "transient.level_db", -6.0)
+
+
+def test_a_transient_that_ends_last_sets_the_length(layered: patch.Patch) -> None:
+    """Start the transient late, and slow it down, so that its 1440 samples end after the body."""
+    late = patch.edit(layered, "transient.start_ms", 230.0)
+    slow = patch.edit(late, "transient.pitch", 0.5)
+    assert (layered.length_ms, late.length_ms, slow.length_ms) == (240.0, 260.0, 290.0)
 
 
 def test_schema_2_requires_the_low_cut(raw: dict[str, Any]) -> None:
