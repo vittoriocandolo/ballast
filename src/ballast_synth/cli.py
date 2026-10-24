@@ -148,19 +148,36 @@ def cmd_transient(a: argparse.Namespace) -> None:
 
 
 def cmd_vary(a: argparse.Namespace) -> None:
-    """Write seeded variations of a patch into a folder, each a patch of its own."""
+    """Write variations of a patch into a folder, each a patch of its own: seeded, or along a grid of axes."""
     _, p = _open(a.patch)
+    if a.along and (a.count is not None or a.seed is not None):
+        msg = "--along sets a grid: leave out -n and --seed, which draw seeded variations"
+        raise CliError(msg)
+    if a.along:
+        axes = [(path, [text for text in steps.split(",") if text]) for path, steps in a.along]
+        if (size := math.prod(len(texts) for _, texts in axes)) > MAX_VARIATIONS:
+            msg = f"the grid has {size} combinations; at most {MAX_VARIATIONS}"
+            raise CliError(msg)
+        try:
+            made = vary.grid(p, axes)
+        except PatchError as e:
+            msg = f"{a.patch}: not written, these combinations are invalid"
+            raise _listing(msg, e) from None
+        what = f"{len(made)} combinations"
+    else:
+        number, chosen = a.count or 8, 1 if a.seed is None else a.seed
+        made = [vary.vary(p, chosen, i) for i in range(1, number + 1)]
+        what = f"{number} variations, seed {chosen},"
     stem, folder = Path(a.patch).stem, Path(a.out)
     try:
         folder.mkdir(parents=True, exist_ok=True)
-        for number in range(1, a.count + 1):
-            q, moves = vary.vary(p, a.seed, number)
-            name = f"{stem}-v{number}.toml"
+        for i, (q, moves) in enumerate(made, 1):
+            name = f"{stem}-v{i}.toml"
             wav.save(folder / name, dumps(q).encode("utf-8"))
             sys.stdout.write(f"{name:<20} {', '.join(moves)}\n")
     except OSError as e:
         raise _os_error(e.filename or folder, e) from None
-    sys.stdout.write(f"wrote {a.count} variations of {a.patch}, seed {a.seed}, to {folder}\n")
+    sys.stdout.write(f"wrote {what} of {a.patch} to {folder}\n")
 
 
 def cmd_render(a: argparse.Namespace) -> None:
@@ -370,11 +387,18 @@ def _patch_commands(sub: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     command.add_argument("wav", help="mono or stereo, at 44.1, 48, 88.2, 96, 176.4 or 192 kHz, ending by 1 s")
     command.set_defaults(run=cmd_transient)
 
-    command = sub.add_parser("vary", help="write seeded variations of a patch")
+    command = sub.add_parser("vary", help="write seeded variations of a patch, or every combination along axes")
     command.add_argument("patch")
     command.add_argument("-o", "--out", required=True, metavar="DIR", help="the folder for the variations")
-    command.add_argument("-n", "--count", type=count, default=8, metavar="N", help="how many (default: 8)")
-    command.add_argument("--seed", type=seed, default=1, help="the same seed gives the same variations (default: 1)")
+    command.add_argument("-n", "--count", type=count, metavar="N", help="how many seeded variations (default: 8)")
+    command.add_argument("--seed", type=seed, help="the same seed gives the same variations (default: 1)")
+    command.add_argument(
+        "--along",
+        nargs=2,
+        action="append",
+        metavar=("FIELD", "STEPS"),
+        help="a grid axis, such as drive.db 6,12,18 or body.amp x0.8,x1,x1.25; repeat for more axes",
+    )
     command.set_defaults(run=cmd_vary)
 
 

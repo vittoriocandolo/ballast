@@ -24,6 +24,7 @@ from ballast_synth.cli import main
 BAD_INPUT = 2  # the exit status for input the command cannot use
 REFUSED = 1  # the exit status for a refusal or a failure
 CD_RATE = 44100
+DRIVE_HIGH = 18.0  # the last step of a grid along the drive
 INTERRUPTED = 130  # the exit status a shell expects after Ctrl+C
 
 type Run = Callable[..., tuple[int, str, str]]
@@ -448,3 +449,17 @@ def test_vary_writes_seeded_variations(run: Run, tmp_path: Path) -> None:
         with pytest.raises(SystemExit) as caught:
             run("vary", "kick.toml", "-o", "d", *bad)
         assert caught.value.code == BAD_INPUT
+
+
+def test_vary_along_axes_writes_every_combination(run: Run, tmp_path: Path) -> None:
+    """Vary a patch along two axes, write nine patches, and refuse a grid mixed with seeded options."""
+    run("init", "tight", "-o", "kick.toml")
+    axes = ("--along", "drive.db", "6,12,18", "--along", "body.amp", "x0.8,x1,x1.25")
+    status, out, _ = run("vary", "kick.toml", "-o", "grid", *axes)
+    assert status == 0
+    assert out.splitlines()[-1] == "wrote 9 combinations of kick.toml to grid"
+    assert patch.loads((tmp_path / "grid" / "kick-v9.toml").read_text(encoding="utf-8")).drive.db == DRIVE_HIGH
+    assert run("vary", "kick.toml", "-o", "x", "--along", "drive.db", "6", "--seed", "2")[0] == BAD_INPUT
+    status, _, err = run("vary", "kick.toml", "-o", "x", "--along", "drive.db", "6,60")
+    assert (status, err.splitlines()[1]) == (BAD_INPUT, "  drive.db 60: drive.db: 60 is outside 0 … 48")
+    assert not (tmp_path / "x").exists()

@@ -44,7 +44,7 @@ The first public release.
 - The report's loudness: the highest momentary loudness of EBU R128, slid
   sample by sample, K-weighted at every sample rate.
 - Kits: `ballast vary` writes seeded variations of a patch, the same in every
-  version, and `ballast pack` renders a folder of patches into a kit with a
+  version, or every combination along axes, and `ballast pack` renders a folder of patches into a kit with a
   manifest, refused whole unless every kick passes its gates.
 - The `ballast` command: `init` from the presets, `tune`, `stretch`,
   `transient`, `vary`, `render`, `pack`, `multisample` for one sample per key

@@ -74,7 +74,7 @@ section removes it.
 patch, with its standard comments: your own comments in the file are not
 kept.
 
-### `ballast vary PATCH -o DIR [-n N] [--seed SEED]`
+### `ballast vary PATCH -o DIR [-n N] [--seed SEED] [--along FIELD STEPS]...`
 
 Writes N variations of a patch, 8 by default, into the folder `DIR`, as
 `kick-v1.toml`, `kick-v2.toml` and so on: patches near yours, to audition and
@@ -95,6 +95,20 @@ the body, the sub and the transient, and the output stay as they were. The
 same seed gives the same variations on every computer and in every version
 of Ballast, and each line printed says what moved, such as `punch ×1.08,
 snap ×1.01, length ×1.222, …`. `ballast pack` renders the folder.
+
+With `--along`, `vary` sets fields along axes instead, and writes every
+combination, the first axis outermost:
+
+```
+ballast vary kick.toml -o grid --along drive.db 6,12,18 --along body.amp x0.8,x1,x1.25
+```
+
+Each axis is a field and its steps, separated by commas. A number sets the
+field; `x` and a factor stretches a curve, as `ballast stretch` does, or
+multiplies a number; any other word sets a choice, such as
+`--along body.phase_ref onset,tail`. Every combination is checked before any
+file is written, and each invalid one is listed. A grid takes neither `-n`
+nor `--seed`, and makes at most 999 patches.
 
 ### `ballast render PATCH -o WAV [--format FORMAT] [--allow-over]`
 

@@ -52,7 +52,8 @@ spectrum, loudness and patch.
 - **Strict patches.** Every field is required and nothing is clamped. An
   invalid patch is refused with every problem and its field path.
 - **Finished kits.** `ballast vary` writes seeded variations of a patch,
-  the same on every computer, and `ballast pack` renders a folder of patches
+  the same on every computer, or every combination along axes you choose,
+  and `ballast pack` renders a folder of patches
   into a kit: WAVs named by key, their patches beside them, a manifest of
   tuning, peaks and loudness, and nothing written unless every kick passes
   its gates.
@@ -87,6 +88,7 @@ ballast render kick.toml -o kick.wav --format pcm24
 ballast extract kick.wav                        # the patch, back out of the file
 ballast multisample kick.toml C1 C2 -o kick     # one sample per key, with an SFZ map
 ballast vary kick.toml -n 8 -o vars             # eight seeded variations to audition
+ballast vary kick.toml -o grid --along drive.db 6,12,18  # or every step along axes
 ballast pack vars -o kit --rate 44100 --rate 48000  # a finished kit, with a manifest
 ```
 

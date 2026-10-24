@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Vittorio Candolo
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Variations: patches near a patch, drawn from a seed, the same ones every time.
+"""Variations: patches near a patch, drawn from a seed the same way every time, or set along a grid of axes.
 
 Each variation draws one uniform in [-1, 1) per move from SHAKE-256, keyed by
 `ballast/vary/v1`, the seed and the variation's number, and makes these
@@ -18,14 +18,21 @@ moves, each bounded to what the patch allows and rounded to read cleanly:
 The tuning, the levels of the body, sub and transient, and everything else
 stay as they were. The draws never depend on NumPy, so the same seed gives
 the same variations in every version.
+
+A grid instead sets fields along axes, such as drive.db at 6, 12 and 18, and
+makes every combination. A step is a number, which sets the field; xF, which
+stretches a curve by F, as `ballast stretch` does, or multiplies a number;
+or any other text, which sets a choice, such as phase_ref's "tail".
 """
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
+import itertools
 import math
 
-from .patch import BODY_HZ, MAX_BODY_MS, TONE_HZ, Patch, edit, stretch
+from .patch import BODY_HZ, CURVES, MAX_BODY_MS, SECTIONS, TONE_HZ, Patch, PatchError, edit, stretch
 
 VARY_KEY = b"ballast/vary/v1"
 MOVES = ("punch", "snap", "length", "click", "tone", "drive", "bright")
@@ -81,3 +88,55 @@ def vary(p: Patch, seed: int, number: int) -> tuple[Patch, list[str]]:
         p = edit(p, "body.bright_hz", bright)
         done.append(f"bright ×{bright / b.bright_hz:.3g}")
     return p, done
+
+
+def step(p: Patch, path: str, text: str) -> Patch:
+    """Return the patch with one step of an axis taken: a number set, xF stretched or multiplied, or a choice set."""
+    section, _, name = path.partition(".")
+    kinds = {f.name: f.type for f in dataclasses.fields(SECTIONS[section])} if section in SECTIONS else {}
+    if name not in kinds:
+        msg = f"{path}: no such field"
+        raise PatchError([msg])
+    if text.startswith("x"):
+        try:
+            factor = float(text[1:])
+        except ValueError:
+            msg = f"{path}: {text!r} is not a factor such as x1.5"
+            raise PatchError([msg]) from None
+        if path in CURVES:
+            return stretch(p, path, factor)
+        part = getattr(p, section)
+        current = None if part is None else getattr(part, name)
+        if not isinstance(current, float):
+            msg = f"{path}: only a number or a curve can be multiplied"
+            raise PatchError([msg])
+        return edit(p, path, round(current * factor, 6))
+    try:
+        value: object = int(text) if text.lstrip("-").isdigit() else float(text)
+    except ValueError:
+        value = text
+    if isinstance(value, int) and kinds[name] != "int":
+        value = float(value)  # 6 means 6.0 for a number; integer fields, such as polarity, keep it whole
+    return edit(p, path, value)
+
+
+def grid(p: Patch, axes: list[tuple[str, list[str]]]) -> list[tuple[Patch, list[str]]]:
+    """Make every combination of the axes' steps, the first axis outermost, or report every one that fails."""
+    known = {f"{name}.{f.name}" for name, cls in SECTIONS.items() for f in dataclasses.fields(cls)}
+    if unknown := [f"{path}: no such field" for path, _ in axes if path not in known]:
+        raise PatchError(unknown)
+    out, problems = [], []
+    for combination in itertools.product(*([(path, text) for text in steps] for path, steps in axes)):
+        q, done = p, []
+        try:
+            for path, text in combination:
+                q = step(q, path, text)
+                done.append(f"{path} {text}")
+        except PatchError as e:
+            where = ", ".join(f"{path} {text}" for path, text in combination)
+            problems += [f"{where}: {problem}" for problem in e.problems]
+            continue
+        out.append((q, done))
+    if problems:
+        raise PatchError(problems)
+    return out
