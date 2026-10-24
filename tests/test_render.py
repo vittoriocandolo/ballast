@@ -15,6 +15,7 @@ from ballast_synth import family, patch, render
 
 PASSBAND_HZ = 20000
 EQ_MATCH_DB = 0.004  # how close the EQ comes to its analog prototypes, up to 20 kHz
+LOW_PASS_MATCH_DB = 0.012  # and the low-pass, whose -12 dB/oct slope shows the warping, 40 log10(tan x / x)
 RIPPLE_DB = 0.001  # the specified flatness of the passband
 STOPBAND_DB = -110  # the specified attenuation from half the base rate up
 
@@ -266,3 +267,16 @@ def test_the_loudest_moment_of_a_kick_counts_its_first_400_ms(gain: patch.Patch)
     louder, _ = render.render(with_output(gain, db=0.0))
     assert render.loudness(louder, 48000) == pytest.approx(report.loudness + 6.0, abs=1e-6)
     assert render.loudness(np.concatenate((audio, np.zeros(48000))), 48000) == report.loudness
+
+
+@pytest.mark.parametrize("base", [44100, 48000])
+@pytest.mark.parametrize(("hz", "q"), [(40.0, 0.707), (800.0, 4.0), (20000.0, 10.0)])
+def test_the_low_pass_matches_its_analog_prototype(tight: patch.Patch, base: int, hz: float, q: float) -> None:
+    """Design the resonant low-pass at the internal rate, and find it within 0.012 dB of 1 / (s² + s/Q + 1)."""
+    _, rate, _ = family.rates(base)
+    bands = render.eq(dataclasses.replace(tight.eq, cutoff_hz=hz, resonance=q), rate)
+    assert bands.shape == (1, 6)
+    f = np.geomspace(10, PASSBAND_HZ, 2000)
+    _, h = sosfreqz(bands, worN=f, fs=rate)
+    s = 1j * f / hz
+    assert np.max(np.abs(20 * np.log10(np.abs(h * (s * s + s / q + 1))))) < LOW_PASS_MATCH_DB

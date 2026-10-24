@@ -278,11 +278,11 @@ patch's sample rate.
 
 ## Designing a kick
 
-Fourteen of the moves below are made on the `tight` preset, each with a link
+Fifteen of the moves below are made on the `tight` preset, each with a link
 to its sound, to compare with [tight itself](audio/tight.wav); the figure
 shows what they do.
 
-![The tight preset and fourteen moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a brighter body, a zap, a sampled click, a sub, a room, more drive, a knock, a low cut, warmth and clipping](figures/design.svg)
+![The tight preset and fifteen moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a brighter body, a zap, a sampled click, a sub, a room, more drive, a knock, a low-pass, a low cut, warmth and clipping](figures/design.svg)
 
 - **Tune it to the track.** A kick in the key of the bass sits in the mix. Use
   `ballast tune kick.toml E1`, or `--tune` with `init`.
@@ -392,6 +392,10 @@ shows what they do.
   −1 dBTP `tight` comes out quieter, −17.1 LUFS against −13.4; let the
   clipper take that peak back, as `tech-house` does.
   [Hear the knock](audio/tight-knock.wav).
+- **Dark is a low-pass.** `eq.cutoff_hz = 1200.0` closes the kick down
+  above 1.2 kHz at 12 dB per octave: the filtered thud of a sampled disco
+  kick. `eq.resonance` above 0.707 rings at the corner, as an analog filter
+  does. [Hear the dark kick](audio/tight-dark.wav).
 - **Cut what you cannot hear.** `output.low_cut_hz = 30.0` high-passes the
   kick at 30 Hz with a 12 dB/octave Butterworth filter, which removes DC and
   sub-sonic energy. The presets leave it off, so what you design is what you

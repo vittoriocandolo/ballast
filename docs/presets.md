@@ -82,13 +82,15 @@ asymmetry = 0.5             # even harmonics, 0 … 1
 mix       = 1.0             # 0 = dry … 1 = driven
 
 [eq]
-low_hz  = 80.0              # low shelf
-low_db  = 0.0               # 0 = off
-bell_hz = 200.0             # bell
-bell_db = 4.0               # 0 = off
-bell_q  = 1.5               # 0.3 = wide … 10 = narrow
-high_hz = 8000.0            # high shelf
-high_db = 0.0               # 0 = off
+low_hz    = 80.0            # low shelf
+low_db    = 0.0             # 0 = off
+bell_hz   = 200.0           # bell
+bell_db   = 4.0             # 0 = off
+bell_q    = 1.5             # 0.3 = wide … 10 = narrow
+high_hz   = 8000.0          # high shelf
+high_db   = 0.0             # 0 = off
+cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
+resonance = 0.707           # Q: 0.707 = flat … 10
 
 [clip]
 db      = 4.0               # off the peaks; 0 = off
@@ -164,13 +166,15 @@ asymmetry = 0.0             # even harmonics, 0 … 1
 mix       = 1.0             # 0 = dry … 1 = driven
 
 [eq]
-low_hz  = 80.0              # low shelf
-low_db  = 0.0               # 0 = off
-bell_hz = 200.0             # bell
-bell_db = 0.0               # 0 = off
-bell_q  = 1.0               # 0.3 = wide … 10 = narrow
-high_hz = 8000.0            # high shelf
-high_db = 0.0               # 0 = off
+low_hz    = 80.0            # low shelf
+low_db    = 0.0             # 0 = off
+bell_hz   = 200.0           # bell
+bell_db   = 0.0             # 0 = off
+bell_q    = 1.0             # 0.3 = wide … 10 = narrow
+high_hz   = 8000.0          # high shelf
+high_db   = 0.0             # 0 = off
+cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
+resonance = 0.707           # Q: 0.707 = flat … 10
 
 [clip]
 db      = 0.0               # off the peaks; 0 = off
@@ -247,13 +251,15 @@ asymmetry = 0.4             # even harmonics, 0 … 1
 mix       = 1.0             # 0 = dry … 1 = driven
 
 [eq]
-low_hz  = 80.0              # low shelf
-low_db  = 0.0               # 0 = off
-bell_hz = 180.0             # bell
-bell_db = 2.0               # 0 = off
-bell_q  = 1.0               # 0.3 = wide … 10 = narrow
-high_hz = 8000.0            # high shelf
-high_db = 0.0               # 0 = off
+low_hz    = 80.0            # low shelf
+low_db    = 0.0             # 0 = off
+bell_hz   = 180.0           # bell
+bell_db   = 2.0             # 0 = off
+bell_q    = 1.0             # 0.3 = wide … 10 = narrow
+high_hz   = 8000.0          # high shelf
+high_db   = 0.0             # 0 = off
+cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
+resonance = 0.707           # Q: 0.707 = flat … 10
 
 [clip]
 db      = 4.0               # off the peaks; 0 = off
@@ -329,13 +335,15 @@ asymmetry = 0.0             # even harmonics, 0 … 1
 mix       = 1.0             # 0 = dry … 1 = driven
 
 [eq]
-low_hz  = 80.0              # low shelf
-low_db  = 0.0               # 0 = off
-bell_hz = 200.0             # bell
-bell_db = 0.0               # 0 = off
-bell_q  = 1.0               # 0.3 = wide … 10 = narrow
-high_hz = 8000.0            # high shelf
-high_db = 0.0               # 0 = off
+low_hz    = 80.0            # low shelf
+low_db    = 0.0             # 0 = off
+bell_hz   = 200.0           # bell
+bell_db   = 0.0             # 0 = off
+bell_q    = 1.0             # 0.3 = wide … 10 = narrow
+high_hz   = 8000.0          # high shelf
+high_db   = 0.0             # 0 = off
+cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
+resonance = 0.707           # Q: 0.707 = flat … 10
 
 [clip]
 db      = 0.0               # off the peaks; 0 = off
@@ -422,13 +430,15 @@ amp = [
 ]
 
 [eq]
-low_hz  = 80.0              # low shelf
-low_db  = 0.0               # 0 = off
-bell_hz = 200.0             # bell
-bell_db = 0.0               # 0 = off
-bell_q  = 1.0               # 0.3 = wide … 10 = narrow
-high_hz = 8000.0            # high shelf
-high_db = 0.0               # 0 = off
+low_hz    = 80.0            # low shelf
+low_db    = 0.0             # 0 = off
+bell_hz   = 200.0           # bell
+bell_db   = 0.0             # 0 = off
+bell_q    = 1.0             # 0.3 = wide … 10 = narrow
+high_hz   = 8000.0          # high shelf
+high_db   = 0.0             # 0 = off
+cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
+resonance = 0.707           # Q: 0.707 = flat … 10
 
 [clip]
 db      = 4.0               # off the peaks; 0 = off
@@ -504,13 +514,15 @@ asymmetry = 0.0             # even harmonics, 0 … 1
 mix       = 1.0             # 0 = dry … 1 = driven
 
 [eq]
-low_hz  = 80.0              # low shelf
-low_db  = 0.0               # 0 = off
-bell_hz = 200.0             # bell
-bell_db = 0.0               # 0 = off
-bell_q  = 1.0               # 0.3 = wide … 10 = narrow
-high_hz = 8000.0            # high shelf
-high_db = 0.0               # 0 = off
+low_hz    = 80.0            # low shelf
+low_db    = 0.0             # 0 = off
+bell_hz   = 200.0           # bell
+bell_db   = 0.0             # 0 = off
+bell_q    = 1.0             # 0.3 = wide … 10 = narrow
+high_hz   = 8000.0          # high shelf
+high_db   = 0.0             # 0 = off
+cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
+resonance = 0.707           # Q: 0.707 = flat … 10
 
 [clip]
 db      = 0.0               # off the peaks; 0 = off
@@ -589,13 +601,15 @@ asymmetry = 0.0             # even harmonics, 0 … 1
 mix       = 1.0             # 0 = dry … 1 = driven
 
 [eq]
-low_hz  = 80.0              # low shelf
-low_db  = 0.0               # 0 = off
-bell_hz = 200.0             # bell
-bell_db = 0.0               # 0 = off
-bell_q  = 1.0               # 0.3 = wide … 10 = narrow
-high_hz = 8000.0            # high shelf
-high_db = 0.0               # 0 = off
+low_hz    = 80.0            # low shelf
+low_db    = 0.0             # 0 = off
+bell_hz   = 200.0           # bell
+bell_db   = 0.0             # 0 = off
+bell_q    = 1.0             # 0.3 = wide … 10 = narrow
+high_hz   = 8000.0          # high shelf
+high_db   = 0.0             # 0 = off
+cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
+resonance = 0.707           # Q: 0.707 = flat … 10
 
 [clip]
 db      = 0.0               # off the peaks; 0 = off

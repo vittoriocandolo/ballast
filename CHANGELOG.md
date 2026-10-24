@@ -36,7 +36,8 @@ The first public release.
 - A room: a seeded tail of noise whose every frequency fades on its own clock,
   after the drive.
 - A three-band EQ after the drive, low shelf, bell and high shelf, within
-  0.004 dB of its analog prototypes up to 20 kHz.
+  0.004 dB of its analog prototypes up to 20 kHz, and a static resonant
+  low-pass within 0.012 dB of its own.
 - Sampled transients: `ballast transient` layers a short WAV over the attack,
   stored in the patch as base64 float32, brought up by the family's frozen
   filter and played at any pitch and from either rate family within 140 dB of

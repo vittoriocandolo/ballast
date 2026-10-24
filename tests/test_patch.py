@@ -416,7 +416,7 @@ def test_older_schemas_still_read_with_everything_new_off(raw: dict[str, Any], s
         0.0,
     )
     assert old.output.low_cut_hz == (0.0 if schema == 1 else raw["output"]["low_cut_hz"])
-    assert (old.eq.low_db, old.eq.bell_db, old.eq.high_db) == (0.0, 0.0, 0.0)
+    assert (old.eq.low_db, old.eq.bell_db, old.eq.high_db, old.eq.cutoff_hz) == (0.0, 0.0, 0.0, 0.0)
     assert patch.dumps(old).startswith("schema = 3\n")
 
 

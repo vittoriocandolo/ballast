@@ -83,8 +83,9 @@ def low_cut(hz: float, rate: int) -> NDArray[np.float64]:
 def eq(e: EQ, rate: int) -> NDArray[np.float64]:
     """Design the EQ's bands that are on, by the bilinear transform, as sections for sosfilt (none when all are off).
 
-    The coefficients are the cookbook's, computed here in closed form: shelves of slope 1, and a bell of bandwidth
-    set by its Q. At 32 times the base rate they match their analog prototypes within 0.004 dB up to 20 kHz.
+    The coefficients are the cookbook's, computed here in closed form: shelves of slope 1, a bell of bandwidth set
+    by its Q, and a resonant low-pass. At 32 times the base rate they match their analog prototypes up to 20 kHz:
+    the shelves and the bell within 0.004 dB, the low-pass within 0.012 dB, where its slope shows the warping.
     """
     sections = []
     if e.low_db != 0.0:
@@ -96,6 +97,10 @@ def eq(e: EQ, rate: int) -> NDArray[np.float64]:
         sections.append([1 + alpha * a, -2 * c, 1 - alpha * a, 1 + alpha / a, -2 * c, 1 - alpha / a])
     if e.high_db != 0.0:
         sections.append(_shelf(e.high_hz, e.high_db, rate, high=True))
+    if e.cutoff_hz != 0.0:
+        w = 2 * math.pi * e.cutoff_hz / rate
+        alpha, low = math.sin(w) / (2 * e.resonance), 2 * math.sin(w / 2) ** 2  # 1 - cos ω, without cancellation
+        sections.append([low / 2, low, low / 2, 1 + alpha, -2 * math.cos(w), 1 - alpha])
     return np.array([[*(x / s[3] for x in s[:3]), 1.0, s[4] / s[3], s[5] / s[3]] for s in sections]).reshape(-1, 6)
 
 

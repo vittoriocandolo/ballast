@@ -447,7 +447,7 @@ class Drive:
 
 @dataclass(frozen=True)
 class EQ:
-    """Three bands after the drive and the sub: a low shelf, a bell and a high shelf, each off at 0 dB."""
+    """After the drive, the sub and the room: a low shelf, a bell and a high shelf, off at 0 dB, and a low-pass."""
 
     low_hz: float = number(20.0, 1000.0, "low shelf")
     low_db: float = number(-12.0, 12.0, "0 = off")
@@ -456,6 +456,8 @@ class EQ:
     bell_q: float = number(0.3, 10.0, "0.3 = wide … 10 = narrow")
     high_hz: float = number(1000.0, 20000.0, "high shelf")
     high_db: float = number(-12.0, 12.0, "0 = off")
+    cutoff_hz: float = number(20.0, 20000.0, "low-pass, 12 dB/oct; 0 = off", off=0.0)
+    resonance: float = number(0.5, 10.0, "Q: 0.707 = flat … 10")
 
 
 @dataclass(frozen=True)
@@ -578,6 +580,8 @@ EQ_OFF = {  # every band at 0 dB
     "bell_q": 1.0,
     "high_hz": 8000.0,
     "high_db": 0.0,
+    "cutoff_hz": 0.0,
+    "resonance": 0.707,
 }
 # What each older schema lacks, with the values that render its patches exactly as they always sounded; None for
 # an optional section it could not have, so that its patches have none.

@@ -278,13 +278,18 @@ EQ and the clipper, so they shape the whole sound and its exact true peak.
 
 ## The EQ
 
-`[eq]` has three bands after the drive and the sub: a low shelf for weight, a
-bell for knock, and a high shelf for air. Each is one biquad from the audio
-EQ cookbook, its coefficients computed in closed form like the low cut's:
-shelves of slope 1, and a bell whose Q sets its width. Designed by the
-bilinear transform at 32 times the base rate, they barely warp: every band
-stays within 0.004 dB of its analog prototype all the way to 20 kHz, where an
-EQ running at 48 kHz bends its top end. A band at 0 dB is not there at all.
+`[eq]` has three bands after the drive, the sub and the room: a low shelf for
+weight, a bell for knock, and a high shelf for air; and a resonant low-pass,
+the filtered sound of a sampled kick. Each is one biquad from the audio EQ
+cookbook, its coefficients computed in closed form like the low cut's: shelves
+of slope 1, a bell whose Q sets its width, and a low-pass whose Q lifts its
+corner. Designed by the bilinear transform at 32 times the base rate, they
+barely warp: the bands stay within 0.004 dB of their analog prototypes all
+the way to 20 kHz, where an EQ running at 48 kHz bends its top end, and the
+low-pass within 0.012 dB, where its falling slope shows the last of the
+warping. The low-pass is static, the same for the whole kick: a sweep belongs
+to a track, across its bars. A band at 0 dB, or the low-pass at 0 Hz, is not
+there at all.
 
 ![The EQ's shelves at four gains and its bell at three widths, as they respond at the internal rate](figures/eq.svg)
 

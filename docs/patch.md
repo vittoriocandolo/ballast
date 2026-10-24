@@ -58,13 +58,15 @@ asymmetry = 0.0             # even harmonics, 0 … 1
 mix       = 1.0             # 0 = dry … 1 = driven
 
 [eq]
-low_hz  = 80.0              # low shelf
-low_db  = 0.0               # 0 = off
-bell_hz = 200.0             # bell
-bell_db = 0.0               # 0 = off
-bell_q  = 1.0               # 0.3 = wide … 10 = narrow
-high_hz = 8000.0            # high shelf
-high_db = 0.0               # 0 = off
+low_hz    = 80.0            # low shelf
+low_db    = 0.0             # 0 = off
+bell_hz   = 200.0           # bell
+bell_db   = 0.0             # 0 = off
+bell_q    = 1.0             # 0.3 = wide … 10 = narrow
+high_hz   = 8000.0          # high shelf
+high_db   = 0.0             # 0 = off
+cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
+resonance = 0.707           # Q: 0.707 = flat … 10
 
 [clip]
 db      = 0.0               # off the peaks; 0 = off
@@ -153,8 +155,8 @@ the EQ, the low cut and the clipper. The kick runs on for the whole tail:
 
 ### `[eq]`: three bands
 
-After the drive and the sub, before the low cut. Each band at 0 dB is not
-there at all.
+After the drive, the sub and the room, before the low cut. Each band at 0 dB,
+and the low-pass at 0 Hz, is not there at all.
 
 | Field | Type | Range | Meaning |
 |---|---|---|---|
@@ -165,6 +167,8 @@ there at all.
 | `bell_q` | number | 0.3 – 10 | The bell's width: 0.3 spans octaves, 10 a few semitones. |
 | `high_hz` | number | 1 – 20 kHz | The high shelf's corner. |
 | `high_db` | number | −12 – +12 dB | The high shelf's gain above its corner; 0 turns it off. |
+| `cutoff_hz` | number | 20 Hz – 20 kHz, or 0 | A resonant low-pass, 12 dB/octave above this frequency; 0 turns it off. |
+| `resonance` | number | 0.5 – 10 | The low-pass's Q: 0.707 is flat to the corner, higher rings and lifts it, 10 by 20 dB. |
 
 ### `[clip]`: the clipper
 

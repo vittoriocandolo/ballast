@@ -437,6 +437,7 @@ def design_moves(tight: Kick) -> list[tuple[str, Kick]]:
         ("tight-room", "[room]: -12 dB, 600 ms", patch.edit(p, "room", ROOM)),
         ("tight-drive", "drive.db = 18.0", patch.edit(p, "drive.db", 18.0)),
         ("tight-knock", "eq.bell_db = 6.0", patch.edit(p, "eq.bell_db", 6.0)),
+        ("tight-dark", "eq.cutoff_hz = 1200.0", patch.edit(p, "eq.cutoff_hz", 1200.0)),
         ("tight-cut", "output.low_cut_hz = 30.0", patch.edit(p, "output.low_cut_hz", 30.0)),
         ("tight-warm", "drive.asymmetry = 1.0", patch.edit(p, "drive.asymmetry", 1.0)),
         ("tight-clip", "clip.db = 4.0", patch.edit(p, "clip.db", 4.0)),
@@ -1287,16 +1288,20 @@ def figure_eq(p: patch.Patch) -> str:
     body += [bells.frame(Ticks((100, 1000, 10000), hz, "frequency, Hz"), gains), bells.hline(0)]
     for cls, q in WIDTHS:
         body.append(bells.line(cls, f, response(dataclasses.replace(p.eq, bell_db=9.0, bell_q=q))))
+    for cls, q in (("s2", 0.707), ("s3", 4.0)):
+        lowpass = response(dataclasses.replace(p.eq, cutoff_hz=2000.0, resonance=q))
+        body.append(bells.clip("lowpass", bells.line(cls, f, lowpass)))
     left = [(f"k{cls}", f"{db:+g} dB".replace("-", "−")) for cls, db in SHELVES]
     body.append(legend_row(below(shelves), [(cls, f"shelves at {text}") for cls, text in left[:1]] + left[1:]))
-    body.append(legend_row(below(bells), [(f"k{cls}", f"bell, Q {num(q)}") for cls, q in WIDTHS]))
+    bell_keys = [(f"k{cls}", f"bell, Q {num(q)}") for cls, q in WIDTHS]
+    body.append(legend(below(bells), [*bell_keys, ("key2", "low-pass at 2 kHz, Q 0.707"), ("key3", "and Q 4")]))
     e = p.eq
     subtitle = (
-        f"Shelves at {num(e.low_hz)} Hz and {num(e.high_hz / KILO)} kHz, and a +9 dB bell at {num(e.bell_hz)} Hz, "
-        "within 0.004 dB of their analog prototypes"
+        f"Shelves at {num(e.low_hz)} Hz and {num(e.high_hz / KILO)} kHz, a +9 dB bell at {num(e.bell_hz)} Hz and a "
+        "resonant low-pass, each true to its analog prototype"
     )
-    description = "The EQ's shelves at four gains and its bell at three widths, as they respond at the internal rate"
-    return svg(fit(shelves, 1), "The EQ", subtitle, "".join(body), description)
+    description = "The EQ's shelves at four gains, its bell at three widths and its low-pass, at the internal rate"
+    return svg(fit(bells, 5), "The EQ", subtitle, "".join(body), description)
 
 
 CORNERS = (("o1", 10.0), ("o2", 30.0), ("o3", 100.0), ("o4", 1000.0))
