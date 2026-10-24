@@ -53,6 +53,9 @@ def raw(tight: patch.Patch) -> dict[str, Any]:
     return patch.to_dict(tight)
 
 
+SUB = patch.Sub(-6.0, ((0.0, 0.0), (5.0, 1.0), (150.0, 0.6), (400.0, 0.0)))  # a sub that outlasts the body
+
+
 @pytest.fixture
 def click() -> NDArray[np.float64]:
     """Return a click to layer, at 48 kHz: three decaying modes of a struck block, 30 ms long, peaking at -12 dBFS."""

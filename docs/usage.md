@@ -211,11 +211,11 @@ patch's sample rate.
 
 ## Designing a kick
 
-Eleven of the moves below are made on the `tight` preset, each with a link to its
+Twelve of the moves below are made on the `tight` preset, each with a link to its
 sound, to compare with [tight itself](audio/tight.wav); the figure shows what
 they do.
 
-![The tight preset and eleven moves made on it: retuned to E1, a faster pitch drop, a longer body, a brighter body, a louder click, a zap, a sampled click, more drive, a low cut, warmth and clipping](figures/design.svg)
+![The tight preset and twelve moves made on it: retuned to E1, a faster pitch drop, a longer body, a brighter body, a louder click, a zap, a sampled click, more drive, a sub, a low cut, warmth and clipping](figures/design.svg)
 
 - **Tune it to the track.** A kick in the key of the bass sits in the mix. Use
   `ballast tune kick.toml E1`, or `--tune` with `init`.
@@ -253,6 +253,23 @@ they do.
   full scale stays at full scale; `h2` adds the even second harmonic.
   `drive.db = 18.0`, up from 6, squares the body off.
   [Hear the heavier drive](audio/tight-drive.wav).
+- **A sub carries the weight on, clean.** A `[sub]` section adds the sine
+  the body's tail meets, under its own shape, after the drive: however hard
+  the body is driven, the sub stays a sine, in phase with the tail. A sub at
+  -6 dB that outlasts the body by 160 ms:
+
+  ```toml
+  [sub]
+  level_db = -6.0
+  amp = [
+    { ms = 0.0,   gain = 0.0 },
+    { ms = 5.0,   gain = 1.0 },
+    { ms = 150.0, gain = 0.6 },
+    { ms = 400.0, gain = 0.0 },
+  ]
+  ```
+
+  [Hear the sub](audio/tight-sub.wav).
 - **Warmth is asymmetry.** `drive.asymmetry` adds even harmonics that grow as
   the body decays, and leaves full scale where it was; `drive.mix` below 1
   keeps some of the undriven kick, for density without losing the hit. Even

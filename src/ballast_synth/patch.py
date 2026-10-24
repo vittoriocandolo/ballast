@@ -4,8 +4,8 @@
 """The patch: a complete, readable description of one kick.
 
 Every field is required and the renderer holds no defaults, so a future
-default can never change an old patch. The one section a patch may leave out
-is [transient], a layer of its own: without it, the patch has none. Each
+default can never change an old patch. The sections a patch may leave out are
+the layers [sub] and [transient]: without one, the patch has none. Each
 field declares its rule and its comment in the canonical TOML once, on its
 dataclass, and parsing, dumping and editing all work from those
 declarations. The parser rejects anything outside the valid domain, reporting
@@ -409,6 +409,14 @@ class Output:
 
 
 @dataclass(frozen=True)
+class Sub:
+    """A clean sub after the drive: the sine at tune_hz that the body's tail meets, under its own amplitude shape."""
+
+    level_db: float = number(-60.0, 24.0, off=-math.inf)
+    amp: tuple[tuple[float, float], ...] = knots("gain", (3, 32), MAX_BODY_MS, _shape)
+
+
+@dataclass(frozen=True)
 class Transient:
     """A sampled transient, layered with the attack: its level, start, pitch and polarity, and its samples."""
 
@@ -439,7 +447,7 @@ class Transient:
 
 @dataclass(frozen=True)
 class Patch:
-    """One kick: the seed of its noise and dither, its five sections, and its transient, if it has one."""
+    """One kick: the seed of its noise and dither, its five sections, and its sub and transient, if it has them."""
 
     seed: int
     body: Body
@@ -447,28 +455,32 @@ class Patch:
     drive: Drive
     clip: Clip
     output: Output
+    sub: Sub | None
     transient: Transient | None
 
     @property
     def length_ms(self) -> float:
         """The source length: the end of the latest source, the amplitude shapes' last knots or the transient."""
         ends = [self.body.amp[-1][0], self.attack.amp[-1][0]]
+        if self.sub is not None:
+            ends.append(self.sub.amp[-1][0])
         if self.transient is not None:
             ends.append(self.transient.end_ms)
         return max(ends)
 
 
-type Section = Body | Attack | Drive | Clip | Output | Transient
+type Section = Body | Attack | Drive | Sub | Clip | Output | Transient
 
 SECTIONS: dict[str, type[Section]] = {
     "body": Body,
     "attack": Attack,
     "drive": Drive,
+    "sub": Sub,
     "clip": Clip,
     "output": Output,
     "transient": Transient,  # last, since its samples run long
 }
-OPTIONAL = ("transient",)  # the sections a patch may leave out
+OPTIONAL = ("sub", "transient")  # the sections a patch may leave out: layers it then does not have
 FIXED_TONE = ((0.0, 1.0),)  # a pitch curve of one knot: the attack's tone holds tone_hz
 # What each older schema lacks, with the values that render its patches exactly as they always sounded; None for
 # an optional section it could not have, so that its patches have none.
@@ -479,6 +491,7 @@ ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
         "drive": {"asymmetry": 0.0, "mix": 1.0},
         "clip": {"db": 0.0, "knee_db": 0.0},
         "output": {"low_cut_hz": 0.0},
+        "sub": None,
         "transient": None,
     },
     2: {
@@ -486,6 +499,7 @@ ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
         "attack": {"pitch": FIXED_TONE},
         "drive": {"asymmetry": 0.0, "mix": 1.0},
         "clip": {"db": 0.0, "knee_db": 0.0},
+        "sub": None,
         "transient": None,
     },
     SCHEMA: {},
@@ -558,7 +572,7 @@ def from_dict(data: object) -> Patch:
             sections[name] = _section(name, cls, data[name], problems, new or {})
     if problems:
         raise PatchError(problems)
-    transient = sections.get("transient")
+    sub, transient = sections.get("sub"), sections.get("transient")
     return Patch(
         data["seed"],
         Body(**sections["body"]),
@@ -566,6 +580,7 @@ def from_dict(data: object) -> Patch:
         Drive(**sections["drive"]),
         Clip(**sections["clip"]),
         Output(**sections["output"]),
+        None if sub is None else Sub(**sub),
         None if transient is None else Transient(**transient),
     )
 
@@ -664,7 +679,10 @@ def stretch(p: Patch, curve: str, factor: float, anchor_ms: float | None = None)
         msg = "the factor must be a positive number"
         raise ValueError(msg)
     section, name = curve.split(".")
-    pairs = getattr(getattr(p, section), name)
+    part = getattr(p, section)
+    if part is None:
+        raise PatchError([f"{section}: the patch has none"])
+    pairs = getattr(part, name)
     if anchor_ms is None:
         anchor_ms = 0.0 if name == "pitch" else next(ms for ms, g in pairs if g == 1.0)
     moved = tuple((ms if ms <= anchor_ms else round(anchor_ms + factor * (ms - anchor_ms), 3), v) for ms, v in pairs)

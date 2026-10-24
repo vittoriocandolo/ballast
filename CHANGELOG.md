@@ -31,6 +31,8 @@ The first public release.
   16-bit PCM with seeded TPDF dither, normalized to a gain, a sample peak or a
   true peak, with the root key in a `smpl` chunk and the patch and its
   provenance in a `blst` chunk. Every file is written whole or not at all.
+- A clean sub: the sine the body's tail meets, under its own shape, added
+  after the drive.
 - Sampled transients: `ballast transient` layers a short WAV over the attack,
   stored in the patch as base64 float32, brought up by the family's frozen
   filter and played at any pitch and from either rate family within 140 dB of

@@ -17,6 +17,8 @@ from numpy.typing import NDArray
 from ballast_synth import patch
 from ballast_synth.patch import PatchError
 
+from .conftest import SUB
+
 RATES = "44100, 48000, 88200, 96000, 176400, 192000"
 
 
@@ -393,11 +395,33 @@ def test_an_older_schema_refuses_what_it_did_not_have(raw: dict[str, Any]) -> No
     assert problems(raw) == ["clip: unknown field", "attack.pitch: unknown field"]
 
 
-def test_a_patch_may_leave_out_its_transient_and_then_has_none(tight: patch.Patch, raw: dict[str, Any]) -> None:
-    """Read a patch without a transient section, which has none and writes none."""
-    assert tight.transient is None
+def test_a_patch_may_leave_out_its_layers_and_then_has_none(tight: patch.Patch, raw: dict[str, Any]) -> None:
+    """Read a patch without a sub or a transient section, which has neither and writes neither."""
+    assert (tight.sub, tight.transient) == (None, None)
+    assert "sub" not in raw
     assert "transient" not in raw
+    assert "[sub]" not in patch.dumps(tight)
     assert "[transient]" not in patch.dumps(tight)
+
+
+def test_a_sub_reads_back_from_its_canonical_text_and_sets_the_length(tight: patch.Patch) -> None:
+    """Write a patch with a sub that outlasts the body, and read the same patch, 400 ms long, back."""
+    p = patch.edit(tight, "sub", SUB)
+    text = patch.dumps(p)
+    assert text.index("[drive]") < text.index("[sub]") < text.index("[clip]")
+    assert patch.loads(text) == p
+    assert p.length_ms == SUB.amp[-1][0]
+
+
+def test_the_sub_amplitude_is_a_shape_that_stretches(tight: patch.Patch) -> None:
+    """Refuse a sub shape that does not peak at 1, and stretch the sub's shape after its peak."""
+    with pytest.raises(PatchError, match=r"sub\.amp: the highest gain must be exactly 1, found 0\.6"):
+        patch.edit(tight, "sub", patch.Sub(-6.0, ((0.0, 0.0), (5.0, 0.6), (10.0, 0.0))))
+    stretched = patch.stretch(patch.edit(tight, "sub", SUB), "sub.amp", 2.0).sub
+    assert stretched is not None
+    assert stretched.amp == ((0.0, 0.0), (5.0, 1.0), (295.0, 0.6), (795.0, 0.0))
+    with pytest.raises(PatchError, match="sub: the patch has none"):
+        patch.stretch(tight, "sub.amp", 2.0)
 
 
 def test_a_transient_reads_back_from_its_canonical_text(layered: patch.Patch) -> None:
@@ -460,11 +484,12 @@ def test_transient_rules(layered: patch.Patch, field: str, value: object, messag
     assert problems(raw) == [message]
 
 
-def test_an_older_schema_cannot_have_a_transient(raw: dict[str, Any], layered: patch.Patch) -> None:
-    """Refuse a transient in a schema 2 patch, which could not have one."""
+def test_an_older_schema_cannot_have_a_layer(raw: dict[str, Any], layered: patch.Patch) -> None:
+    """Refuse a sub and a transient in a schema 2 patch, which could have neither."""
     raw = older(raw, 2)
+    raw["sub"] = patch.to_dict(patch.edit(layered, "sub", SUB))["sub"]
     raw["transient"] = patch.to_dict(layered)["transient"]
-    assert problems(raw) == ["transient: unknown field"]
+    assert problems(raw) == ["sub: unknown field", "transient: unknown field"]
 
 
 def test_a_missing_transient_has_no_field_to_edit(tight: patch.Patch) -> None:

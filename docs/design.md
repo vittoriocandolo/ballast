@@ -3,9 +3,10 @@
 Ballast computes one kick as a pure function of time, at 32 times the sample
 rate, and band-limits it once.
 
-    x(t) = b(t) + a(t) + v(t),    z = Q(C(D(x))),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
+    x(t) = b(t) + a(t) + v(t),    z = Q(C(D(x) + s)),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
 
-Here b is the body, a the attack, v the optional transient, D the drive, C the optional low cut and Q
+Here b is the body, a the attack, v the optional transient, D the drive, s
+the optional sub, C the optional low cut and Q
 the optional clipper, all at the internal rate F; h is the frozen decimator of
 the sample rate's family, K the decimation factor, g_out the output gain and p
 the polarity.
@@ -17,6 +18,7 @@ the polarity.
 - [The attack](#the-attack)
 - [The transient](#the-transient)
 - [The saturator](#the-saturator)
+- [The sub](#the-sub)
 - [The low cut](#the-low-cut)
 - [The clipper](#the-clipper)
 - [Rates and the decimator](#rates-and-the-decimator)
@@ -213,6 +215,23 @@ sample for sample and blend without combing.
 
 ![The drive's curve at 6 dB with asymmetry 0, 0.5 and 1, and a half-scale sine through each: the positive half grows fuller](figures/asymmetry.svg)
 
+## The sub
+
+The optional sub is the sine that the body's tail meets, under its own
+amplitude shape A_s and level g_s:
+
+    s(t) = g_s · A_s(t) · sin(φ₀ + 2π f₀ (t − c)),    c = t_n − ∫₀^{t_n} R
+
+With `phase_ref = "onset"`, c makes it the very sine the body becomes from
+the last pitch knot t_n on; with `"tail"`, c is 0. So the sub only ever adds
+to the tail: where the body has landed, the two share every zero crossing. It
+joins after the drive, so it stays a clean sine under a body driven to the
+limit, and before the low cut and the clipper, whose promise of an exact true
+peak covers the whole file. A sub an octave down would sit below 22 Hz for
+any kick tuned under F1, so the sub stays on the note.
+
+![The body and the sub meeting at the last pitch knot, and the tight preset with a sub under it and without](figures/sub.svg)
+
 ## The low cut
 
 `output.low_cut_hz` adds a second-order Butterworth high-pass, 12 dB per
@@ -359,7 +378,7 @@ Audition reuses the renderer and adds four small parts:
 | `patch.py` | the schema, declared once on the dataclass fields; parsing, canonical TOML, edits, tuning, transients' samples |
 | `curve.py` | monotone cubic Hermite curves with exact integrals |
 | `noise.py` | the seeded continuous-time noise, and the PCM dither |
-| `voice.py` | body, attack, transient and saturator as pure functions of time, evaluated in blocks |
+| `voice.py` | body, attack, transient, saturator and sub as pure functions of time, evaluated in blocks |
 | `shaper.py` | the drive's and the clipper's curves, anti-aliased by their antiderivatives |
 | `family.py` | the rate families: base and internal rates, and the frozen filters, checked by checksum |
 | `render.py` | low cut, clipper, parallel decimation, output stage, report, export |

@@ -428,6 +428,7 @@ def design_moves(tight: Kick) -> list[tuple[str, Kick]]:
         ("tight-bright", "body.bright_hz = 1000.0", patch.edit(p, "body.bright_hz", 1000.0)),
         ("tight-zap", "attack.pitch: 4 to 1 in 2 ms", patch.edit(p, "attack.pitch", ZAP)),
         ("tight-sample", "ballast transient kick.toml click.wav", patch.edit(p, "transient", CLICK)),
+        ("tight-sub", "[sub]: -6 dB, out to 400 ms", patch.edit(p, "sub", SUB)),
         ("tight-drive", "drive.db = 18.0", patch.edit(p, "drive.db", 18.0)),
         ("tight-cut", "output.low_cut_hz = 30.0", patch.edit(p, "output.low_cut_hz", 30.0)),
         ("tight-warm", "drive.asymmetry = 1.0", patch.edit(p, "drive.asymmetry", 1.0)),
@@ -535,10 +536,17 @@ def figure_pipeline() -> str:
     body.append(arrow(f"M182,{top + 68}C192,{top + 68} 204,{cy - 50} 208,{cy - 15}"))
     body.append(arrow(f"M182,{cy}H198"))
     body.append(arrow(f"M182,{top + 228}C192,{top + 228} 204,{cy + 50} 208,{cy + 15}"))
-    body.append(box(246, cy - 32, 190, "Drive", ("math", "tanh(αx)/tanh α + even"), ("label", "mixed with the dry")))
+    body.append(box(246, cy - 32, 172, "Drive", ("math", "tanh(αx)/tanh α + even"), ("label", "mixed with the dry")))
     body.append(arrow(f"M228,{cy}H244"))
-    body.append(box(462, cy - 32, 140, "Low cut", ("label", "12 dB/octave"), ("label", "0 Hz: off")))
-    body.append(arrow(f"M436,{cy}H460"))
+    body.append(
+        f'<circle class="box" cx="444" cy="{cy}" r="14"/>'
+        f'<text class="boxtitle" x="444" y="{cy + 5}" text-anchor="middle">+</text>',
+    )
+    body.append(arrow(f"M418,{cy}H428"))
+    body.append(box(374, top + 36, 140, "Sub", ("label", "the tail's own sine"), ("label", "clean, after the drive")))
+    body.append(arrow(f"M444,{top + 100}V{cy - 16}"))
+    body.append(box(484, cy - 32, 118, "Low cut", ("label", "12 dB/octave"), ("label", "0 Hz: off")))
+    body.append(arrow(f"M458,{cy}H482"))
     body.append(box(628, cy - 32, 180, "Clipper", ("label", "true peak down by db"), ("label", "knee: hard to soft")))
     body.append(arrow(f"M602,{cy}H626"))
     low = top + zone + 48
@@ -869,6 +877,40 @@ def figure_zap(p: patch.Patch) -> str:
     subtitle = "attack.pitch sweeps the click's tone into tone_hz, its phase integrated exactly, as the body's is"
     description = "A zap: the tone's frequency falling from 10 kHz into 2.5 kHz in 2 ms, and the tone it makes"
     return svg(fit(pitch, 1), "A zap", subtitle, "".join(body), description)
+
+
+SUB = patch.Sub(-6.0, ((0.0, 0.0), (5.0, 1.0), (150.0, 0.6), (400.0, 0.0)))  # the usage guide's sub
+
+
+def figure_sub(k: Kick) -> str:
+    """Draw the body and the sub where they meet, and the tight preset with the sub under it and without."""
+    p = patch.edit(patch.edit(k.p, "body.h2", 0.0), "sub", SUB)
+    v = Voice(p, INTERNAL)
+    if v.sub_amp is None:
+        msg = "the patch has a sub, so the voice has its shape"
+        raise ValueError(msg)
+    meet = KILO * float(v.pitch.t[-1])
+    window = Panel(LEFT, Axis(0, 2 * meet), Axis(-1.2, 1.2))
+    t = np.linspace(0, 2 * meet, 1601)[1:] / KILO  # from just after the trigger, where both shapes are silent
+    body = [
+        window.frame(Ticks(steps(2 * meet, meet / 2), num, "ms"), Ticks((-1, 0, 1), num, "Without their shapes")),
+        window.vline(meet, "ref") + window.text((meet + 4, 1.05), "last pitch knot"),
+        window.line("s2", t * KILO, v.sub(t) / (v.sub_gain * v.sub_amp(t))),
+        window.line("s3", t * KILO, v.body(t) / (v.body_gain * v.body_amp(t))),
+    ]
+    layered = kick("tight-sub", patch.dumps(patch.edit(k.p, "sub", SUB)))
+    length, length_step = nice(SUB.amp[-1][0])
+    whole = Panel(RIGHT, Axis(0, length), Axis(-1, 1))
+    body += [
+        whole.frame(Ticks(steps(length, length_step), num, "ms"), Ticks((-0.5, 0, 0.5), num, "The tight preset")),
+        waveform(whole, layered.audio, length / KILO),
+        whole.line("ref", *trace(k.audio, length, round(whole.w))),
+    ]
+    keys = [("key3", "the body's sweep"), ("key2", "the sub"), ("kref", "tight"), ("key1", "with the sub, -6 dB")]
+    body.append(legend_row(below(window), keys))
+    subtitle = "The sub is the sine the body's tail meets, so it only adds to the tail; it joins after the drive, clean"
+    description = "The body and the sub meeting at the last pitch knot, and the tight preset with a sub under it"
+    return svg(fit(window, 1), "The sub", subtitle, "".join(body), description)
 
 
 PITCHES = (("o1", 0.5), ("o3", 1.0), ("o4", 2.0))
@@ -1418,6 +1460,7 @@ def main() -> None:
         "attack": figure_attack(tight),
         "zap": figure_zap(tight),
         "transient": figure_transient(kicks["tight"]),
+        "sub": figure_sub(kicks["tight"]),
         "saturator": figure_saturator(),
         "aliasing": figure_aliasing(),
         "asymmetry": figure_asymmetry(),

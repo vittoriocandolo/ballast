@@ -2,8 +2,8 @@
 
 A patch is a complete TOML description of one kick. Every field is required
 and the renderer has no defaults, so a future default can never change an old
-patch. The one section a patch may leave out is `[transient]`, a sampled layer
-of its own: without it, the patch has none. The parser rejects anything outside the valid domain, reports every
+patch. The sections a patch may leave out are its layers, `[sub]` and
+`[transient]`: without one, the patch has none. The parser rejects anything outside the valid domain, reports every
 problem with its field path, and never clamps or repairs.
 
 ![The tight preset's pitch, body and attack curves through their knots, and the first 60 ms of its output](figures/anatomy-tight.svg)
@@ -112,6 +112,18 @@ as Windows PowerShell writes.
 | `asymmetry` | number | 0 – 1 | Even harmonics: warmth that rises as the body decays through the curve. Full scale and the small-signal gain stay exactly put; 1 is as far as the curve stays monotonic. Even harmonics bring DC, which `output.low_cut_hz` removes. |
 | `mix` | number | 0 – 1 | The share of the driven signal, against the undriven one: 1 is all driven, 0 all dry. The two line up exactly, since the drive adds no delay. |
 
+### `[sub]`: a clean sub
+
+Optional: a patch without this section has no sub. The sub is a sine at
+`tune_hz`, in phase with the free-running sine that the body's tail meets, so
+it only adds to the tail. It joins after the drive, which never touches it,
+and before the low cut and the clipper.
+
+| Field | Type | Range | Meaning |
+|---|---|---|---|
+| `level_db` | number | −60 – +24 dB, or `-inf` | The sub's level; `-inf` silences it. |
+| `amp` | curve | 3 – 32 knots of `{ ms, gain }` | The sub's own amplitude shape, ending by 8 s. |
+
 ### `[clip]`: the clipper
 
 | Field | Type | Range | Meaning |
@@ -162,8 +174,8 @@ a pitch curve, `gain` for an amplitude shape.
 - **Pitch curves** end flat on ratio 1, so the body lands on its note, and
   the attack's tone on `tone_hz`, without a kink.
 
-The kick lasts until the latest of the amplitude shapes' last knots and the
-transient's end.
+The kick lasts until the latest of the amplitude shapes' last knots, the
+sub's included, and the transient's end.
 
 ## Validation
 
@@ -197,11 +209,12 @@ A patch states its schema, so a later renderer can read it as it was meant,
 and a renderer refuses a schema it does not know rather than guess.
 
 - **Schema 3**, the current one, adds `body.bright_hz`, `attack.pitch`, `drive.asymmetry`,
-  `drive.mix`, the `[clip]` section and the optional `[transient]`.
+  `drive.mix`, the `[clip]` section, and the optional `[sub]` and
+  `[transient]`.
 - **Schema 2** adds `output.low_cut_hz` to schema 1.
 - **Schema 1** has no low cut.
 
 Ballast still reads schemas 1 and 2 and renders them exactly as they always
 sounded: what they lack is off, with a sine body, a fixed tone, no asymmetry, all of the
-drive, and no clipper, low cut or transient. `tune` and `stretch` write them back as schema 3 with
+drive, and no clipper, low cut, sub or transient. `tune` and `stretch` write them back as schema 3 with
 those values, which sound the same.

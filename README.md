@@ -27,7 +27,8 @@ one's curves, spectrum and patch.
   116.4 dB, without ringing before the kick.
 - **Character by design.** `body.bright_hz` turns the body into a saw whose
   harmonics fade above it, by the same Hz at every pitch, so its weight
-  carries to small speakers. Warmth is `drive.asymmetry`: even harmonics that
+  carries to small speakers. A `[sub]` adds the sine the tail meets, clean,
+  after the drive. Warmth is `drive.asymmetry`: even harmonics that
   grow as the body decays, with full scale and the drive's gain left exactly
   where they were. `drive.mix` blends in the undriven kick, sample-aligned.
   Loudness is the clipper: `clip.db` takes exactly that many decibels off the

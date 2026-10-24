@@ -14,6 +14,8 @@ from scipy.signal import upfirdn
 from ballast_synth import family, patch, voice
 from ballast_synth.voice import Voice
 
+from .conftest import SUB
+
 _, INTERNAL, _ = family.rates(48000)  # the internal rate of the 48 kHz family
 EXACT_DB = -140  # how close a transient read between its samples comes to exact interpolation, re its peak
 
@@ -167,6 +169,28 @@ def test_a_bright_body_fades_by_the_same_hz_at_every_pitch(tight: patch.Patch) -
         k = round(2000 / tune)
         harmonic = abs(2 * np.mean(wave * np.exp(-1j * k * phi)))
         assert harmonic == pytest.approx(math.exp(-(k - 1) * tune / 1000.0) / k, rel=1e-9)
+
+
+@pytest.mark.parametrize("reference", ["onset", "tail"])
+def test_the_sub_is_the_sine_the_body_tail_meets(tight: patch.Patch, reference: str) -> None:
+    """Find the sub in phase with the body, sample for sample to rounding, from the last pitch knot on."""
+    p = patch.edit(patch.edit(patch.edit(tight, "body.h2", 0.0), "body.phase_ref", reference), "sub", SUB)
+    v = Voice(p, INTERNAL)
+    t = np.linspace(v.pitch.t[-1], v.body_amp.t[-1] - 0.001, 5001)
+    assert v.sub_amp is not None
+    sine = v.sub(t) / (v.sub_gain * v.sub_amp(t))
+    assert np.allclose(sine, v.body(t) / (v.body_gain * v.body_amp(t)), rtol=0, atol=1e-11)
+
+
+def test_the_sub_stays_clean_however_hard_the_body_is_driven(tight: patch.Patch) -> None:
+    """Drive the body by 48 dB, and find the sub added after the drive, untouched."""
+    hard = patch.edit(tight, "drive.db", 48.0)
+    v = Voice(patch.edit(hard, "sub", SUB), INTERNAL)
+    without = Voice(hard, INTERNAL).samples()
+    t = np.arange(v.count) / INTERNAL
+    added = v.samples()[: without.size] - without
+    assert np.allclose(added, v.sub(t[: without.size]), rtol=0, atol=1e-15)
+    assert v.count > without.size  # the sub outlasts the body
 
 
 def reconstruction(t: patch.Transient) -> NDArray[np.float64]:

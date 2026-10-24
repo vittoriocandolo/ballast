@@ -1,9 +1,9 @@
 # Copyright (C) 2026 Vittorio Candolo
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Body, attack, transient and drive as pure functions of time.
+"""Body, attack, transient, drive and sub as pure functions of time.
 
-    x(t) = b(t) + a(t) + v(t),    y[n] = the drive's curve S_α, averaged around t_n = n / F
+    x(t) = b(t) + a(t) + v(t),    y[n] = the drive's curve S_α, averaged around t_n = n / F, + s(t_n)
 
 Nothing here keeps state: sample n at rate F is computed from x at t_(n-2) … t_(n+2)
 alone, so a block boundary, a longer render or another rate of the same family
@@ -134,6 +134,10 @@ class Voice:
         # No curve at all at 0 dB. Asymmetry adds the even term k S²(1 - S²), with k up to the monotonic limit 1/2.
         self.curve = shaper.Tanh(self.alpha, p.drive.asymmetry / 2) if self.alpha != 0.0 else None
         self.mix = p.drive.mix
+        self.sub_amp = None if p.sub is None else _curve(p.sub.amp, first=0.0, last=0.0)
+        self.sub_gain = 0.0 if p.sub is None else 10.0 ** (p.sub.level_db / 20.0)
+        # The sub is the sine the body's tail meets: φ0 + 2π f0 (t − c), with c = t_n − ∫₀^{t_n} R from the onset.
+        self.sub_lag = 0.0 if self.tail else float(self.pitch.t[-1] - self.pitch.total)
         self.count = sample_count(p.length_ms / 1000, rate)
         self.transient = None if p.transient is None else place(p.transient, rate)
         if self.transient is not None:  # the samples' interpolation rings on past their end
@@ -148,11 +152,22 @@ class Voice:
         """Compute y[n] for n0 ≤ n < n1, from the sources two samples either side, which the drive averages over."""
         x = self.sources(n0 - 2, n1 + 2)
         if self.curve is None:
-            return x[2:-2]
-        driven = shaper.apply(self.curve, x)
-        if self.mix == 1.0:
-            return driven
-        return (1 - self.mix) * x[2:-2] + self.mix * driven  # dry and driven line up: the drive adds no delay
+            y = x[2:-2]
+        elif self.mix == 1.0:
+            y = shaper.apply(self.curve, x)
+        else:  # dry and driven line up: the drive adds no delay
+            y = (1 - self.mix) * x[2:-2] + self.mix * shaper.apply(self.curve, x)
+        if self.sub_amp is not None and self.sub_gain != 0.0:
+            t = np.arange(n0, n1) / self.rate
+            s = _support(t, self.sub_amp)
+            y[s] += self.sub(t[s])
+        return y
+
+    def sub(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return the sub at times t: the free-running sine at tune_hz of the body's tail, under its own shape."""
+        if self.sub_amp is None:
+            return np.zeros_like(t)
+        return self.sub_gain * self.sub_amp(t) * np.sin(self.phi0 + (2 * math.pi * self.f0) * (t - self.sub_lag))
 
     def sources(self, n0: int, n1: int) -> NDArray[np.float64]:
         """Compute x[n] = b(n / F) + a(n / F) + v(n / F) for n0 ≤ n < n1, each source only over its support."""
