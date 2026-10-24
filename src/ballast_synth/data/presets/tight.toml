@@ -42,6 +42,15 @@ db        = 6.0             # small-signal gain; 0 = bypass
 asymmetry = 0.0             # even harmonics, 0 … 1
 mix       = 1.0             # 0 = dry … 1 = driven
 
+[eq]
+low_hz  = 80.0              # low shelf
+low_db  = 0.0               # 0 = off
+bell_hz = 200.0             # bell
+bell_db = 0.0               # 0 = off
+bell_q  = 1.0               # 0.3 = wide … 10 = narrow
+high_hz = 8000.0            # high shelf
+high_db = 0.0               # 0 = off
+
 [clip]
 db      = 0.0               # off the peaks; 0 = off
 knee_db = 0.0               # 0 = hard … 6 = soft

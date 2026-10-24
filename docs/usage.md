@@ -211,11 +211,11 @@ patch's sample rate.
 
 ## Designing a kick
 
-Twelve of the moves below are made on the `tight` preset, each with a link to its
+Thirteen of the moves below are made on the `tight` preset, each with a link to its
 sound, to compare with [tight itself](audio/tight.wav); the figure shows what
 they do.
 
-![The tight preset and twelve moves made on it: retuned to E1, a faster pitch drop, a longer body, a brighter body, a louder click, a zap, a sampled click, more drive, a sub, a low cut, warmth and clipping](figures/design.svg)
+![The tight preset and thirteen moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a brighter body, a zap, a sampled click, a sub, more drive, a knock, a low cut, warmth and clipping](figures/design.svg)
 
 - **Tune it to the track.** A kick in the key of the bass sits in the mix. Use
   `ballast tune kick.toml E1`, or `--tune` with `init`.
@@ -287,6 +287,11 @@ they do.
 - **Watch the true peak.** For files that must not exceed a level after
   conversion, use `output.mode = "true-peak"`, or read the dBTP figure in the
   report rather than the sample peak.
+- **Knock is a bell.** `eq.bell_db = 6.0` lifts 200 Hz by 6 dB, where the
+  body sweeps through at full strength in its first milliseconds: the
+  tech house knock. It raises the kick's peak by over 5 dB, so lower
+  `output.db` or let the clipper take it back.
+  [Hear the knock](audio/tight-knock.wav).
 - **Cut what you cannot hear.** `output.low_cut_hz = 30.0` high-passes the
   kick at 30 Hz with a 12 dB/octave Butterworth filter, which removes DC and
   sub-sonic energy. The presets leave it off: they carry DC between 45 and 62

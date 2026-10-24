@@ -363,7 +363,8 @@ def test_every_malformed_knot_is_reported(raw: dict[str, Any]) -> None:
 def older(raw: dict[str, Any], schema: int) -> dict[str, Any]:
     """Return the patch as an older schema writes it: without the fields that schema did not have."""
     raw["schema"] = schema
-    del raw["clip"], raw["drive"]["asymmetry"], raw["drive"]["mix"], raw["attack"]["pitch"], raw["body"]["bright_hz"]
+    del raw["clip"], raw["eq"], raw["drive"]["asymmetry"], raw["drive"]["mix"], raw["attack"]["pitch"]
+    del raw["body"]["bright_hz"]
     if schema == 1:
         del raw["output"]["low_cut_hz"]
     return raw
@@ -381,6 +382,7 @@ def test_older_schemas_still_read_with_everything_new_off(raw: dict[str, Any], s
         0.0,
     )
     assert old.output.low_cut_hz == (0.0 if schema == 1 else raw["output"]["low_cut_hz"])
+    assert (old.eq.low_db, old.eq.bell_db, old.eq.high_db) == (0.0, 0.0, 0.0)
     assert patch.dumps(old).startswith("schema = 3\n")
 
 

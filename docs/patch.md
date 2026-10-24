@@ -56,6 +56,15 @@ db        = 6.0             # small-signal gain; 0 = bypass
 asymmetry = 0.0             # even harmonics, 0 … 1
 mix       = 1.0             # 0 = dry … 1 = driven
 
+[eq]
+low_hz  = 80.0              # low shelf
+low_db  = 0.0               # 0 = off
+bell_hz = 200.0             # bell
+bell_db = 0.0               # 0 = off
+bell_q  = 1.0               # 0.3 = wide … 10 = narrow
+high_hz = 8000.0            # high shelf
+high_db = 0.0               # 0 = off
+
 [clip]
 db      = 0.0               # off the peaks; 0 = off
 knee_db = 0.0               # 0 = hard … 6 = soft
@@ -123,6 +132,21 @@ and before the low cut and the clipper.
 |---|---|---|---|
 | `level_db` | number | −60 – +24 dB, or `-inf` | The sub's level; `-inf` silences it. |
 | `amp` | curve | 3 – 32 knots of `{ ms, gain }` | The sub's own amplitude shape, ending by 8 s. |
+
+### `[eq]`: three bands
+
+After the drive and the sub, before the low cut. Each band at 0 dB is not
+there at all.
+
+| Field | Type | Range | Meaning |
+|---|---|---|---|
+| `low_hz` | number | 20 – 1000 Hz | The low shelf's corner, where it is halfway in decibels. |
+| `low_db` | number | −12 – +12 dB | The low shelf's gain below its corner; 0 turns it off. |
+| `bell_hz` | number | 20 Hz – 20 kHz | The bell's center. |
+| `bell_db` | number | −12 – +12 dB | The bell's gain at its center; 0 turns it off. |
+| `bell_q` | number | 0.3 – 10 | The bell's width: 0.3 spans octaves, 10 a few semitones. |
+| `high_hz` | number | 1 – 20 kHz | The high shelf's corner. |
+| `high_db` | number | −12 – +12 dB | The high shelf's gain above its corner; 0 turns it off. |
 
 ### `[clip]`: the clipper
 
@@ -209,12 +233,12 @@ A patch states its schema, so a later renderer can read it as it was meant,
 and a renderer refuses a schema it does not know rather than guess.
 
 - **Schema 3**, the current one, adds `body.bright_hz`, `attack.pitch`, `drive.asymmetry`,
-  `drive.mix`, the `[clip]` section, and the optional `[sub]` and
+  `drive.mix`, the `[eq]` and `[clip]` sections, and the optional `[sub]` and
   `[transient]`.
 - **Schema 2** adds `output.low_cut_hz` to schema 1.
 - **Schema 1** has no low cut.
 
 Ballast still reads schemas 1 and 2 and renders them exactly as they always
 sounded: what they lack is off, with a sine body, a fixed tone, no asymmetry, all of the
-drive, and no clipper, low cut, sub or transient. `tune` and `stretch` write them back as schema 3 with
+drive, and no EQ, clipper, low cut, sub or transient. `tune` and `stretch` write them back as schema 3 with
 those values, which sound the same.

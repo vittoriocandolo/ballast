@@ -3,15 +3,18 @@
 
 """Rendering: the frozen decimators, exact parallel chunks, rates, the output stage, PCM and the report."""
 
+import dataclasses
 import math
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 from scipy.signal import sosfreqz, upfirdn
 
 from ballast_synth import family, patch, render
 
 PASSBAND_HZ = 20000
+EQ_MATCH_DB = 0.004  # how close the EQ comes to its analog prototypes, up to 20 kHz
 RIPPLE_DB = 0.001  # the specified flatness of the passband
 STOPBAND_DB = -110  # the specified attenuation from half the base rate up
 
@@ -188,3 +191,52 @@ def test_a_transient_passes_flat_to_20_khz(tight: patch.Patch, rate: int) -> Non
     n = 1 << 18
     passband = np.abs(np.fft.rfft(render.synthesize(p), n))[np.fft.rfftfreq(n, 1 / rate) <= PASSBAND_HZ]
     assert np.max(np.abs(20 * np.log10(passband))) < 2 * 0.0000135  # the filter's ripple, once up and once down
+
+
+def analog(kind: str, hz: float, db: float, q: float, f: NDArray[np.float64]) -> NDArray[np.complex128]:
+    """Return the response of a band's analog prototype at frequencies f."""
+    a, s, slope = 10 ** (db / 40), 1j * f / hz, math.sqrt(2)  # a shelf of slope 1 has Q = 1/√2
+    if kind == "bell":
+        out: NDArray[np.complex128] = (s * s + s * a / q + 1) / (s * s + s / (a * q) + 1)
+    elif kind == "low":
+        out = a * (s * s + math.sqrt(a) * slope * s + a) / (a * s * s + math.sqrt(a) * slope * s + 1)
+    else:
+        out = a * (a * s * s + math.sqrt(a) * slope * s + 1) / (s * s + math.sqrt(a) * slope * s + a)
+    return out
+
+
+@pytest.mark.parametrize("base", [44100, 48000])
+@pytest.mark.parametrize(
+    "band",
+    [
+        ("low", 20.0, 12.0, 1.0),
+        ("low", 1000.0, -12.0, 1.0),
+        ("bell", 60.0, 12.0, 10.0),
+        ("bell", 10000.0, -12.0, 1.0),
+        ("bell", 20000.0, 6.0, 0.3),
+        ("high", 1000.0, -12.0, 1.0),
+        ("high", 20000.0, 12.0, 1.0),
+    ],
+)
+def test_the_eq_matches_its_analog_prototypes(
+    tight: patch.Patch,
+    base: int,
+    band: tuple[str, float, float, float],
+) -> None:
+    """Design one band at the internal rate, and find its response within 0.004 dB of the analog one to 20 kHz."""
+    kind, hz, db, q = band
+    e = dataclasses.replace(tight.eq, **{f"{kind}_hz": hz, f"{kind}_db": db}, bell_q=q)
+    _, rate, _ = family.rates(base)
+    bands = render.eq(e, rate)
+    assert bands.shape == (1, 6)
+    f = np.geomspace(10, PASSBAND_HZ, 2000)
+    _, h = sosfreqz(bands, worN=f, fs=rate)
+    assert np.max(np.abs(20 * np.log10(np.abs(h / analog(kind, hz, db, q, f))))) < EQ_MATCH_DB
+
+
+def test_a_bell_reaches_its_gain_at_its_frequency_and_off_designs_nothing(tight: patch.Patch) -> None:
+    """Boost a bell by 9 dB at 200 Hz, find exactly 9 dB there, and design no band at all with every gain at 0."""
+    _, rate, _ = family.rates(48000)
+    assert render.eq(tight.eq, rate).shape == (0, 6)
+    _, h = sosfreqz(render.eq(dataclasses.replace(tight.eq, bell_db=9.0), rate), worN=[200.0], fs=rate)
+    assert 20 * math.log10(abs(h[0])) == pytest.approx(9.0, abs=1e-6)

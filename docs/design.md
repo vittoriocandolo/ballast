@@ -3,10 +3,10 @@
 Ballast computes one kick as a pure function of time, at 32 times the sample
 rate, and band-limits it once.
 
-    x(t) = b(t) + a(t) + v(t),    z = Q(C(D(x) + s)),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
+    x(t) = b(t) + a(t) + v(t),    z = Q(C(E(D(x) + s))),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
 
 Here b is the body, a the attack, v the optional transient, D the drive, s
-the optional sub, C the optional low cut and Q
+the optional sub, E the EQ, C the optional low cut and Q
 the optional clipper, all at the internal rate F; h is the frozen decimator of
 the sample rate's family, K the decimation factor, g_out the output gain and p
 the polarity.
@@ -19,6 +19,7 @@ the polarity.
 - [The transient](#the-transient)
 - [The saturator](#the-saturator)
 - [The sub](#the-sub)
+- [The EQ](#the-eq)
 - [The low cut](#the-low-cut)
 - [The clipper](#the-clipper)
 - [Rates and the decimator](#rates-and-the-decimator)
@@ -231,6 +232,18 @@ peak covers the whole file. A sub an octave down would sit below 22 Hz for
 any kick tuned under F1, so the sub stays on the note.
 
 ![The body and the sub meeting at the last pitch knot, and the tight preset with a sub under it and without](figures/sub.svg)
+
+## The EQ
+
+`[eq]` has three bands after the drive and the sub: a low shelf for weight, a
+bell for knock, and a high shelf for air. Each is one biquad from the audio
+EQ cookbook, its coefficients computed in closed form like the low cut's:
+shelves of slope 1, and a bell whose Q sets its width. Designed by the
+bilinear transform at 32 times the base rate, they barely warp: every band
+stays within 0.004 dB of its analog prototype all the way to 20 kHz, where an
+EQ running at 48 kHz bends its top end. A band at 0 dB is not there at all.
+
+![The EQ's shelves at four gains and its bell at three widths, as they respond at the internal rate](figures/eq.svg)
 
 ## The low cut
 

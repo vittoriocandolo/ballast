@@ -390,6 +390,19 @@ class Drive:
 
 
 @dataclass(frozen=True)
+class EQ:
+    """Three bands after the drive and the sub: a low shelf, a bell and a high shelf, each off at 0 dB."""
+
+    low_hz: float = number(20.0, 1000.0, "low shelf")
+    low_db: float = number(-12.0, 12.0, "0 = off")
+    bell_hz: float = number(20.0, 20000.0, "bell")
+    bell_db: float = number(-12.0, 12.0, "0 = off")
+    bell_q: float = number(0.3, 10.0, "0.3 = wide … 10 = narrow")
+    high_hz: float = number(1000.0, 20000.0, "high shelf")
+    high_db: float = number(-12.0, 12.0, "0 = off")
+
+
+@dataclass(frozen=True)
 class Clip:
     """The clipper before the decimator: how far it brings the kick's peaks down, and how softly it bends."""
 
@@ -447,12 +460,13 @@ class Transient:
 
 @dataclass(frozen=True)
 class Patch:
-    """One kick: the seed of its noise and dither, its five sections, and its sub and transient, if it has them."""
+    """One kick: the seed of its noise and dither, its six sections, and its sub and transient, if it has them."""
 
     seed: int
     body: Body
     attack: Attack
     drive: Drive
+    eq: EQ
     clip: Clip
     output: Output
     sub: Sub | None
@@ -469,19 +483,29 @@ class Patch:
         return max(ends)
 
 
-type Section = Body | Attack | Drive | Sub | Clip | Output | Transient
+type Section = Body | Attack | Drive | Sub | EQ | Clip | Output | Transient
 
 SECTIONS: dict[str, type[Section]] = {
     "body": Body,
     "attack": Attack,
     "drive": Drive,
     "sub": Sub,
+    "eq": EQ,
     "clip": Clip,
     "output": Output,
     "transient": Transient,  # last, since its samples run long
 }
 OPTIONAL = ("sub", "transient")  # the sections a patch may leave out: layers it then does not have
 FIXED_TONE = ((0.0, 1.0),)  # a pitch curve of one knot: the attack's tone holds tone_hz
+EQ_OFF = {  # every band at 0 dB
+    "low_hz": 80.0,
+    "low_db": 0.0,
+    "bell_hz": 200.0,
+    "bell_db": 0.0,
+    "bell_q": 1.0,
+    "high_hz": 8000.0,
+    "high_db": 0.0,
+}
 # What each older schema lacks, with the values that render its patches exactly as they always sounded; None for
 # an optional section it could not have, so that its patches have none.
 ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
@@ -490,6 +514,7 @@ ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
         "attack": {"pitch": FIXED_TONE},
         "drive": {"asymmetry": 0.0, "mix": 1.0},
         "clip": {"db": 0.0, "knee_db": 0.0},
+        "eq": EQ_OFF,
         "output": {"low_cut_hz": 0.0},
         "sub": None,
         "transient": None,
@@ -499,6 +524,7 @@ ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
         "attack": {"pitch": FIXED_TONE},
         "drive": {"asymmetry": 0.0, "mix": 1.0},
         "clip": {"db": 0.0, "knee_db": 0.0},
+        "eq": EQ_OFF,
         "sub": None,
         "transient": None,
     },
@@ -578,6 +604,7 @@ def from_dict(data: object) -> Patch:
         Body(**sections["body"]),
         Attack(**sections["attack"]),
         Drive(**sections["drive"]),
+        EQ(**sections["eq"]),
         Clip(**sections["clip"]),
         Output(**sections["output"]),
         None if sub is None else Sub(**sub),

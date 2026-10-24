@@ -33,6 +33,8 @@ The first public release.
   provenance in a `blst` chunk. Every file is written whole or not at all.
 - A clean sub: the sine the body's tail meets, under its own shape, added
   after the drive.
+- A three-band EQ after the drive, low shelf, bell and high shelf, within
+  0.004 dB of its analog prototypes up to 20 kHz.
 - Sampled transients: `ballast transient` layers a short WAV over the attack,
   stored in the patch as base64 float32, brought up by the family's frozen
   filter and played at any pitch and from either rate family within 140 dB of

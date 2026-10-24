@@ -13,6 +13,7 @@ written from the shipped presets, so the gallery always shows them as they are.
 from __future__ import annotations
 
 import base64
+import dataclasses
 import html
 import itertools
 import math
@@ -430,6 +431,7 @@ def design_moves(tight: Kick) -> list[tuple[str, Kick]]:
         ("tight-sample", "ballast transient kick.toml click.wav", patch.edit(p, "transient", CLICK)),
         ("tight-sub", "[sub]: -6 dB, out to 400 ms", patch.edit(p, "sub", SUB)),
         ("tight-drive", "drive.db = 18.0", patch.edit(p, "drive.db", 18.0)),
+        ("tight-knock", "eq.bell_db = 6.0", patch.edit(p, "eq.bell_db", 6.0)),
         ("tight-cut", "output.low_cut_hz = 30.0", patch.edit(p, "output.low_cut_hz", 30.0)),
         ("tight-warm", "drive.asymmetry = 1.0", patch.edit(p, "drive.asymmetry", 1.0)),
         ("tight-clip", "clip.db = 4.0", patch.edit(p, "clip.db", 4.0)),
@@ -539,23 +541,25 @@ def figure_pipeline() -> str:
     body.append(box(246, cy - 32, 172, "Drive", ("math", "tanh(αx)/tanh α + even"), ("label", "mixed with the dry")))
     body.append(arrow(f"M228,{cy}H244"))
     body.append(
-        f'<circle class="box" cx="444" cy="{cy}" r="14"/>'
-        f'<text class="boxtitle" x="444" y="{cy + 5}" text-anchor="middle">+</text>',
+        f'<circle class="box" cx="442" cy="{cy}" r="14"/>'
+        f'<text class="boxtitle" x="442" y="{cy + 5}" text-anchor="middle">+</text>',
     )
-    body.append(arrow(f"M418,{cy}H428"))
-    body.append(box(374, top + 36, 140, "Sub", ("label", "the tail's own sine"), ("label", "clean, after the drive")))
-    body.append(arrow(f"M444,{top + 100}V{cy - 16}"))
-    body.append(box(484, cy - 32, 118, "Low cut", ("label", "12 dB/octave"), ("label", "0 Hz: off")))
-    body.append(arrow(f"M458,{cy}H482"))
-    body.append(box(628, cy - 32, 180, "Clipper", ("label", "true peak down by db"), ("label", "knee: hard to soft")))
-    body.append(arrow(f"M602,{cy}H626"))
+    body.append(arrow(f"M418,{cy}H426"))
+    body.append(box(372, top + 36, 140, "Sub", ("label", "the tail's own sine"), ("label", "clean, after the drive")))
+    body.append(arrow(f"M442,{top + 100}V{cy - 16}"))
+    body.append(box(470, cy - 32, 110, "EQ", ("label", "low, bell, high"), ("label", "0 dB: off")))
+    body.append(arrow(f"M456,{cy}H468"))
+    body.append(box(600, cy - 32, 110, "Low cut", ("label", "12 dB/octave"), ("label", "0 Hz: off")))
+    body.append(arrow(f"M580,{cy}H598"))
+    body.append(box(730, cy - 32, 180, "Clipper", ("label", "true peak down by db"), ("label", "knee: hard to soft")))
+    body.append(arrow(f"M710,{cy}H728"))
     low = top + zone + 48
-    body.append(box(628, low, 180, "Decimator", ("math", "↓32, ↓16 or ↓8"), ("label", "minimum phase")))
-    body.append(arrow(f"M718,{cy + 32}V{low - 2}"))
-    body.append(box(426, low, 160, "Output", ("label", "gain or peak target"), ("label", "polarity")))
-    body.append(arrow(f"M628,{low + 32}H588"))
-    body.append(box(246, low, 140, "WAV", ("label", "float or PCM"), ("label", "patch inside")))
-    body.append(arrow(f"M426,{low + 32}H388"))
+    body.append(box(730, low, 180, "Decimator", ("math", "↓32, ↓16 or ↓8"), ("label", "minimum phase")))
+    body.append(arrow(f"M820,{cy + 32}V{low - 2}"))
+    body.append(box(508, low, 160, "Output", ("label", "gain or peak target"), ("label", "polarity")))
+    body.append(arrow(f"M730,{low + 32}H670"))
+    body.append(box(306, low, 140, "WAV", ("label", "float or PCM"), ("label", "patch inside")))
+    body.append(arrow(f"M508,{low + 32}H448"))
     subtitle = "From the patch's curves to a WAV file"
     return svg(low + 92, "Signal flow", subtitle, "".join(body), "Signal flow from patch to WAV")
 
@@ -1141,6 +1145,41 @@ def figure_clipper(k: Kick) -> str:
     return svg(fit(shape, 1), "The clipper", subtitle, "".join(body), description)
 
 
+SHELVES = (("o1", -12.0), ("o2", -6.0), ("o3", 6.0), ("o4", 12.0))
+WIDTHS = (("o1", 0.3), ("o3", 1.0), ("o4", 4.0))
+
+
+def figure_eq(p: patch.Patch) -> str:
+    """Draw the low and high shelves at four gains, and the bell at three widths, as their sections respond."""
+    _, rate, _ = family.rates(RATE)
+    f = np.geomspace(20, 20000, 800)
+
+    def response(e: patch.EQ) -> NDArray[np.float64]:
+        _, h = sosfreqz(render.eq(e, rate), worN=f, fs=rate)
+        db: NDArray[np.float64] = 20 * np.log10(np.abs(h))
+        return db
+
+    shelves = Panel(LEFT, Axis(20, 20000, log=True), Axis(-13, 13))
+    bells = Panel(RIGHT, Axis(20, 20000, log=True), Axis(-13, 13))
+    gains = Ticks((-12, -6, 0, 6, 12), num, "Gain, dB")
+    body = [shelves.frame(Ticks((100, 1000, 10000), hz, "frequency, Hz"), gains), shelves.hline(0)]
+    for cls, db in SHELVES:
+        body.append(shelves.line(cls, f, response(dataclasses.replace(p.eq, low_db=db, high_db=db))))
+    body += [bells.frame(Ticks((100, 1000, 10000), hz, "frequency, Hz"), gains), bells.hline(0)]
+    for cls, q in WIDTHS:
+        body.append(bells.line(cls, f, response(dataclasses.replace(p.eq, bell_db=9.0, bell_q=q))))
+    left = [(f"k{cls}", f"{db:+g} dB".replace("-", "−")) for cls, db in SHELVES]
+    body.append(legend_row(below(shelves), [(cls, f"shelves at {text}") for cls, text in left[:1]] + left[1:]))
+    body.append(legend_row(below(bells), [(f"k{cls}", f"bell, Q {num(q)}") for cls, q in WIDTHS]))
+    e = p.eq
+    subtitle = (
+        f"Shelves at {num(e.low_hz)} Hz and {num(e.high_hz / KILO)} kHz, and a +9 dB bell at {num(e.bell_hz)} Hz, "
+        "within 0.004 dB of their analog prototypes"
+    )
+    description = "The EQ's shelves at four gains and its bell at three widths, as they respond at the internal rate"
+    return svg(fit(shelves, 1), "The EQ", subtitle, "".join(body), description)
+
+
 CORNERS = (("o1", 10.0), ("o2", 30.0), ("o3", 100.0), ("o4", 1000.0))
 
 
@@ -1465,6 +1504,7 @@ def main() -> None:
         "aliasing": figure_aliasing(),
         "asymmetry": figure_asymmetry(),
         "clipper": figure_clipper(kicks["tight"]),
+        "eq": figure_eq(tight),
         "low-cut": figure_low_cut(),
         "decimator": figure_decimator(),
         "rates": figure_rates(tight),
