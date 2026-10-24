@@ -25,7 +25,9 @@ one's curves, spectrum and patch.
   at the maximum drive keeps every alias 104 dB down. A minimum-phase FIR passes 0–20 kHz within
   ±0.000014 dB and rejects everything from half the base rate up by at least
   116.4 dB, without ringing before the kick.
-- **Character by design.** Warmth is `drive.asymmetry`: even harmonics that
+- **Character by design.** `body.bright_hz` turns the body into a saw whose
+  harmonics fade above it, by the same Hz at every pitch, so its weight
+  carries to small speakers. Warmth is `drive.asymmetry`: even harmonics that
   grow as the body decays, with full scale and the drive's gain left exactly
   where they were. `drive.mix` blends in the undriven kick, sample-aligned.
   Loudness is the clipper: `clip.db` takes exactly that many decibels off the

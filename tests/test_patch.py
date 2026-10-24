@@ -361,7 +361,7 @@ def test_every_malformed_knot_is_reported(raw: dict[str, Any]) -> None:
 def older(raw: dict[str, Any], schema: int) -> dict[str, Any]:
     """Return the patch as an older schema writes it: without the fields that schema did not have."""
     raw["schema"] = schema
-    del raw["clip"], raw["drive"]["asymmetry"], raw["drive"]["mix"], raw["attack"]["pitch"]
+    del raw["clip"], raw["drive"]["asymmetry"], raw["drive"]["mix"], raw["attack"]["pitch"], raw["body"]["bright_hz"]
     if schema == 1:
         del raw["output"]["low_cut_hz"]
     return raw
@@ -371,7 +371,13 @@ def older(raw: dict[str, Any], schema: int) -> dict[str, Any]:
 def test_older_schemas_still_read_with_everything_new_off(raw: dict[str, Any], schema: int) -> None:
     """Read a schema 1 or 2 patch, with every later field off, and write it back as schema 3, sounding the same."""
     old = patch.from_dict(older(raw, schema))
-    assert (old.attack.pitch, old.drive.asymmetry, old.drive.mix, old.clip.db) == (patch.FIXED_TONE, 0.0, 1.0, 0.0)
+    assert (old.body.bright_hz, old.attack.pitch, old.drive.asymmetry, old.drive.mix, old.clip.db) == (
+        0.0,
+        patch.FIXED_TONE,
+        0.0,
+        1.0,
+        0.0,
+    )
     assert old.output.low_cut_hz == (0.0 if schema == 1 else raw["output"]["low_cut_hz"])
     assert patch.dumps(old).startswith("schema = 3\n")
 

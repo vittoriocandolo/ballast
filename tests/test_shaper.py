@@ -142,3 +142,15 @@ def test_asymmetry_and_hard_clipping_alias_no_more_than_the_drive(base: int) -> 
     assert worst_alias(hz, factor, base, driven) < WORST_ALIAS_DB
     clipped = render.clip(x[2:-2], 12.0, 0.0, base, factor)
     assert worst_alias(hz, factor, base, clipped) < WORST_ALIAS_DB
+
+
+@pytest.mark.parametrize("base", [44100, 48000])
+def test_the_brightest_body_aliases_no_more_than_the_drive(base: int) -> None:
+    """Drive a full-scale saw at 7996 Hz that fades only above 20 kHz with 48 dB, and find no alias 104 dB up."""
+    _, rate, factor = family.rates(base)
+    hz = 7996  # no divisor of either internal rate, so its aliases miss its harmonics
+    phi = 2 * math.pi * hz * np.arange(-2, round(0.27 * rate) + 2) / rate
+    r = math.exp(-hz / 20000)
+    saw = np.arctan(r * np.sin(phi) / (1 - r * np.cos(phi))) / r
+    driven = shaper.apply(shaper.Tanh(drive_alpha(48.0)), saw / np.max(np.abs(saw)))
+    assert worst_alias(hz, factor, base, driven) < WORST_ALIAS_DB

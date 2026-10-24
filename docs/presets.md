@@ -40,6 +40,7 @@ seed = 1
 tune_hz   = 55.0
 level_db  = 0.0
 h2        = 0.15            # second harmonic, 0 … 0.5
+bright_hz = 0.0             # harmonics fade above; 0 = sine
 phase_deg = 0.0
 phase_ref = "onset"         # "onset" | "tail"
 pitch = [                   # ratio to tune_hz; starts at 0 ms, ends at 1
@@ -111,6 +112,7 @@ seed = 1
 tune_hz   = 50.0
 level_db  = 0.0
 h2        = 0.25            # second harmonic, 0 … 0.5
+bright_hz = 0.0             # harmonics fade above; 0 = sine
 phase_deg = 0.0
 phase_ref = "onset"         # "onset" | "tail"
 pitch = [                   # ratio to tune_hz; starts at 0 ms, ends at 1
@@ -182,6 +184,7 @@ seed = 1
 tune_hz   = 48.999
 level_db  = 0.0
 h2        = 0.08            # second harmonic, 0 … 0.5
+bright_hz = 0.0             # harmonics fade above; 0 = sine
 phase_deg = 0.0
 phase_ref = "onset"         # "onset" | "tail"
 pitch = [                   # ratio to tune_hz; starts at 0 ms, ends at 1
@@ -253,6 +256,7 @@ seed = 1
 tune_hz   = 41.203
 level_db  = 0.0
 h2        = 0.05            # second harmonic, 0 … 0.5
+bright_hz = 0.0             # harmonics fade above; 0 = sine
 phase_deg = 0.0
 phase_ref = "tail"          # "onset" | "tail"
 pitch = [                   # ratio to tune_hz; starts at 0 ms, ends at 1

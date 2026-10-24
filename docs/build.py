@@ -425,6 +425,7 @@ def design_moves(tight: Kick) -> list[tuple[str, Kick]]:
         ("tight-snap", "ballast stretch kick.toml body.pitch 0.5", patch.stretch(p, "body.pitch", 0.5)),
         ("tight-long", "ballast stretch kick.toml body.amp 1.5", patch.stretch(p, "body.amp", 1.5)),
         ("tight-click", "attack.level_db = -8.0", patch.edit(p, "attack.level_db", -8.0)),
+        ("tight-bright", "body.bright_hz = 1000.0", patch.edit(p, "body.bright_hz", 1000.0)),
         ("tight-zap", "attack.pitch: 4 to 1 in 2 ms", patch.edit(p, "attack.pitch", ZAP)),
         ("tight-sample", "ballast transient kick.toml click.wav", patch.edit(p, "transient", CLICK)),
         ("tight-drive", "drive.db = 18.0", patch.edit(p, "drive.db", 18.0)),
@@ -675,6 +676,65 @@ def figure_body(long: patch.Patch) -> str:
     subtitle = "Its second harmonic keeps every zero crossing; a tail phase is exactly the free-running sine"
     description = "The body's shape for three values of h2, and the long preset with each phase reference"
     return svg(fit(shape, 3), "The body", subtitle, "".join(body), description)
+
+
+BRIGHTS = (("ref", 0.0), ("o1", 200.0), ("o3", 1000.0), ("o4", 5000.0))
+SPEAKER_HZ = 150  # about where small speakers start to play bass
+
+
+def saw(phi: NDArray[np.float64], hz: float, bright: float) -> NDArray[np.float64]:
+    """Return the body's wave at phases phi and frequency hz: the saw that fades above bright, or a sine at 0."""
+    if bright == 0.0:
+        return np.sin(phi)
+    r = math.exp(-hz / bright)
+    out: NDArray[np.float64] = np.arctan(r * np.sin(phi) / (1 - r * np.cos(phi))) / r
+    return out
+
+
+def above(hz: float, bright: float) -> float:
+    """Return the share of the body's power, at hz, in its harmonics above SPEAKER_HZ."""
+    k = np.arange(1, 20001)
+    power = (np.exp(-(k - 1) * hz / bright) / k) ** 2 if bright else (k == 1).astype(float)
+    return float(np.sum(power[k * hz > SPEAKER_HZ]) / np.sum(power))
+
+
+def figure_brightness(p: patch.Patch) -> str:
+    """Draw one cycle of the body at four brightnesses, and its harmonics at two pitches, fading alike in Hz."""
+    tune = p.body.tune_hz
+    cycle = Panel(LEFT, Axis(0, 360), Axis(-1.8, 1.8))
+    phi = np.linspace(0, 2 * math.pi, 721)
+    body = [
+        cycle.frame(
+            Ticks((0, 90, 180, 270, 360), num, "phase, degrees"),
+            Ticks((-1, 0, 1), num, "One cycle on the note"),
+        ),
+        *(cycle.line(cls, np.degrees(phi), saw(phi, tune, bright)) for cls, bright in BRIGHTS),
+    ]
+    levels = Panel(RIGHT, Axis(20, 20000, log=True), Axis(-80, 3))
+    body.append(
+        levels.frame(
+            Ticks((100, 1000, 10000), hz, "frequency, Hz"),
+            Ticks((-80, -60, -40, -20, 0), num, "Harmonics, dB"),
+        ),
+    )
+    for cls, f0 in (("dot1", tune), ("dot2", 2 * tune)):
+        k = np.arange(1, int(20000 // f0) + 1)
+        db = 20 * np.log10(np.exp(-(k - 1) * f0 / 1000.0) / k)
+        body.append(levels.clip("harmonics", levels.dots(cls, k * f0, db, 2.5)))
+    keys = []
+    for cls, bright in BRIGHTS:
+        name = f"{num(bright)} Hz" if bright else "0, a sine"
+        keys.append((f"k{cls}", f"{name}: {num(round(100 * above(tune, bright)))}% of the power above {SPEAKER_HZ} Hz"))
+    body.append(legend(below(cycle), keys))
+    body.append(
+        legend(
+            below(levels),
+            [("dot1", f"bright_hz = 1000 on {num(tune)} Hz"), ("dot2", f"and an octave up, {num(2 * tune)} Hz")],
+        ),
+    )
+    subtitle = "bright_hz turns the sine into a saw whose harmonics fade above it, by the same Hz at every pitch"
+    description = "One cycle of the body at four brightnesses, and the harmonics of a 1 kHz brightness at two pitches"
+    return svg(fit(cycle, 4), "Brightness", subtitle, "".join(body), description)
 
 
 def versus(panel: Panel, knots: patch.Knots, curve: Curve, spline: CubicSpline, ticks: tuple[Ticks, Ticks]) -> str:
@@ -1354,6 +1414,7 @@ def main() -> None:
         "pipeline": figure_pipeline(),
         "body": figure_body(kicks["long"].p),
         "curves": figure_curves(tight),
+        "brightness": figure_brightness(tight),
         "attack": figure_attack(tight),
         "zap": figure_zap(tight),
         "transient": figure_transient(kicks["tight"]),

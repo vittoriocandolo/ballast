@@ -338,11 +338,12 @@ def _shape(path: str, curve: Knots, problems: list[str], _section: dict[str, Any
 
 @dataclass(frozen=True)
 class Body:
-    """The tonal body: a sine and its second harmonic, swept by the pitch curve."""
+    """The tonal body: a sine, or a saw that fades above bright_hz, and a second harmonic, swept by the pitch curve."""
 
     tune_hz: float = number(20.0, 1000.0)
     level_db: float = number(-60.0, 24.0, off=-math.inf)
     h2: float = number(0.0, 0.5, "second harmonic, 0 … 0.5")
+    bright_hz: float = number(50.0, 20000.0, "harmonics fade above; 0 = sine", off=0.0)
     phase_deg: float = number(0.0, 360.0, below=True)
     phase_ref: str = choice(("onset", "tail"), '"onset" | "tail"')
     pitch: tuple[tuple[float, float], ...] = knots(
@@ -473,6 +474,7 @@ FIXED_TONE = ((0.0, 1.0),)  # a pitch curve of one knot: the attack's tone holds
 # an optional section it could not have, so that its patches have none.
 ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
     1: {
+        "body": {"bright_hz": 0.0},
         "attack": {"pitch": FIXED_TONE},
         "drive": {"asymmetry": 0.0, "mix": 1.0},
         "clip": {"db": 0.0, "knee_db": 0.0},
@@ -480,6 +482,7 @@ ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
         "transient": None,
     },
     2: {
+        "body": {"bright_hz": 0.0},
         "attack": {"pitch": FIXED_TONE},
         "drive": {"asymmetry": 0.0, "mix": 1.0},
         "clip": {"db": 0.0, "knee_db": 0.0},

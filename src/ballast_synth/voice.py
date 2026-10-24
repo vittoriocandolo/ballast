@@ -117,6 +117,7 @@ class Voice:
         b, a = p.body, p.attack
         self.rate = rate
         self.f0, self.h2, self.phi0, self.tail = b.tune_hz, b.h2, math.radians(b.phase_deg), b.phase_ref == "tail"
+        self.bright = b.bright_hz
         self.body_gain: float = 10.0 ** (b.level_db / 20.0) / math.sqrt(1.0 + b.h2 * b.h2)  # g_b / √(1 + h2²)
         self.pitch = _curve(b.pitch, last=0.0)  # lands smoothly on the tuning
         # Amplitude shapes have zero end slopes, so they join silence smoothly.
@@ -181,10 +182,19 @@ class Voice:
         else:
             tau = self.pitch.integral(t)
         phi = self.phi0 + (2 * math.pi * self.f0) * tau
-        wave = np.sin(phi)
-        if self.h2 != 0.0:
-            # sin φ + h2 sin 2φ = sin φ (1 + 2 h2 cos φ): no extra zero crossings while h2 ≤ ½.
-            wave *= 1.0 + 2.0 * self.h2 * np.cos(phi)
+        if self.bright == 0.0:
+            wave = np.sin(phi)
+            if self.h2 != 0.0:
+                # sin φ + h2 sin 2φ = sin φ (1 + 2 h2 cos φ): no extra zero crossings while h2 ≤ ½.
+                wave *= 1.0 + 2.0 * self.h2 * np.cos(phi)
+        else:
+            # Σ r^(k-1) sin(kφ) / k = atan(r sin φ / (1 - r cos φ)) / r, with r = e^(-f/bright) at the frequency f
+            # of the moment: a saw whose k-th harmonic, at k f, fades by e^(-(k-1) f/bright), a roll-off fixed in
+            # Hz whatever the pitch, while the fundamental stays at exactly 1. h2 adds to its second harmonic.
+            r = np.exp(-(self.f0 / self.bright) * self.pitch(t))
+            wave = np.arctan(r * np.sin(phi) / (1.0 - r * np.cos(phi))) / r
+            if self.h2 != 0.0:
+                wave += self.h2 * np.sin(2.0 * phi)
         return self.body_gain * self.body_amp(t) * wave
 
     def attack(self, t: NDArray[np.float64], n: NDArray[np.int_]) -> NDArray[np.float64]:

@@ -28,7 +28,8 @@ the polarity.
 
 ## The body
 
-The body is a sine with a second harmonic, under an amplitude shape A_b:
+The body is a sine, or a saw that fades above `bright_hz`, with a second
+harmonic, under an amplitude shape A_b. As a sine:
 
     b(t) = g_b / √(1 + h2²) · A_b(t) · (sin φ(t) + h2 sin 2φ(t))
 
@@ -48,6 +49,21 @@ the last pitch knot t_n on, and τ(t) = t_n − ∫ₜ^{t_n} R before it. The ta
 then exactly the free-running sine at f₀ with phase φ₀, whatever the sweep
 does, and the integral from t to t_n is computed on its own so it stays exact
 as t approaches t_n.
+
+`bright_hz` turns the sine into a saw whose harmonics fade above it:
+
+    Σ_{k≥1} r^(k−1) sin(kφ) / k = atan(r sin φ / (1 − r cos φ)) / r,    r = e^(−f(t) / bright_hz)
+
+The fundamental stays at exactly 1, so brightness never takes weight away,
+and the k-th harmonic, at k f, sits e^(−(k−1) f / bright_hz) below a saw's:
+a roll-off fixed in Hz, which keeps its color as the pitch sweeps. Unlike the
+drive's harmonics, these do not fade as the body decays, so the tail stays
+audible where small speakers play nothing at the note itself. `h2` adds to
+the saw's own second harmonic. The sum runs to infinitely many harmonics, but
+they fade so fast that even the brightest body, driven by 48 dB, keeps every
+alias 104 dB down.
+
+![One cycle of the body at four brightnesses, and the harmonics of a 1 kHz brightness on the note and an octave up](figures/brightness.svg)
 
 ![The body's shape for h2 = 0, 0.25 and 0.5, and the long preset's body around its last pitch knot with each phase reference](figures/body.svg)
 

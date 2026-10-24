@@ -144,6 +144,31 @@ def test_the_tone_sweeps_along_its_pitch_curve(tight: patch.Patch) -> None:
     assert np.allclose(tone, v.attack_amp(t) * np.sin(phase), rtol=0, atol=1e-9)
 
 
+@pytest.mark.parametrize("bright", [50.0, 1000.0, 20000.0])
+def test_a_bright_body_is_a_saw_that_fades_above_bright_hz(tight: patch.Patch, bright: float) -> None:
+    """Sum the series Σ r^(k-1) sin(kφ) / k itself, with r = e^(-f/bright), and find the body's closed form."""
+    v = Voice(patch.edit(patch.edit(tight, "body.bright_hz", bright), "body.h2", 0.0), INTERNAL)
+    t = np.linspace(0.0, 0.2, 4001)
+    phi = v.phi0 + 2 * math.pi * v.f0 * v.pitch.integral(t)
+    r = np.exp(-v.f0 * v.pitch(t) / bright)
+    k = np.arange(1, 20001)[:, None]
+    series = np.sum(r ** (k - 1) * np.sin(k * phi) / k, axis=0)
+    assert np.allclose(v.body(t), v.body_gain * v.body_amp(t) * series, rtol=0, atol=1e-12)
+
+
+def test_a_bright_body_fades_by_the_same_hz_at_every_pitch(tight: patch.Patch) -> None:
+    """Find the harmonic nearest 2 kHz e^(-f/bright) below a saw's, on the note and an octave up, over one period."""
+    for tune in (55.0, 110.0):
+        bright = patch.edit(patch.edit(tight, "body.tune_hz", tune), "body.bright_hz", 1000.0)
+        v = Voice(patch.edit(bright, "body.h2", 0.0), INTERNAL)
+        t = 0.1 + np.arange(4096) / 4096 / tune  # one period, past the sweep, where φ grows at 2π tune_hz
+        wave = v.body(t) / (v.body_gain * v.body_amp(t))
+        phi = v.phi0 + 2 * math.pi * v.f0 * v.pitch.integral(t)
+        k = round(2000 / tune)
+        harmonic = abs(2 * np.mean(wave * np.exp(-1j * k * phi)))
+        assert harmonic == pytest.approx(math.exp(-(k - 1) * tune / 1000.0) / k, rel=1e-9)
+
+
 def reconstruction(t: patch.Transient) -> NDArray[np.float64]:
     """Bring a transient's samples up to its family's internal rate, with the family's frozen filter."""
     base, _, factor = family.rates(t.rate)

@@ -211,11 +211,11 @@ patch's sample rate.
 
 ## Designing a kick
 
-Ten of the moves below are made on the `tight` preset, each with a link to its
+Eleven of the moves below are made on the `tight` preset, each with a link to its
 sound, to compare with [tight itself](audio/tight.wav); the figure shows what
 they do.
 
-![The tight preset and ten moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a zap, a sampled click, more drive, a low cut, warmth and clipping](figures/design.svg)
+![The tight preset and eleven moves made on it: retuned to E1, a faster pitch drop, a longer body, a brighter body, a louder click, a zap, a sampled click, more drive, a low cut, warmth and clipping](figures/design.svg)
 
 - **Tune it to the track.** A kick in the key of the bass sits in the mix. Use
   `ballast tune kick.toml E1`, or `--tune` with `init`.
@@ -228,6 +228,12 @@ they do.
 - **Length is the body's amplitude shape.** Stretch it after the peak with
   `ballast stretch kick.toml body.amp 1.5`, which keeps the attack intact.
   [Hear the longer body](audio/tight-long.wav).
+- **Brightness carries the weight to small speakers.** `body.bright_hz`
+  turns the body's sine into a saw whose harmonics fade above it, the same in
+  Hz at every pitch, while the fundamental stays put. Its harmonics, unlike
+  the drive's, last as long as the tail. `body.bright_hz = 1000.0` puts 15%
+  of the tail's power above 150 Hz, where a laptop can play it.
+  [Hear the brighter body](audio/tight-bright.wav).
 - **The click is the attack.** A tone around 1.5–3 kHz with band-limited
   noise, a few milliseconds long, cuts through a dense mix; `noise_mix` blends
   the two at constant power. `attack.level_db = -8.0` brings the click 8 dB
