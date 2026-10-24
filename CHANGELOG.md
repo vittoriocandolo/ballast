@@ -45,8 +45,9 @@ The first public release.
   stored in the patch as base64 float32, brought up by the family's frozen
   filter and played at any pitch and from either rate family within 140 dB of
   exact interpolation.
-- Seven presets at −1 dBTP: kicks for house, tech house and trance, and four
-  shapes to start from.
+- Eleven presets at −1 dBTP: kicks for house, tech house and trance; four
+  along the line from machine to band, from a sampled drum machine to an
+  acoustic drum played in a room; and four shapes to start from.
 - The report's loudness: the highest momentary loudness of EBU R128, slid
   sample by sample, K-weighted at every sample rate.
 - Kits: `ballast vary` writes seeded variations of a patch, the same in every

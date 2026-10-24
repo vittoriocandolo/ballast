@@ -501,4 +501,4 @@ Audition reuses the renderer and adds four small parts:
 | `wav.py` | the RIFF writer, the reader of beds and transients, the chunk reader behind `extract`, and writing any file whole or not at all |
 | `audition.py` | hits, bed, watcher and playback |
 | `cli.py` | the commands |
-| `data/` | the two decimators and the seven presets |
+| `data/` | the two decimators and the eleven presets |

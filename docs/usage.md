@@ -41,9 +41,10 @@ what it redirects, so comments may not survive.
 
 ### `ballast init PRESET [--tune NOTE] [-o FILE]`
 
-Writes a complete patch from a preset: `house`, `tech-house` or `trance`, or
-one of the four shapes `tight`, `driven`, `round` and `long`. Every preset
-peaks at −1 dBTP.
+Writes a complete patch from a preset: `house`, `tech-house` or `trance`; one
+of `sampled`, `deep`, `fat` and `kit`, from machine to band, the last two
+with a `[play]` section; or one of the four shapes `tight`, `driven`, `round`
+and `long`. Every preset peaks at −1 dBTP.
 `--tune` takes a note name such as `F1`, `C#2` or `Db2`, or a frequency in
 Hz. A note name sets `tune_hz` to its equal-tempered frequency (A4 = 440 Hz),
 rounded to 3 decimals.

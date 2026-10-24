@@ -3,7 +3,7 @@
 A kick drum synthesizer that renders a short text patch to a WAV file, the same
 way every time.
 
-![Waveforms of the seven presets, tech-house, tight, house, driven, trance, round and long, rendered at 48 kHz](docs/figures/presets.svg)
+![Waveforms of the eleven presets, from tech-house to deep, rendered at 48 kHz](docs/figures/presets.svg)
 
 Ballast synthesizes one voice: a tonal body with an exact pitch sweep, and a
 short attack of a tone, which can sweep too, and noise, with any sampled click
@@ -14,11 +14,14 @@ ask for a vintage sampler's grit, are ready for any sampler, and carry the
 patch that made them.
 
 Listen to the presets: [house](docs/audio/house.wav) ·
-[tech-house](docs/audio/tech-house.wav) · [trance](docs/audio/trance.wav) ·
-[tight](docs/audio/tight.wav) · [driven](docs/audio/driven.wav) ·
-[round](docs/audio/round.wav) · [long](docs/audio/long.wav). Each peaks at
-−1 dBTP, and the [preset gallery](docs/presets.md) shows its curves,
-spectrum, loudness and patch.
+[tech-house](docs/audio/tech-house.wav) · [trance](docs/audio/trance.wav);
+from machine to band, [sampled](docs/audio/sampled.wav) ·
+[deep](docs/audio/deep.wav) · [fat](docs/audio/fat.wav) ·
+[kit](docs/audio/kit.wav); and the shapes [tight](docs/audio/tight.wav) ·
+[driven](docs/audio/driven.wav) · [round](docs/audio/round.wav) ·
+[long](docs/audio/long.wav). Each peaks at −1 dBTP, and the
+[preset gallery](docs/presets.md) shows its curves, spectrum, loudness and
+patch.
 
 ## Features
 
