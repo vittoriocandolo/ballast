@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Vittorio Candolo
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""The documentation's links lead somewhere, and every figure and sound in docs/ is shown on a page."""
+"""The documentation's links lead somewhere, every figure and sound in docs/ is shown, and its example is real."""
 
 import re
 from pathlib import Path
@@ -45,3 +45,10 @@ def test_every_figure_and_sound_is_shown() -> None:
     linked = {(page.parent / target.partition("#")[0]).resolve() for page in PAGES for target in targets(page)}
     files = {file.resolve() for folder in ("figures", "audio") for file in (ROOT / "docs" / folder).iterdir()}
     assert files <= linked, sorted(file.name for file in files - linked)
+
+
+def test_the_patch_reference_shows_the_tight_preset_as_it_ships(tight_text: str) -> None:
+    """Find the patch reference's first example the very text of the tight preset, which it says it is."""
+    page = (ROOT / "docs" / "patch.md").read_text(encoding="utf-8")
+    start = page.index("```toml\n") + len("```toml\n")
+    assert page[start : page.index("```", start)] == tight_text

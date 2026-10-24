@@ -6,7 +6,7 @@
 import numpy as np
 import pytest
 
-from ballast_synth import noise
+from ballast_synth import noise, play, room, vary, wav
 
 
 def test_the_noise_is_the_same_at_every_internal_rate() -> None:
@@ -51,3 +51,15 @@ def test_dither_is_triangular_and_prefix_stable() -> None:
     assert np.mean(d) == pytest.approx(0, abs=0.01)
     assert np.var(d) == pytest.approx(1 / 6, rel=0.02)  # the variance of a triangle on (-1, 1)
     assert np.array_equal(noise.dither(7, 1000), d[:1000])
+
+
+def test_the_keys_and_the_chunk_never_change() -> None:
+    """Find every key that seeds a sound, and the WAV chunk of the patch, as every version of Ballast must have them."""
+    assert (noise.NOISE_KEY, noise.DITHER_KEY, room.ROOM_KEY, vary.VARY_KEY, play.PLAY_KEY, wav.PRIVATE) == (
+        b"ballast/noise/v1",
+        b"ballast/dither/v1",
+        b"ballast/room/v1",
+        b"ballast/vary/v1",
+        b"ballast/play/v1",
+        b"blst",
+    )

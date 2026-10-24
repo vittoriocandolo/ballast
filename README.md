@@ -5,12 +5,12 @@ way every time.
 
 ![Waveforms of the eleven presets, from tech-house to deep, rendered at 48 kHz](docs/figures/presets.svg)
 
-Ballast synthesizes one voice: a tonal body with an exact pitch sweep, and a
-short attack of a tone, which can sweep too, and noise, with any sampled click
-layered over them. It computes them at 32 times the sample rate,
-saturates their sum, and band-limits it once with a frozen minimum-phase
-filter. The files it writes keep every alias at least 104 dB down, unless you
-ask for a vintage sampler's grit, are ready for any sampler, and carry the
+Ballast synthesizes one voice: a tonal body with an exact pitch sweep, or a
+drum head's modes, and a short attack of a tone and noise, with a clean sub,
+a sampled click, a room and a vintage sampler's grit when you want them. It
+computes them at 32 times the sample rate and band-limits them once with a
+frozen minimum-phase filter. The files it writes keep every alias at least
+104 dB down, unless you ask for grit, are ready for any sampler, and carry the
 patch that made them.
 
 Listen to the presets: [house](docs/audio/house.wav) ·
@@ -25,56 +25,52 @@ patch.
 
 ## Features
 
-- **Grit by name.** `[grit]` models a vintage drum sampler, aliasing and
-  staircase included, computed exactly: the only place Ballast aliases, and
-  only when asked.
+- **Weight, by design.** The body lands exactly on its note, and a `[sub]`
+  adds the sine its tail meets, clean, after the drive. `body.bright_hz`
+  turns the body into a saw whose harmonics fade above a frequency, the same
+  at every pitch, so its weight carries to small speakers. The drive adds
+  density, `drive.asymmetry` warmth that grows as the body decays, and the
+  clipper loudness: `clip.db` takes exactly that many decibels off the file's
+  true peak. `[eq]` has shelves, a bell for knock and a resonant low-pass.
+- **From machine to band.** `[grit]` samples the kick as the drum samplers of
+  the 1980s did, aliasing and staircase included, computed exactly: the only
+  place Ballast aliases, and only when asked. At the other end, `body.modes`
+  gives the body a drum head's partials, `[room]` puts it in a space that
+  darkens as it fades, and `[play]` plays it like a drum.
+- **Clicks.** `attack.pitch` sweeps the click's tone into a zap, and
+  `ballast transient` layers any short WAV over the attack, stored in the
+  patch, played at any pitch and from either rate family within 140 dB of
+  exact interpolation.
 - **Clean at any drive.** Synthesis runs at 1.4112 or 1.536 MHz, and the
   drive and the clipper average their curves around each sample, by
   second-order antiderivative anti-aliasing, so even a full-scale 20 kHz tone
-  at the maximum drive keeps every alias 104 dB down. A minimum-phase FIR passes 0–20 kHz within
-  ±0.000014 dB and rejects everything from half the base rate up by at least
-  116.4 dB, without ringing before the kick.
-- **Character by design.** `body.modes` gives the body a drum head's
-  partials, each fading at its own rate. `body.bright_hz` turns the body into a saw whose
-  harmonics fade above it, by the same Hz at every pitch, so its weight
-  carries to small speakers. A `[sub]` adds the sine the tail meets, clean,
-  after the drive, a `[room]` a seeded tail that darkens as it fades, and `[eq]` shelves and a bell for weight, knock and air.
-  Warmth is `drive.asymmetry`: even harmonics that
-  grow as the body decays, with full scale and the drive's gain left exactly
-  where they were. `drive.mix` blends in the undriven kick, sample-aligned.
-  Loudness is the clipper: `clip.db` takes exactly that many decibels off the
-  file's true peak, from a hard to a soft knee. A zap is `attack.pitch`: the
-  click's tone dives into its own frequency.
-- **Sampled transients.** `ballast transient` layers any short WAV over the
-  attack, stored inside the patch. The same frozen filter brings it up to the
-  internal rate, it plays at any pitch and from either rate family within 140
-  dB of exact interpolation, and the drive glues it to the body.
+  at the maximum drive keeps every alias 104 dB down. A minimum-phase FIR
+  passes 0–20 kHz within ±0.000014 dB and rejects everything from half the
+  base rate up by at least 116.4 dB, without ringing before the kick.
 - **Exact pitch.** Pitch curves are integrated exactly into phase. With
   `phase_ref = "tail"`, an 808-style tail meets the free-running sine at its
   note exactly, whatever the sweep did before.
 - **Deterministic.** Every sample is a pure function of the patch and its
-  time, and the filter ships as checksummed data. The same patch renders the
+  time, and the filters ship as checksummed data. The same patch renders the
   same samples, run after run.
 - **The patch travels with the sound.** Every WAV embeds its patch, and
   `ballast extract` gives it back byte for byte, comments included.
 - **Strict patches.** Every field is required and nothing is clamped. An
   invalid patch is refused with every problem and its field path.
-- **Finished kits.** `ballast vary` writes seeded variations of a patch,
-  the same on every computer, or every combination along axes you choose,
-  and `ballast pack` renders a folder of patches
-  into a kit: WAVs named by key, their patches beside them, a manifest of
-  tuning, peaks and loudness, and nothing written unless every kick passes
-  its gates. With `[play]`, it plays each kick like a drum: velocity layers
-  that lose level, click and punch, and round robins that never repeat
-  exactly, with an SFZ map.
+- **Finished kits.** `ballast vary` writes seeded variations of a patch, the
+  same on every computer, or every combination along axes you choose.
+  `ballast pack` renders a folder of patches into a kit: WAVs named by key,
+  their patches beside them, a manifest of tuning, peaks and loudness, and
+  nothing written unless every kick passes its gates. With `[play]`, it writes
+  velocity layers and round robins, with an SFZ map.
 - **Live audition.** Plays the exact render buffer, renders again on every
   save, and loops your bass line under the hits in tempo, without resampling.
 - **Sampler-ready.** The root key sits in the `smpl` chunk; 16- and 24-bit
   exports use seeded TPDF dither that never clips. `ballast multisample`
   renders one sample per key with an SFZ map, to play an 808 bassline.
-- **Mastering-aware.** Normalize to a sample peak or to a true peak, clip
-  the transient for loudness, high-pass the kick with an optional low cut, and
-  read every render's loudness: its loudest momentary moment, by EBU R128.
+- **Mastering-aware.** Normalize to a sample peak or to a true peak, high-pass
+  the kick with an optional low cut, and read every render's loudness: its
+  loudest momentary moment, by EBU R128.
 
 ## Install
 
@@ -128,8 +124,8 @@ wrote kick.wav
 | PCM headroom | peaks stay 2 LSB below full scale, so dither never clips |
 | Low cut | optional 12 dB/octave Butterworth high-pass, 10 Hz – 1 kHz |
 | Tuning | 20 Hz – 1 kHz, by frequency or note name; the sweep spans 10 Hz – 20 kHz |
-| Length | body up to 8 s, attack and transient up to 1 s |
-| Render time | about 60 ms for a 240 ms kick, about 0.25 s for a 1.45 s one, on a 12-core laptop; the clipper adds up to half a second |
+| Length | body up to 8 s, attack and transient up to 1 s, and a room's tail up to 6.2 s after them |
+| Render time | about 60 ms for a 240 ms kick and a third of a second for a 1.45 s one, on a 12-core laptop; the clipper, a room or grit each add from a tenth of a second to about a second |
 
 ## Documentation
 

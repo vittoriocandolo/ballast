@@ -43,6 +43,11 @@ versions.
   and a new version.
 - **Patches have no defaults.** A new field means a new schema version, and
   older schemas keep rendering exactly as before.
+- **Seeds and names are forever.** The keys that seed the noise, the dither,
+  the room, the variations and the repeats, `ballast/noise/v1`,
+  `ballast/dither/v1`, `ballast/room/v1`, `ballast/vary/v1` and
+  `ballast/play/v1`, and the WAV chunk `blst` never change: a new behavior
+  takes a new key.
 - **Every behavior has a test,** written as a property that holds on every
   platform, such as "rendering in blocks never changes a sample", rather than
   as a stored hash of a render.
@@ -64,7 +69,8 @@ uv run python docs/build.py
 
 Commit them with the change that alters them, and keep the documentation in
 `docs/` and the README true to the code. The tests check that every link in
-the documentation leads somewhere, and that every figure and sound is shown.
+the documentation leads somewhere, that every figure and sound is shown, and
+that the patch reference's example is the tight preset as it ships.
 
 ## Frozen filters
 
