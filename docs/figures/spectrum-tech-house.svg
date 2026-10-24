@@ -34,6 +34,10 @@
 .fig .khalo{fill:var(--muted);fill-opacity:.35}
 .fig .knot,.fig .dot1{fill:var(--accent);stroke:var(--paper);stroke-width:2}
 .fig .dot2{fill:var(--series-2);stroke:var(--paper);stroke-width:2}
+.fig .do1{fill:var(--step-1);stroke:var(--paper);stroke-width:2}
+.fig .do2{fill:var(--step-2);stroke:var(--paper);stroke-width:2}
+.fig .do3{fill:var(--step-3);stroke:var(--paper);stroke-width:2}
+.fig .do4{fill:var(--step-4);stroke:var(--paper);stroke-width:2}
 .fig .dot3{fill:var(--series-3);stroke:var(--paper);stroke-width:2}
 .fig .band{fill:var(--accent);fill-opacity:.08}
 .fig .limit{fill:none;stroke:var(--ink-2);stroke-width:1}

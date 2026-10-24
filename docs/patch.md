@@ -2,8 +2,8 @@
 
 A patch is a complete TOML description of one kick. Every field is required
 and the renderer has no defaults, so a future default can never change an old
-patch. The sections a patch may leave out are its layers, `[sub]` and
-`[transient]`: without one, the patch has none. The parser rejects anything outside the valid domain, reports every
+patch. The sections a patch may leave out are its layers, `[sub]`, `[room]`
+and `[transient]`: without one, the patch has none. The parser rejects anything outside the valid domain, reports every
 problem with its field path, and never clamps or repairs.
 
 ![The tight preset's pitch, body and attack curves through their knots, and the first 60 ms of its output](figures/anatomy-tight.svg)
@@ -135,6 +135,22 @@ and before the low cut and the clipper.
 | `level_db` | number | −60 – +24 dB, or `-inf` | The sub's level; `-inf` silences it. |
 | `amp` | curve | 3 – 32 knots of `{ ms, gain }` | The sub's own amplitude shape, ending by 8 s. |
 
+### `[room]`: the space
+
+Optional: a patch without this section has no room. The room is a seeded tail
+of Gaussian noise, drawn from the patch's seed, that the kick is heard in.
+Each frequency falls 60 dB in decay_ms / (1 + f / damping_hz), so the tail
+darkens as it fades. It joins after the drive and the sub, clean, and before
+the EQ, the low cut and the clipper. The kick runs on for the whole tail:
+`predelay_ms`, then 1.5 × `decay_ms`, to −90 dB.
+
+| Field | Type | Range | Meaning |
+|---|---|---|---|
+| `level_db` | number | −60 – +12 dB, or `-inf` | The tail's level against the kick: at 0 dB its energy equals the kick's. `-inf` silences it. |
+| `decay_ms` | number | 50 – 4000 ms | How long the low frequencies take to fall 60 dB. |
+| `damping_hz` | number | 200 Hz – 20 kHz | Where the tail fades twice as fast as at its lowest frequencies. |
+| `predelay_ms` | number | 0 – 200 ms | How long after the kick the tail begins: the distance to the walls. |
+
 ### `[eq]`: three bands
 
 After the drive and the sub, before the low cut. Each band at 0 dB is not
@@ -201,7 +217,8 @@ a pitch curve, `gain` for an amplitude shape.
   the attack's tone on `tone_hz`, without a kink.
 
 The kick lasts until the latest of the amplitude shapes' last knots, the
-sub's included, and the transient's end.
+sub's included, and the transient's end, and then, with a room, for its
+whole tail.
 
 ## Validation
 
@@ -235,12 +252,12 @@ A patch states its schema, so a later renderer can read it as it was meant,
 and a renderer refuses a schema it does not know rather than guess.
 
 - **Schema 3**, the current one, adds `body.bright_hz`, `body.modes`, `attack.pitch`, `drive.asymmetry`,
-  `drive.mix`, the `[eq]` and `[clip]` sections, and the optional `[sub]` and
-  `[transient]`.
+  `drive.mix`, the `[eq]` and `[clip]` sections, and the optional `[sub]`,
+  `[room]` and `[transient]`.
 - **Schema 2** adds `output.low_cut_hz` to schema 1.
 - **Schema 1** has no low cut.
 
 Ballast still reads schemas 1 and 2 and renders them exactly as they always
 sounded: what they lack is off, with a sine body without modes, a fixed tone, no asymmetry, all of the
-drive, and no EQ, clipper, low cut, sub or transient. `tune` and `stretch` write them back as schema 3 with
+drive, and no EQ, clipper, low cut, sub, room or transient. `tune` and `stretch` write them back as schema 3 with
 those values, which sound the same.

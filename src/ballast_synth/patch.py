@@ -5,7 +5,7 @@
 
 Every field is required and the renderer holds no defaults, so a future
 default can never change an old patch. The sections a patch may leave out are
-the layers [sub] and [transient]: without one, the patch has none. Each
+the layers [sub], [room] and [transient]: without one, the patch has none. Each
 field declares its rule and its comment in the canonical TOML once, on its
 dataclass, and parsing, dumping and editing all work from those
 declarations. The parser rejects anything outside the valid domain, reporting
@@ -45,6 +45,7 @@ MIN_SPACING_MS = Decimal("0.01")  # 10 µs, compared on the decimal values as wr
 MAX_SEED = 2**63 - 1
 PEAK_MODES = ("peak", "true-peak")  # the modes whose `db` is a target at or below full scale
 BODY_HZ = (10.0, 20000.0)  # where the body's frequency must lie at every pitch knot
+ROOM_TAIL = 1.5  # a room rings for this many times its decay: until it has fallen 90 dB
 TONE_HZ = (20.0, 20000.0)  # where the attack tone's frequency must lie, at every pitch knot too
 
 
@@ -485,6 +486,21 @@ class Sub:
 
 
 @dataclass(frozen=True)
+class Room:
+    """The room after the drive and the sub: a seeded tail that darkens as it fades, and its delay and level."""
+
+    level_db: float = number(-60.0, 12.0, "re the kick's energy", off=-math.inf)
+    decay_ms: float = number(50.0, 4000.0, "to fall 60 dB, at low frequencies")
+    damping_hz: float = number(200.0, 20000.0, "fades twice as fast here")
+    predelay_ms: float = number(0.0, 200.0)
+
+    @property
+    def tail_ms(self) -> float:
+        """How long the tail rings after the kick: its delay, then ROOM_TAIL × decay, to -90 dB."""
+        return self.predelay_ms + ROOM_TAIL * self.decay_ms
+
+
+@dataclass(frozen=True)
 class Transient:
     """A sampled transient, layered with the attack: its level, start, pitch and polarity, and its samples."""
 
@@ -515,7 +531,7 @@ class Transient:
 
 @dataclass(frozen=True)
 class Patch:
-    """One kick: the seed of its noise and dither, its six sections, and its sub and transient, if it has them."""
+    """One kick: the seed of its noise and dither, its six sections, and its sub, room and transient, if any."""
 
     seed: int
     body: Body
@@ -525,32 +541,34 @@ class Patch:
     clip: Clip
     output: Output
     sub: Sub | None
+    room: Room | None
     transient: Transient | None
 
     @property
     def length_ms(self) -> float:
-        """The source length: the end of the latest source, the amplitude shapes' last knots or the transient."""
+        """The source length: the latest source's end, a shape's last knot or the transient's, then the room's tail."""
         ends = [self.body.amp[-1][0], self.attack.amp[-1][0]]
         if self.sub is not None:
             ends.append(self.sub.amp[-1][0])
         if self.transient is not None:
             ends.append(self.transient.end_ms)
-        return max(ends)
+        return max(ends) + (0.0 if self.room is None else self.room.tail_ms)
 
 
-type Section = Body | Attack | Drive | Sub | EQ | Clip | Output | Transient
+type Section = Body | Attack | Drive | Sub | Room | EQ | Clip | Output | Transient
 
 SECTIONS: dict[str, type[Section]] = {
     "body": Body,
     "attack": Attack,
     "drive": Drive,
     "sub": Sub,
+    "room": Room,
     "eq": EQ,
     "clip": Clip,
     "output": Output,
     "transient": Transient,  # last, since its samples run long
 }
-OPTIONAL = ("sub", "transient")  # the sections a patch may leave out: layers it then does not have
+OPTIONAL = ("sub", "room", "transient")  # the sections a patch may leave out: layers it then does not have
 FIXED_TONE = ((0.0, 1.0),)  # a pitch curve of one knot: the attack's tone holds tone_hz
 EQ_OFF = {  # every band at 0 dB
     "low_hz": 80.0,
@@ -572,6 +590,7 @@ ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
         "eq": EQ_OFF,
         "output": {"low_cut_hz": 0.0},
         "sub": None,
+        "room": None,
         "transient": None,
     },
     2: {
@@ -581,6 +600,7 @@ ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
         "clip": {"db": 0.0, "knee_db": 0.0},
         "eq": EQ_OFF,
         "sub": None,
+        "room": None,
         "transient": None,
     },
     SCHEMA: {},
@@ -653,7 +673,7 @@ def from_dict(data: object) -> Patch:
             sections[name] = _section(name, cls, data[name], problems, new or {})
     if problems:
         raise PatchError(problems)
-    sub, transient = sections.get("sub"), sections.get("transient")
+    sub, room, transient = sections.get("sub"), sections.get("room"), sections.get("transient")
     return Patch(
         data["seed"],
         Body(**sections["body"]),
@@ -663,6 +683,7 @@ def from_dict(data: object) -> Patch:
         Clip(**sections["clip"]),
         Output(**sections["output"]),
         None if sub is None else Sub(**sub),
+        None if room is None else Room(**room),
         None if transient is None else Transient(**transient),
     )
 

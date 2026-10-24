@@ -31,7 +31,7 @@ spectrum, loudness and patch.
   partials, each fading at its own rate. `body.bright_hz` turns the body into a saw whose
   harmonics fade above it, by the same Hz at every pitch, so its weight
   carries to small speakers. A `[sub]` adds the sine the tail meets, clean,
-  after the drive, and `[eq]` shelves and a bell for weight, knock and air.
+  after the drive, a `[room]` a seeded tail that darkens as it fades, and `[eq]` shelves and a bell for weight, knock and air.
   Warmth is `drive.asymmetry`: even harmonics that
   grow as the body decays, with full scale and the drive's gain left exactly
   where they were. `drive.mix` blends in the undriven kick, sample-aligned.

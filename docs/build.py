@@ -28,9 +28,9 @@ from typing import TYPE_CHECKING, NamedTuple
 import numpy as np
 from scipy.interpolate import CubicSpline
 from scipy.io import wavfile
-from scipy.signal import fftconvolve, sosfreqz
+from scipy.signal import butter, fftconvolve, sosfilt, sosfreqz
 
-from ballast_synth import audition, family, noise, patch, render, shaper
+from ballast_synth import audition, family, noise, patch, render, room, shaper
 from ballast_synth.voice import Voice, drive_alpha
 
 if TYPE_CHECKING:
@@ -147,6 +147,10 @@ STYLE = f"""<style>
 .fig .khalo{{fill:var(--muted);fill-opacity:.35}}
 .fig .knot,.fig .dot1{{fill:var(--accent);{RING}}}
 .fig .dot2{{fill:var(--series-2);{RING}}}
+.fig .do1{{fill:var(--step-1);{RING}}}
+.fig .do2{{fill:var(--step-2);{RING}}}
+.fig .do3{{fill:var(--step-3);{RING}}}
+.fig .do4{{fill:var(--step-4);{RING}}}
 .fig .dot3{{fill:var(--series-3);{RING}}}
 .fig .band{{fill:var(--accent);fill-opacity:.08}}
 .fig .limit{{fill:none;stroke:var(--ink-2);stroke-width:1}}
@@ -430,6 +434,7 @@ def design_moves(tight: Kick) -> list[tuple[str, Kick]]:
         ("tight-zap", "attack.pitch: 4 to 1 in 2 ms", patch.edit(p, "attack.pitch", ZAP)),
         ("tight-sample", "ballast transient kick.toml click.wav", patch.edit(p, "transient", CLICK)),
         ("tight-sub", "[sub]: -6 dB, out to 400 ms", patch.edit(p, "sub", SUB)),
+        ("tight-room", "[room]: -12 dB, 600 ms", patch.edit(p, "room", ROOM)),
         ("tight-drive", "drive.db = 18.0", patch.edit(p, "drive.db", 18.0)),
         ("tight-knock", "eq.bell_db = 6.0", patch.edit(p, "eq.bell_db", 6.0)),
         ("tight-cut", "output.low_cut_hz = 30.0", patch.edit(p, "output.low_cut_hz", 30.0)),
@@ -548,6 +553,9 @@ def figure_pipeline() -> str:
     body.append(box(372, top + 36, 140, "Sub", ("label", "the tail's own sine"), ("label", "clean, after the drive")))
     body.append(arrow(f"M442,{top + 100}V{cy - 16}"))
     body.append(box(470, cy - 32, 110, "EQ", ("label", "low, bell, high"), ("label", "0 dB: off")))
+    body.append(box(372, top + 196, 140, "Room", ("label", "a seeded tail"), ("label", "darker as it fades")))
+    body.append(arrow(f"M462,{cy}V{top + 194}"))
+    body.append(arrow(f"M512,{top + 228}H525V{cy + 34}"))
     body.append(arrow(f"M456,{cy}H468"))
     body.append(box(600, cy - 32, 110, "Low cut", ("label", "12 dB/octave"), ("label", "0 Hz: off")))
     body.append(arrow(f"M580,{cy}H598"))
@@ -1215,6 +1223,47 @@ def figure_clipper(k: Kick) -> str:
     return svg(fit(shape, 1), "The clipper", subtitle, "".join(body), description)
 
 
+ROOM = patch.Room(-12.0, 600.0, 4000.0, 8.0)  # the usage guide's room
+THIRDS = (("o1", 250.0), ("o3", 1000.0), ("o4", 4000.0))
+
+
+def figure_room(k: Kick) -> str:
+    """Draw the room's energy decay in three third octaves against their designed times, and a kick in the room."""
+    h = room.impulse(k.p.seed, ROOM.decay_ms, ROOM.damping_hz, RATE)
+    seconds = 1.5 * ROOM.decay_ms
+    decay = Panel(LEFT, Axis(0, seconds), Axis(-70, 3))
+    body = [decay.frame(Ticks(steps(seconds, 300), num, "ms"), Ticks((-60, -40, -20, 0), num, "Energy left, dB"))]
+    for cls, center in THIRDS:
+        band = sosfilt(butter(4, [center * 2 ** (-1 / 6), center * 2 ** (1 / 6)], "band", fs=INTERNAL, output="sos"), h)
+        energy = np.cumsum((band * band)[::-1])[::-1]
+        level = 10 * np.log10(energy / energy[0] + 1e-30)
+        t = np.arange(h.size) / INTERNAL * KILO
+        pick = slice(None, None, 64)
+        body.append(decay.clip("room", decay.line(cls, t[pick], level[pick])))
+        designed = ROOM.decay_ms / (1 + center / ROOM.damping_hz)
+        body.append(decay.clip("room", decay.dots(f"d{cls}", [designed], [-60.0], 4.0)))
+    body.append(decay.hline(-60, "ref"))
+    roomed = kick("tight-room", patch.dumps(patch.edit(k.p, "room", ROOM)))
+    length, length_step = nice(roomed.p.length_ms)
+    whole = Panel(RIGHT, Axis(0, length), Axis(-1, 1))
+    body += [
+        whole.frame(Ticks(steps(length, length_step), num, "ms"), Ticks((-0.5, 0, 0.5), num, "The tight preset")),
+        waveform(whole, roomed.audio, length / KILO),
+        whole.line("ref", *trace(k.audio, length, round(whole.w))),
+    ]
+    keys = [
+        (f"k{cls}", f"{num(center / KILO)} kHz" if center >= KILO else f"{num(center)} Hz") for cls, center in THIRDS
+    ]
+    keys += [("kref", "tight"), ("key1", f"in the room, {num(ROOM.level_db)} dB")]
+    body.append(legend_row(below(decay), keys))
+    subtitle = (
+        f"Each third octave falls 60 dB in its own time (dots: designed, decay {num(ROOM.decay_ms)} ms, damping "
+        f"{num(ROOM.damping_hz / KILO)} kHz), so the tail darkens as it fades"
+    )
+    description = "The room's energy decay in three third octaves, and the tight preset with a room and without"
+    return svg(fit(decay, 1), "The room", subtitle, "".join(body), description)
+
+
 SHELVES = (("o1", -12.0), ("o2", -6.0), ("o3", 6.0), ("o4", 12.0))
 WIDTHS = (("o1", 0.3), ("o3", 1.0), ("o4", 4.0))
 
@@ -1594,6 +1643,7 @@ def main() -> None:
         "aliasing": figure_aliasing(),
         "asymmetry": figure_asymmetry(),
         "clipper": figure_clipper(kicks["tight"]),
+        "room": figure_room(kicks["tight"]),
         "eq": figure_eq(tight),
         "low-cut": figure_low_cut(),
         "decimator": figure_decimator(),

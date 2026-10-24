@@ -3,10 +3,10 @@
 Ballast computes one kick as a pure function of time, at 32 times the sample
 rate, and band-limits it once.
 
-    x(t) = b(t) + a(t) + v(t),    z = Q(C(E(D(x) + s))),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
+    x(t) = b(t) + a(t) + v(t),    z = Q(C(E(W(D(x) + s)))),    out[m] = p · g_out · Σ_k h[k] · z[mK − k]
 
 Here b is the body, a the attack, v the optional transient, D the drive, s
-the optional sub, E the EQ, C the optional low cut and Q
+the optional sub, W the optional room, E the EQ, C the optional low cut and Q
 the optional clipper, all at the internal rate F; h is the frozen decimator of
 the sample rate's family, K the decimation factor, g_out the output gain and p
 the polarity.
@@ -19,6 +19,7 @@ the polarity.
 - [The transient](#the-transient)
 - [The saturator](#the-saturator)
 - [The sub](#the-sub)
+- [The room](#the-room)
 - [The EQ](#the-eq)
 - [The low cut](#the-low-cut)
 - [The clipper](#the-clipper)
@@ -248,6 +249,33 @@ any kick tuned under F1, so the sub stays on the note.
 
 ![The body and the sub meeting at the last pitch knot, and the tight preset with a sub under it and without](figures/sub.svg)
 
+## The room
+
+The optional room adds a tail to the kick: W(y) = y + g_w · (h ∗ y), delayed
+by `predelay_ms`. The tail h is seeded Gaussian noise whose every frequency
+fades on its own clock:
+
+    h(t) = Σ_k ρ_k cos(2π f_k t + θ_k) · e^(−t ln 1000 / T(f_k)),    T(f) = decay / (1 + f / damping)
+
+so it darkens as it fades, as air and walls darken a real room. Its
+amplitudes and phases come from SHAKE-256 under its own key,
+`ballast/room/v1`, and the patch's seed, spaced so that the tail never
+repeats within itself. The fades are those of octave bands from 62.5 Hz to
+16 kHz, each at the decay of its center, with every component weighted across
+its two nearest bands, linearly in octaves; the weights sum to exactly 1, so
+the tail starts as plain white noise. Measured in third octaves, each falls
+60 dB within 10% of its designed time.
+
+Ballast builds the tail at the family's base rate and brings it up to the
+internal rate with the frozen filter, as it does a transient, so every rate
+of a family shares it, and scales it to unit energy, so that `level_db = 0`
+gives the tail the kick's energy. It lasts 1.5 × `decay_ms`, to −90 dB, and
+fades out smoothly over its last tenth. The room joins after the drive,
+because saturating a tail of noise only fills it with grit, and before the
+EQ and the clipper, so they shape the whole sound and its exact true peak.
+
+![The room's energy decay in three third octaves against their designed times, and the tight preset in a room and without](figures/room.svg)
+
 ## The EQ
 
 `[eq]` has three bands after the drive and the sub: a low shelf for weight, a
@@ -412,6 +440,7 @@ Audition reuses the renderer and adds four small parts:
 | `render.py` | EQ, low cut, clipper, parallel decimation, output stage, loudness, report, export |
 | `vary.py` | seeded variations, drawn from SHAKE-256, and grids along axes |
 | `pack.py` | kits: names by key, the gates, the manifest |
+| `room.py` | the seeded tail of the room, and its convolution |
 | `wav.py` | the RIFF writer, the reader of beds and transients, the chunk reader behind `extract`, and writing any file whole or not at all |
 | `audition.py` | hits, bed, watcher and playback |
 | `cli.py` | the commands |

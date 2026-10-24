@@ -43,9 +43,16 @@ def _shake(key: bytes, seed: int, size: int) -> bytes:
     return hashlib.shake_256(key + seed.to_bytes(8, "little")).digest(size)
 
 
-def coefficients(seed: int) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """Draw the amplitudes ρ_k and phases θ_k for f_k = 1 … 20000 Hz."""
-    words = np.frombuffer(_shake(NOISE_KEY, seed, 16 * COMPONENTS), dtype="<u8").reshape(COMPONENTS, 2) >> np.uint64(11)
+def coefficients(
+    seed: int,
+    key: bytes = NOISE_KEY,
+    count: int = COMPONENTS,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Draw `count` amplitudes ρ_k and phases θ_k under `key`: by default those of the attack's noise, 1 … 20000 Hz.
+
+    The draws are prefix-stable: more of them begin with the same ones.
+    """
+    words = np.frombuffer(_shake(key, seed, 16 * count), dtype="<u8").reshape(count, 2) >> np.uint64(11)
     u = (words[:, 0] + np.uint64(1)).astype(float) * 2.0**-53  # (0, 1]
     v = words[:, 1].astype(float) * 2.0**-53  # [0, 1)
     return np.sqrt(-2.0 * np.log(u)), 2.0 * np.pi * v

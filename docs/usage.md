@@ -278,11 +278,11 @@ patch's sample rate.
 
 ## Designing a kick
 
-Thirteen of the moves below are made on the `tight` preset, each with a link to its
-sound, to compare with [tight itself](audio/tight.wav); the figure shows what
-they do.
+Fourteen of the moves below are made on the `tight` preset, each with a link
+to its sound, to compare with [tight itself](audio/tight.wav); the figure
+shows what they do.
 
-![The tight preset and thirteen moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a brighter body, a zap, a sampled click, a sub, more drive, a knock, a low cut, warmth and clipping](figures/design.svg)
+![The tight preset and fourteen moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a brighter body, a zap, a sampled click, a sub, a room, more drive, a knock, a low cut, warmth and clipping](figures/design.svg)
 
 - **Tune it to the track.** A kick in the key of the bass sits in the mix. Use
   `ballast tune kick.toml E1`, or `--tune` with `init`.
@@ -354,6 +354,20 @@ they do.
   ```
 
   [Hear the sub](audio/tight-sub.wav).
+- **Depth is a room.** A `[room]` section puts the kick in a space: a
+  seeded tail that darkens as it fades, after the drive, so it stays clean.
+  `decay_ms` is how long it rings, `damping_hz` how dark it gets, and
+  `predelay_ms` how far away the walls are:
+
+  ```toml
+  [room]
+  level_db    = -12.0         # re the kick's energy
+  decay_ms    = 600.0         # to fall 60 dB, at low frequencies
+  damping_hz  = 4000.0        # fades twice as fast here
+  predelay_ms = 8.0
+  ```
+
+  [Hear the room](audio/tight-room.wav).
 - **Warmth is asymmetry.** `drive.asymmetry` adds even harmonics that grow as
   the body decays, and leaves full scale where it was; `drive.mix` below 1
   keeps some of the undriven kick, for density without losing the hit. Even

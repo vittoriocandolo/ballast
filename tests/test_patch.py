@@ -521,11 +521,20 @@ def test_transient_rules(layered: patch.Patch, field: str, value: object, messag
 
 
 def test_an_older_schema_cannot_have_a_layer(raw: dict[str, Any], layered: patch.Patch) -> None:
-    """Refuse a sub and a transient in a schema 2 patch, which could have neither."""
+    """Refuse a sub, a room and a transient in a schema 2 patch, which could have none of them."""
     raw = older(raw, 2)
     raw["sub"] = patch.to_dict(patch.edit(layered, "sub", SUB))["sub"]
+    raw["room"] = {"level_db": -10.0, "decay_ms": 600.0, "damping_hz": 4000.0, "predelay_ms": 8.0}
     raw["transient"] = patch.to_dict(layered)["transient"]
-    assert problems(raw) == ["sub: unknown field", "transient: unknown field"]
+    assert problems(raw) == ["sub: unknown field", "room: unknown field", "transient: unknown field"]
+
+
+def test_a_room_reads_back_between_the_sub_and_the_eq(tight: patch.Patch) -> None:
+    """Write a patch with a room, which sits after the sub and before the EQ, and read the same patch back."""
+    p = patch.edit(tight, "room", patch.Room(-10.0, 600.0, 4000.0, 8.0))
+    text = patch.dumps(p)
+    assert text.index("[drive]") < text.index("[room]") < text.index("[eq]")
+    assert patch.loads(text) == p
 
 
 def test_a_missing_transient_has_no_field_to_edit(tight: patch.Patch) -> None:
