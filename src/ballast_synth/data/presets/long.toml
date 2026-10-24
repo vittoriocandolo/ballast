@@ -24,6 +24,7 @@ amp = [                     # shape: 0 at both ends, highest point exactly 1
   { ms = 1190.0, gain = 0.00285 },
   { ms = 1450.0, gain = 0.0 },
 ]
+modes = []                  # ratio to the body, dB re its sine, ms to fall 60 dB
 
 [attack]
 level_db      = -24.0

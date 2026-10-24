@@ -66,6 +66,21 @@ the saw's own second harmonic. The sum runs to infinitely many harmonics, but
 they fade so fast that even the brightest body, driven by 48 dB, keeps every
 alias 104 dB down.
 
+`modes` add partials that ring from the strike, an acoustic body's own:
+
+    m(t) = Σ_k 10^(db_k/20) · e^(−t ln 1000 / T_k) · sin(r_k · 2π f₀ ∫₀ᵗ R)
+
+Each mode sits at a fixed ratio r_k to the body's frequency, so it follows
+the pitch curve, the slight glide of a head relaxing after the hit, and
+falls 60 dB in its own time T_k, under the body's shape. Its phase counts
+from the trigger whatever the phase reference, so every mode starts at
+zero, where the beater meets the head. An ideal membrane's first modes sit
+at 1.594, 2.136, 2.296 and 2.653 times its fundamental; a real kick's heads,
+tuning and air move them, and the table states whatever they are. The
+modes add to the fundamental, which stays where it was.
+
+![An acoustic body's spectrum and opening with five modes and without, over its first 150 and 60 ms](figures/modes.svg)
+
 ![One cycle of the body at four brightnesses, and the harmonics of a 1 kHz brightness on the note and an octave up](figures/brightness.svg)
 
 ![The body's shape for h2 = 0, 0.25 and 0.5, and the long preset's body around its last pitch knot with each phase reference](figures/body.svg)

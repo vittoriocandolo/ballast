@@ -35,6 +35,7 @@ amp = [                     # shape: 0 at both ends, highest point exactly 1
   { ms = 180.0, gain = 0.08 },
   { ms = 240.0, gain = 0.0 },
 ]
+modes = []                  # ratio to the body, dB re its sine, ms to fall 60 dB
 
 [attack]
 level_db      = -16.0
@@ -101,6 +102,7 @@ as Windows PowerShell writes.
 | `phase_ref` | `"onset"` or `"tail"` | | Where `phase_deg` applies: at the trigger, or on the free-running sine at `tune_hz` that the body meets exactly from the last pitch knot on. |
 | `pitch` | curve | 2 – 32 knots of `{ ms, ratio }` | The frequency as a ratio to `tune_hz`. It starts at 0 ms and ends at ratio 1, and `tune_hz × ratio` stays within 10 Hz – 20 kHz at every knot. |
 | `amp` | curve | 3 – 32 knots of `{ ms, gain }` | The body's amplitude shape, ending by 8 s. |
+| `modes` | table | 0 – 16 rows of `{ ratio, db, decay_ms }` | Partials that ring from the strike: each at `ratio` (0.5 – 40) times the body's frequency, following its pitch curve, `db` (−60 – +12) relative to the body's sine, and falling 60 dB in `decay_ms` (1 – 8000), under the body's shape. A drum head's inharmonic modes, a shell's boxy ring, or a synthetic kick's overtones; each must stay within 20 kHz at the top of the sweep. `[]` is none. |
 
 ### `[attack]`: the click
 
@@ -232,13 +234,13 @@ and writing it again gives the same text.
 A patch states its schema, so a later renderer can read it as it was meant,
 and a renderer refuses a schema it does not know rather than guess.
 
-- **Schema 3**, the current one, adds `body.bright_hz`, `attack.pitch`, `drive.asymmetry`,
+- **Schema 3**, the current one, adds `body.bright_hz`, `body.modes`, `attack.pitch`, `drive.asymmetry`,
   `drive.mix`, the `[eq]` and `[clip]` sections, and the optional `[sub]` and
   `[transient]`.
 - **Schema 2** adds `output.low_cut_hz` to schema 1.
 - **Schema 1** has no low cut.
 
 Ballast still reads schemas 1 and 2 and renders them exactly as they always
-sounded: what they lack is off, with a sine body, a fixed tone, no asymmetry, all of the
+sounded: what they lack is off, with a sine body without modes, a fixed tone, no asymmetry, all of the
 drive, and no EQ, clipper, low cut, sub or transient. `tune` and `stretch` write them back as schema 3 with
 those values, which sound the same.

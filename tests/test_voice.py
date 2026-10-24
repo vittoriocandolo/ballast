@@ -193,6 +193,28 @@ def test_the_sub_stays_clean_however_hard_the_body_is_driven(tight: patch.Patch)
     assert v.count > without.size  # the sub outlasts the body
 
 
+@pytest.mark.parametrize("reference", ["onset", "tail"])
+def test_modes_ring_from_the_strike_along_the_glide(tight: patch.Patch, reference: str) -> None:
+    """Add two modes, and find each the sine at its ratio of the body's phase from the trigger, under its own decay."""
+    modes = ((1.59, -9.0, 60.0), (2.65, -20.0, 20.0))
+    plain = patch.edit(patch.edit(tight, "body.h2", 0.0), "body.phase_ref", reference)
+    v, sine = Voice(patch.edit(plain, "body.modes", modes), INTERNAL), Voice(plain, INTERNAL)
+    t = np.linspace(0.0, 0.2, 4001)
+    struck = 2 * math.pi * v.f0 * v.pitch.integral(t)  # from the trigger, whatever the phase reference
+    modal = np.zeros_like(t)
+    for ratio, db, ms in modes:
+        modal += 10 ** (db / 20) * np.exp(-math.log(1000) * t / (ms / 1000)) * np.sin(ratio * struck)
+    assert np.allclose(v.body(t), sine.body(t) + v.body_gain * v.body_amp(t) * modal, rtol=0, atol=1e-12)
+
+
+def test_a_mode_falls_60_db_in_its_decay_time(tight: patch.Patch) -> None:
+    """Find a mode's envelope 60 dB down after decay_ms, whatever the body's shape does."""
+    v = Voice(patch.edit(tight, "body.modes", ((1.59, 0.0, 50.0),)), INTERNAL)
+    ratio, gain, rate = v.modes[0]
+    assert (ratio, gain) == (1.59, 1.0)
+    assert 20 * math.log10(math.exp(-rate * 0.05)) == pytest.approx(-60.0, abs=1e-9)
+
+
 def reconstruction(t: patch.Transient) -> NDArray[np.float64]:
     """Bring a transient's samples up to its family's internal rate, with the family's frozen filter."""
     base, _, factor = family.rates(t.rate)

@@ -27,7 +27,8 @@ spectrum, loudness and patch.
   at the maximum drive keeps every alias 104 dB down. A minimum-phase FIR passes 0–20 kHz within
   ±0.000014 dB and rejects everything from half the base rate up by at least
   116.4 dB, without ringing before the kick.
-- **Character by design.** `body.bright_hz` turns the body into a saw whose
+- **Character by design.** `body.modes` gives the body a drum head's
+  partials, each fading at its own rate. `body.bright_hz` turns the body into a saw whose
   harmonics fade above it, by the same Hz at every pitch, so its weight
   carries to small speakers. A `[sub]` adds the sine the tail meets, clean,
   after the drive, and `[eq]` shelves and a bell for weight, knock and air.

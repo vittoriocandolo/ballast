@@ -132,6 +132,40 @@ def test_the_tone_pitch_follows_the_body_pitch_rules_within_the_tone_range(
     assert problems(raw) == [message]
 
 
+DRUM = ((1.59, -9.0, 60.0), (2.14, -14.0, 35.0), (2.65, -20.0, 20.0))  # three modes of a struck head
+
+
+def test_modes_read_back_from_their_canonical_table(tight: patch.Patch) -> None:
+    """Write a body with three modes, as a table with its columns lined up, and read the same patch back."""
+    p = patch.edit(tight, "body.modes", DRUM)
+    text = patch.dumps(p)
+    assert "  { ratio = 1.59, db = -9.0,  decay_ms = 60.0 },\n" in text
+    assert patch.loads(text) == p
+    assert "modes = []" in patch.dumps(tight)
+
+
+@pytest.mark.parametrize(
+    ("modes", "message"),
+    [
+        ([{"ratio": 1.5, "db": -6.0}], "body.modes[0].decay_ms: missing"),
+        ([{"ratio": 0.2, "db": -6.0, "decay_ms": 50.0}], "body.modes[0].ratio: 0.2 is outside 0.5 … 40"),
+        ([{"ratio": 1.5, "db": -6.0, "decay_ms": 0.5}], "body.modes[0].decay_ms: 0.5 is outside 1 … 8000"),
+        ("x", "body.modes: expected an array of { ratio, db, decay_ms } tables, found a string"),
+    ],
+)
+def test_mode_rules(raw: dict[str, Any], modes: object, message: str) -> None:
+    """Break one rule of the modes, and get exactly that problem."""
+    raw["body"]["modes"] = modes
+    assert problems(raw) == [message]
+
+
+def test_a_mode_must_stay_within_20_khz_at_the_top_of_the_sweep(raw: dict[str, Any]) -> None:
+    """Tune the body to 100 Hz, which starts at 700 Hz, and refuse a mode 40 times that."""
+    raw["body"]["tune_hz"] = 100.0
+    raw["body"]["modes"] = [{"ratio": 40.0, "db": -6.0, "decay_ms": 50.0}]
+    assert problems(raw) == ["body.modes[0].ratio: the mode reaches 28000 Hz at the top of the sweep, above 20 kHz"]
+
+
 def test_knot_spacing_is_compared_on_the_decimal_values_as_written(raw: dict[str, Any]) -> None:
     """Space two knots exactly 0.01 ms apart as written, which binary floats would put a hair short."""
     spacing = float(patch.MIN_SPACING_MS)
@@ -364,7 +398,7 @@ def older(raw: dict[str, Any], schema: int) -> dict[str, Any]:
     """Return the patch as an older schema writes it: without the fields that schema did not have."""
     raw["schema"] = schema
     del raw["clip"], raw["eq"], raw["drive"]["asymmetry"], raw["drive"]["mix"], raw["attack"]["pitch"]
-    del raw["body"]["bright_hz"]
+    del raw["body"]["bright_hz"], raw["body"]["modes"]
     if schema == 1:
         del raw["output"]["low_cut_hz"]
     return raw

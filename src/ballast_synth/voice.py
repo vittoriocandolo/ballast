@@ -118,6 +118,8 @@ class Voice:
         self.rate = rate
         self.f0, self.h2, self.phi0, self.tail = b.tune_hz, b.h2, math.radians(b.phase_deg), b.phase_ref == "tail"
         self.bright = b.bright_hz
+        # Each mode: its ratio, its gain re the sine, and its decay rate, from the time it takes to fall 60 dB.
+        self.modes = [(ratio, 10.0 ** (db / 20.0), math.log(1000.0) / (ms / 1000)) for ratio, db, ms in b.modes]
         self.body_gain: float = 10.0 ** (b.level_db / 20.0) / math.sqrt(1.0 + b.h2 * b.h2)  # g_b / √(1 + h2²)
         self.pitch = _curve(b.pitch, last=0.0)  # lands smoothly on the tuning
         # Amplitude shapes have zero end slopes, so they join silence smoothly.
@@ -210,6 +212,11 @@ class Voice:
             wave = np.arctan(r * np.sin(phi) / (1.0 - r * np.cos(phi))) / r
             if self.h2 != 0.0:
                 wave += self.h2 * np.sin(2.0 * phi)
+        if self.modes:
+            # The modes ring from the strike: phase ratio · 2π f0 ∫₀ᵗ R, so they follow the glide and start at 0.
+            struck = (2 * math.pi * self.f0) * (self.pitch.integral(t) if self.tail else tau)
+            for ratio, gain, rate in self.modes:
+                wave = wave + gain * np.exp(-rate * t) * np.sin(ratio * struck)
         return self.body_gain * self.body_amp(t) * wave
 
     def attack(self, t: NDArray[np.float64], n: NDArray[np.int_]) -> NDArray[np.float64]:

@@ -59,6 +59,7 @@ amp = [                     # shape: 0 at both ends, highest point exactly 1
   { ms = 180.0, gain = 0.06 },
   { ms = 230.0, gain = 0.0 },
 ]
+modes = []                  # ratio to the body, dB re its sine, ms to fall 60 dB
 
 [attack]
 level_db      = -12.0
@@ -140,6 +141,7 @@ amp = [                     # shape: 0 at both ends, highest point exactly 1
   { ms = 180.0, gain = 0.08 },
   { ms = 240.0, gain = 0.0 },
 ]
+modes = []                  # ratio to the body, dB re its sine, ms to fall 60 dB
 
 [attack]
 level_db      = -16.0
@@ -222,6 +224,7 @@ amp = [                     # shape: 0 at both ends, highest point exactly 1
   { ms = 260.0, gain = 0.1 },
   { ms = 330.0, gain = 0.0 },
 ]
+modes = []                  # ratio to the body, dB re its sine, ms to fall 60 dB
 
 [attack]
 level_db      = -14.0
@@ -303,6 +306,7 @@ amp = [                     # shape: 0 at both ends, highest point exactly 1
   { ms = 320.0, gain = 0.12 },
   { ms = 400.0, gain = 0.0 },
 ]
+modes = []                  # ratio to the body, dB re its sine, ms to fall 60 dB
 
 [attack]
 level_db      = -20.0
@@ -385,6 +389,7 @@ amp = [                     # shape: 0 at both ends, highest point exactly 1
   { ms = 280.0, gain = 0.12 },
   { ms = 360.0, gain = 0.0 },
 ]
+modes = []                  # ratio to the body, dB re its sine, ms to fall 60 dB
 
 [attack]
 level_db      = -13.0
@@ -476,6 +481,7 @@ amp = [                     # shape: 0 at both ends, highest point exactly 1
   { ms = 420.0, gain = 0.12 },
   { ms = 600.0, gain = 0.0 },
 ]
+modes = []                  # ratio to the body, dB re its sine, ms to fall 60 dB
 
 [attack]
 level_db      = -28.0
@@ -560,6 +566,7 @@ amp = [                     # shape: 0 at both ends, highest point exactly 1
   { ms = 1190.0, gain = 0.00285 },
   { ms = 1450.0, gain = 0.0 },
 ]
+modes = []                  # ratio to the body, dB re its sine, ms to fall 60 dB
 
 [attack]
 level_db      = -24.0

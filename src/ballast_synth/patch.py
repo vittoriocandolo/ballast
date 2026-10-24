@@ -31,7 +31,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     import os
-    from collections.abc import Callable, Collection, Iterable
+    from collections.abc import Callable, Collection, Iterable, Mapping
 
     from numpy.typing import NDArray
 
@@ -142,8 +142,9 @@ def _toml(v: object) -> str:
 # Field declarations. Each carries `parse(path, raw, problems, section)`, which
 # appends any problems and returns the normalized value or None; `section` holds
 # the fields of the same section parsed before it. `key` names the value of each
-# knot in a curve, and `dump`, if any, writes the value in the canonical TOML. A
-# declaration is typed as the value its field holds, as dataclasses.field is.
+# knot in a curve, `columns` the keys of each row of a table, and `dump`, if any,
+# writes the value in the canonical TOML. A declaration is typed as the value its
+# field holds, as dataclasses.field is.
 
 if TYPE_CHECKING:
     type Parse[T] = Callable[[str, Any, list[str], dict[str, Any]], T | None]
@@ -155,8 +156,10 @@ def _rule[T](
     note: str = "",
     key: str | None = None,
     dump: Callable[[T], str] | None = None,
+    columns: tuple[str, ...] = (),
 ) -> T:
-    return cast("T", field(metadata={"parse": parse, "note": note, "key": key, "dump": dump}))
+    meta = {"parse": parse, "note": note, "key": key, "dump": dump, "columns": columns}
+    return cast("T", field(metadata=meta))
 
 
 def number(
@@ -242,6 +245,52 @@ def knots(key: str, count: tuple[int, int], max_ms: float, check: Check, note: s
         return curve
 
     return _rule(parse, note, key)
+
+
+type Rows = tuple[tuple[float, ...], ...]  # a table's rows, each a value per column
+type RowCheck = Callable[[str, Rows, list[str], dict[str, Any]], None]
+
+
+def table(columns: dict[str, _Bounds], count: tuple[int, int], check: RowCheck, note: str = "") -> Rows:
+    """Declare a table: rows of numbers, written as an array of tables of `columns`, each in its bounds."""
+
+    def parse(path: str, raw: object, problems: list[str], section: dict[str, Any]) -> Rows | None:
+        keys = ", ".join(columns)
+        if not isinstance(raw, list):
+            problems.append(f"{path}: expected an array of {{ {keys} }} tables, found {_kind(raw)}")
+            return None
+        if not count[0] <= len(raw) <= count[1]:
+            problems.append(f"{path}: needs {count[0]} to {count[1]} rows, found {len(raw)}")
+            return None
+        rows, malformed = [], False
+        for i, row in enumerate(raw):
+            if not isinstance(row, dict):
+                problems.append(f"{path}[{i}]: expected a {{ {keys} }} table, found {_kind(row)}")
+                malformed = True
+            elif _keys(problems, f"{path}[{i}].", row, columns):
+                values = [_number(f"{path}[{i}].{k}", row[k], problems, bounds) for k, bounds in columns.items()]
+                malformed |= None in values
+                rows.append(tuple(cast("list[float]", values)))
+            else:
+                malformed = True
+        if malformed:
+            return None
+        check(path, tuple(rows), problems, section)
+        return tuple(rows)
+
+    return _rule(parse, note, columns=tuple(columns))
+
+
+def _modes(path: str, rows: Rows, problems: list[str], section: dict[str, Any]) -> None:
+    """Check that every mode stays within 20 kHz, at the top of the body's sweep too."""
+    tune, pitch = section["tune_hz"], section["pitch"]
+    if tune is None or pitch is None:
+        return
+    top = tune * max(r for _, r in pitch)
+    for i, (ratio, _, _) in enumerate(rows):
+        if top * ratio > BODY_HZ[1]:
+            reach = f"the mode reaches {top * ratio:g} Hz at the top of the sweep, above 20 kHz"
+            problems.append(f"{path}[{i}].ratio: {reach}")
 
 
 def encode(samples: NDArray[np.floating[Any]]) -> str:
@@ -338,7 +387,7 @@ def _shape(path: str, curve: Knots, problems: list[str], _section: dict[str, Any
 
 @dataclass(frozen=True)
 class Body:
-    """The tonal body: a sine, or a saw that fades above bright_hz, and a second harmonic, swept by the pitch curve."""
+    """The tonal body: a sine, or a saw that fades above bright_hz, a second harmonic and modes, swept by the pitch."""
 
     tune_hz: float = number(20.0, 1000.0)
     level_db: float = number(-60.0, 24.0, off=-math.inf)
@@ -359,6 +408,12 @@ class Body:
         MAX_BODY_MS,
         _shape,
         "shape: 0 at both ends, highest point exactly 1",
+    )
+    modes: tuple[tuple[float, ...], ...] = table(
+        {"ratio": _Bounds(0.5, 40.0), "db": _Bounds(-60.0, 12.0), "decay_ms": _Bounds(1.0, MAX_BODY_MS)},
+        (0, 16),
+        _modes,
+        "ratio to the body, dB re its sine, ms to fall 60 dB",
     )
 
 
@@ -510,7 +565,7 @@ EQ_OFF = {  # every band at 0 dB
 # an optional section it could not have, so that its patches have none.
 ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
     1: {
-        "body": {"bright_hz": 0.0},
+        "body": {"bright_hz": 0.0, "modes": ()},
         "attack": {"pitch": FIXED_TONE},
         "drive": {"asymmetry": 0.0, "mix": 1.0},
         "clip": {"db": 0.0, "knee_db": 0.0},
@@ -520,7 +575,7 @@ ADDED: dict[int, dict[str, dict[str, Any] | None]] = {
         "transient": None,
     },
     2: {
-        "body": {"bright_hz": 0.0},
+        "body": {"bright_hz": 0.0, "modes": ()},
         "attack": {"pitch": FIXED_TONE},
         "drive": {"asymmetry": 0.0, "mix": 1.0},
         "clip": {"db": 0.0, "knee_db": 0.0},
@@ -618,16 +673,18 @@ def to_dict(p: Patch) -> dict[str, Any]:
     for name, cls in SECTIONS.items():
         section = getattr(p, name)
         if section is not None:  # an optional section the patch leaves out
-            data[name] = {f.name: _plain(getattr(section, f.name), f.metadata["key"]) for f in fields(cls)}
+            data[name] = {f.name: _plain(getattr(section, f.name), f.metadata) for f in fields(cls)}
     return data
 
 
-def _plain(v: object, key: str | None) -> object:
-    """Return a field's value as TOML parses it: a curve as an array of { ms, key } tables, a pair as an array."""
+def _plain(v: object, meta: Mapping[str, Any]) -> object:
+    """Return a field's value as TOML parses it: a curve or a table as an array of tables, a pair as an array."""
     if not isinstance(v, tuple):
         return v
-    if key:
-        return [{"ms": ms, key: x} for ms, x in v]
+    if meta["key"]:
+        return [{"ms": ms, meta["key"]: x} for ms, x in v]
+    if meta["columns"]:
+        return [dict(zip(meta["columns"], row, strict=True)) for row in v]
     return list(v)
 
 
@@ -657,6 +714,9 @@ def dumps(p: Patch) -> str:
         curves: list[str] = []
         for f in fields(cls):
             meta, value = f.metadata, getattr(section, f.name)
+            if meta["columns"]:
+                curves += _table(f.name, value, meta["columns"], meta["note"])
+                continue
             if meta["key"] is None:
                 rows.append((f.name, (meta["dump"] or _toml)(value), meta["note"]))
                 continue
@@ -670,6 +730,16 @@ def dumps(p: Patch) -> str:
         width = max(len(key) for key, _, _ in rows)
         lines += ["", f"[{name}]", *(_note(f"{key.ljust(width)} = {text}", note) for key, text, note in rows), *curves]
     return "\n".join(lines) + "\n"
+
+
+def _table(name: str, rows: Rows, columns: tuple[str, ...], note: str) -> list[str]:
+    """Write a table as an array of inline tables, its columns lined up, or as [] when it has no rows."""
+    if not rows:
+        return [_note(f"{name} = []", note)]
+    cells = [[f"{key} = {value!r}," for key, value in zip(columns, row, strict=True)] for row in rows]
+    widths = [max(len(row[j]) for row in cells) for j in range(len(columns))]
+    lined = (" ".join(c.ljust(w) for c, w in zip(row, widths, strict=True)).rstrip(", ") for row in cells)
+    return [_note(f"{name} = [", note), *(f"  {{ {row} }}," for row in lined), "]"]
 
 
 def _note(line: str, note: str) -> str:

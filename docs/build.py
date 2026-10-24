@@ -694,6 +694,72 @@ def figure_body(long: patch.Patch) -> str:
     return svg(fit(shape, 3), "The body", subtitle, "".join(body), description)
 
 
+DRUM_MODES = (  # four modes of an ideal membrane, at its ratios, and a shell mode, each fading faster as it rises
+    (1.594, -5.0, 140.0),
+    (2.136, -9.0, 90.0),
+    (2.296, -12.0, 80.0),
+    (2.653, -14.0, 60.0),
+    (7.3, -16.0, 35.0),
+)
+DRUM_HZ = 55.0
+DRUM = {  # an acoustic body on the tight preset: a slight glide, membrane modes and a shell mode, a felt beater
+    "body.tune_hz": DRUM_HZ,
+    "body.h2": 0.0,
+    "body.pitch": ((0.0, 1.12), (40.0, 1.0)),
+    "body.amp": ((0.0, 0.0), (0.5, 1.0), (40.0, 0.6), (140.0, 0.2), (240.0, 0.04), (300.0, 0.0)),
+    "body.modes": DRUM_MODES,
+    "attack.level_db": -14.0,
+    "attack.noise_mix": 1.0,
+    "attack.noise_band_hz": (900.0, 6000.0),
+    "attack.amp": ((0.0, 0.0), (0.1, 1.0), (1.0, 0.3), (4.0, 0.0)),
+    "drive.db": 3.0,
+}
+
+
+def drum(tight: patch.Patch) -> patch.Patch:
+    """Return the acoustic body the design notes draw, made on the tight preset."""
+    p = tight
+    for path, value in DRUM.items():
+        p = patch.edit(p, path, value)
+    return p
+
+
+def figure_modes(k: Kick) -> str:
+    """Draw the drum's spectrum over its first 150 ms with its modes and without, and its opening."""
+    with_modes = kick("drum", patch.dumps(drum(k.p)))
+    sine = kick("drum-sine", patch.dumps(patch.edit(drum(k.p), "body.modes", ())))
+    n = 1 << 17
+    f = np.fft.rfftfreq(n, 1 / RATE)
+    band = Axis(30, 1000, log=True)
+    keep = (f >= band.lo) & (f <= band.hi)
+    spectra = Panel(LEFT, band, Axis(-60, 3))
+    body = [
+        spectra.frame(
+            Ticks((50, 100, 200, 500, 1000), hz, "frequency, Hz"),
+            Ticks((-60, -40, -20, 0), num, "Level, dB"),
+        ),
+    ]
+    for cls, kk in (("ref", sine), ("s1", with_modes)):
+        level = 20 * np.log10(np.abs(np.fft.rfft(kk.audio[: round(0.15 * RATE)].astype(float), n)) + 1e-12)
+        body.append(spectra.clip("modes", spectra.line(cls, f[keep], level[keep] - np.max(level[keep]))))
+    for ratio, _, _ in DRUM_MODES:
+        body.append(spectra.vline(DRUM_HZ * ratio, "zero"))
+    ms = 60
+    wave = Panel(RIGHT, Axis(0, ms), Axis(-1.05, 1.05))
+    body += [
+        wave.frame(Ticks((0, 20, 40, 60), num, "ms"), Ticks((-1, 0, 1), num, "The drum, first 60 ms")),
+        wave.line("ref", *trace(sine.audio, ms, round(wave.w))),
+        wave.line("s1", *trace(with_modes.audio, ms, round(wave.w))),
+    ]
+    keys = [("kref", "a sine body"), ("key1", "with five modes: four of the membrane, one of the shell")]
+    body.append(legend_row(below(spectra), keys))
+    subtitle = (
+        "Modes at fixed ratios to the body ring from the strike, each fading at its own rate, along the head's glide"
+    )
+    description = "An acoustic body's spectrum and opening with five modes and without, over its first 150 and 60 ms"
+    return svg(fit(spectra, 1), "Modes", subtitle, "".join(body), description)
+
+
 BRIGHTS = (("ref", 0.0), ("o1", 200.0), ("o3", 1000.0), ("o4", 5000.0))
 SPEAKER_HZ = 150  # about where small speakers start to play bass
 
@@ -1506,6 +1572,8 @@ def main() -> None:
     figures.mkdir(exist_ok=True)
     audio.mkdir(exist_ok=True)
     wavfile.write(audio / "click.wav", RATE, click(RATE).astype(np.float32))  # a WAV from elsewhere, to layer
+    drummed = kick("drum", patch.dumps(drum(kicks["tight"].p)))
+    render.export(audio / "drum.wav", drummed.p, drummed.text, drummed.audio, 16)
     for k in [*kicks.values(), *(k for _, k in moves[1:])]:
         render.export(audio / f"{k.name}.wav", k.p, k.text, k.audio, 16)
         summary = str(k.report).replace("\n", " | ")
@@ -1517,6 +1585,7 @@ def main() -> None:
         "body": figure_body(kicks["long"].p),
         "curves": figure_curves(tight),
         "brightness": figure_brightness(tight),
+        "modes": figure_modes(kicks["tight"]),
         "attack": figure_attack(tight),
         "zap": figure_zap(tight),
         "transient": figure_transient(kicks["tight"]),

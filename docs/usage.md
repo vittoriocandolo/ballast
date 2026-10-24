@@ -301,6 +301,23 @@ they do.
   the drive's, last as long as the tail. `body.bright_hz = 1000.0` puts 15%
   of the tail's power above 150 Hz, where a laptop can play it.
   [Hear the brighter body](audio/tight-bright.wav).
+- **An acoustic body is modes.** `body.modes` adds partials at fixed ratios
+  to the body, each fading at its own rate: a drum head instead of a sweep.
+  With a slight glide, `pitch = [{ ms = 0.0, ratio = 1.12 }, { ms = 40.0,
+  ratio = 1.0 }]`, a felt beater of noise, and four membrane modes and a
+  shell mode:
+
+  ```toml
+  modes = [
+    { ratio = 1.594, db = -5.0,  decay_ms = 140.0 },
+    { ratio = 2.136, db = -9.0,  decay_ms = 90.0 },
+    { ratio = 2.296, db = -12.0, decay_ms = 80.0 },
+    { ratio = 2.653, db = -14.0, decay_ms = 60.0 },
+    { ratio = 7.3,   db = -16.0, decay_ms = 35.0 },
+  ]
+  ```
+
+  [Hear the drum](audio/drum.wav).
 - **The click is the attack.** A tone around 1.5–3 kHz with band-limited
   noise, a few milliseconds long, cuts through a dense mix; `noise_mix` blends
   the two at constant power. `attack.level_db = -8.0` brings the click 8 dB
