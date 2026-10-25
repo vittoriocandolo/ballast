@@ -31,8 +31,12 @@ import dataclasses
 import hashlib
 import itertools
 import math
+from typing import TYPE_CHECKING
 
 from .patch import BODY_HZ, CURVES, MAX_BODY_MS, SECTIONS, TONE_HZ, Patch, PatchError, edit, stretch
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 VARY_KEY = b"ballast/vary/v1"
 MOVES = ("punch", "snap", "length", "click", "tone", "drive", "bright")
@@ -49,10 +53,23 @@ def draws(seed: int, number: int) -> dict[str, float]:
     return {move: 2.0 * word * 2.0**-53 - 1.0 for move, word in zip(MOVES, words, strict=True)}
 
 
-def _factor(u: float, octaves: float, top: float) -> float:
-    """Return 2^(u · octaves), at most `top`, rounded to 3 decimals."""
+def _inside(x: float, lo: float, hi: float, digits: int, fits: Callable[[float], bool]) -> float:
+    """Return x within lo … hi, rounded to `digits` decimals, and stepped back inside if the rounding left `fits`.
+
+    The bounds come from dividing a limit, so their rounding can land a hair outside it; `fits` checks the value
+    as the patch itself will.
+    """
+    step = 10.0**-digits
+    x = round(min(max(x, lo), hi), digits)
+    while not fits(x):
+        x = round(x - step if 2 * x > lo + hi else x + step, digits)
+    return x
+
+
+def _factor(u: float, octaves: float, top: float, fits: Callable[[float], bool]) -> float:
+    """Return 2^(u · octaves), at most `top`, rounded to 3 decimals, within what `fits`."""
     factor: float = 2.0 ** (u * octaves)
-    return round(min(factor, top), 3)
+    return _inside(factor, 0.0, top, 3, fits)
 
 
 def vary(p: Patch, seed: int, number: int) -> tuple[Patch, list[str]]:
@@ -60,14 +77,22 @@ def vary(p: Patch, seed: int, number: int) -> tuple[Patch, list[str]]:
     u = draws(seed, number)
     b, a, done = p.body, p.attack, []
     ratio = b.pitch[0][1]
-    first = round(min(max(ratio * 2.0 ** (PUNCH * u["punch"]), BODY_HZ[0] / b.tune_hz), BODY_HZ[1] / b.tune_hz), 3)
+    lo, hi = BODY_HZ[0] / b.tune_hz, BODY_HZ[1] / b.tune_hz
+    first = _inside(ratio * 2.0 ** (PUNCH * u["punch"]), lo, hi, 3, lambda r: BODY_HZ[0] <= b.tune_hz * r <= BODY_HZ[1])
     p = edit(p, "body.pitch", ((0.0, first), *b.pitch[1:]))
     done.append(f"punch ×{first / ratio:.3g}")
-    snap = _factor(u["snap"], SNAP, MAX_BODY_MS / b.pitch[-1][0])
+    end = b.pitch[-1][0]
+    snap = _factor(u["snap"], SNAP, MAX_BODY_MS / end, lambda f: round(f * end, 3) <= MAX_BODY_MS)
     p = stretch(p, "body.pitch", snap)
     done.append(f"snap ×{snap:g}")
     peak = next(ms for ms, g in b.amp if g == 1.0)
-    length = _factor(u["length"], LENGTH, (MAX_BODY_MS - peak) / (b.amp[-1][0] - peak))
+    span = b.amp[-1][0] - peak
+    length = _factor(
+        u["length"],
+        LENGTH,
+        (MAX_BODY_MS - peak) / span,
+        lambda f: round(peak + f * span, 3) <= MAX_BODY_MS,
+    )
     p = stretch(p, "body.amp", length)
     done.append(f"length ×{length:g}")
     if math.isfinite(a.level_db):
@@ -75,9 +100,14 @@ def vary(p: Patch, seed: int, number: int) -> tuple[Patch, list[str]]:
         p = edit(p, "attack.level_db", level)
         done.append(f"click {level - a.level_db:+.1f} dB")
     reach = max(r for _, r in a.pitch), min(r for _, r in a.pitch)  # the tone's highest and lowest ratios
-    tone = a.tone_hz * 2.0 ** (TONE * u["tone"])
-    tone = round(min(max(tone, TONE_HZ[0] / reach[1]), TONE_HZ[1] / reach[0]))
-    p = edit(p, "attack.tone_hz", float(tone))
+    tone = _inside(
+        a.tone_hz * 2.0 ** (TONE * u["tone"]),
+        TONE_HZ[0] / reach[1],
+        TONE_HZ[1] / reach[0],
+        0,
+        lambda f: TONE_HZ[0] <= f * reach[1] and f * reach[0] <= TONE_HZ[1],
+    )
+    p = edit(p, "attack.tone_hz", tone)
     done.append(f"tone ×{tone / a.tone_hz:.3g}")
     before = p.drive.db
     drive = round(min(max(before + DRIVE_DB * u["drive"], 0.0), 48.0), 1)

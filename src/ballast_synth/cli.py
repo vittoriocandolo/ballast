@@ -167,7 +167,11 @@ def cmd_vary(a: argparse.Namespace) -> None:
         what = f"{len(made)} combinations"
     else:
         number, chosen = a.count or 8, 1 if a.seed is None else a.seed
-        made = [vary.vary(p, chosen, i) for i in range(1, number + 1)]
+        try:
+            made = [vary.vary(p, chosen, i) for i in range(1, number + 1)]
+        except PatchError as e:  # knots too close for a snap to keep apart, say
+            msg = f"{a.patch}: not written, a variation is invalid"
+            raise _listing(msg, e) from None
         what = f"{number} variations, seed {chosen},"
     stem, folder = Path(a.patch).stem, Path(a.out)
     try:
@@ -270,6 +274,9 @@ def _patches(paths: list[str]) -> list[tuple[str, str, Patch]]:
 def cmd_pack(a: argparse.Namespace) -> None:
     """Render patches into a finished kit, writing nothing unless every kick passes the gates."""
     bits = FORMATS[a.format]
+    if repeated := sorted({rate for rate in a.rate or [] if a.rate.count(rate) > 1}):
+        msg = f"--rate {', '.join(map(str, repeated))} given more than once"
+        raise CliError(msg)
     try:  # every kick renders before any file is written
         kicks = pack.kicks(_patches(a.patches), a.rate or [], bits, a.velocities, a.round_robins)
     except PatchError as e:

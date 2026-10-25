@@ -12,6 +12,9 @@ from ballast_synth.cli import PRESETS
 
 from .conftest import preset_text
 
+TONE_TOP_HZ = 6666.0  # the highest whole hertz whose triple stays within 20 kHz
+BODY_TOP = 666.666  # the highest ratio, to 3 decimals, that keeps a 30 Hz body within 20 kHz
+
 
 def test_the_draws_never_change() -> None:
     """Draw the moves of seed 1, variation 1, as every version of Ballast must."""
@@ -52,6 +55,20 @@ def test_variations_are_valid_and_keep_the_tuning_and_levels(name: str) -> None:
         assert 1 / reach <= q.body.pitch[0][1] / p.body.pitch[0][1] <= reach
         assert abs(q.drive.db - p.drive.db) <= vary.DRIVE_DB
         assert len(moves) == 6 + (p.body.bright_hz != 0.0)
+
+
+def test_variations_round_inside_every_limit() -> None:
+    """Vary a tone and a body held near 20 kHz, whose limits, rounded, would land just past it: they step back.
+
+    The tone under a curve from 3 tops out at 20000 / 3 Hz, which rounds up to 6667 Hz; the body in 30 Hz at
+    20000 / 30, which rounds up to a ratio of 666.667.
+    """
+    p = patch.loads(preset_text("house"))
+    p = patch.edit(patch.edit(p, "attack.pitch", ((0.0, 3.0), (5.0, 1.0))), "attack.tone_hz", 6000.0)
+    p = patch.edit(patch.edit(p, "body.tune_hz", 30.0), "body.pitch", ((0.0, 666.666), (10.0, 1.0)))
+    made = [vary.vary(p, 1, i)[0] for i in range(1, 9)]
+    assert max(q.attack.tone_hz for q in made) == TONE_TOP_HZ
+    assert max(q.body.pitch[0][1] for q in made) == BODY_TOP
 
 
 def test_a_silent_click_stays_silent(tight: patch.Patch) -> None:

@@ -462,6 +462,20 @@ def test_pack_and_vary_refuse_kits_too_large_or_unplayable(
     assert caught.value.code == BAD_INPUT
 
 
+def test_vary_and_pack_refuse_what_they_cannot_make(run: Run, tmp_path: Path) -> None:
+    """Refuse variations whose snap would squeeze two pitch knots closer than 0.01 ms, and a rate given twice."""
+    run("init", "tight", "-o", "kick.toml")
+    p = patch.loads((tmp_path / "kick.toml").read_text(encoding="utf-8"))
+    close = patch.edit(p, "body.pitch", ((0.0, 4.0), (0.01, 3.0), (60.0, 1.0)))
+    (tmp_path / "close.toml").write_text(patch.dumps(close), encoding="utf-8")
+    status, out, err = run("vary", "close.toml", "-o", "vars", "-n", "8")
+    assert (status, out) == (BAD_INPUT, "")
+    assert err.startswith("close.toml: not written, a variation is invalid\n  body.pitch[1].ms: ")
+    assert not (tmp_path / "vars").exists()
+    status, _, err = run("pack", "kick.toml", "-o", "kit", "--rate", "48000", "--rate", "44100", "--rate", "48000")
+    assert (status, err) == (BAD_INPUT, "--rate 48000 given more than once\n")
+
+
 def test_pack_refuses_names_it_cannot_tell_apart(run: Run, tmp_path: Path) -> None:
     """Refuse two patches of one name from two folders, and an empty folder."""
     for folder, name in (("a", "tight"), ("b", "house")):
