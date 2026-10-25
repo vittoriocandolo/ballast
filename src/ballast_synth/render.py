@@ -104,7 +104,7 @@ def sweep(y: NDArray[np.float64], e: EQ, low: NDArray[np.float64], rate: int) ->
     `low`'s difference equation exactly, whatever its state, as any second-order filter's do, so `low` continues
     from its last two inputs and outputs, vectorized: the loop costs what the sweep lasts, never what the kick does.
     """
-    curve = Curve([ms / 1000 for ms, _ in e.sweep], [r for _, r in e.sweep], last=0.0)  # lands on the cutoff
+    curve = Curve.of(e.sweep, last=0.0)  # lands on the cutoff
     head = min(y.size, sample_count(float(curve.t[-1]), rate) + 2)  # every later sample's cutoff is cutoff_hz
     g = np.tan(math.pi * e.cutoff_hz * curve(np.arange(head) / rate) / rate)
     a1 = 1 / (1 + g * (g + 1 / e.resonance))

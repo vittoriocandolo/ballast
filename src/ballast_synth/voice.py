@@ -27,7 +27,7 @@ from .patch import decode
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from .patch import Knots, Patch, Transient
+    from .patch import Patch, Transient
 
 # Samples per block. Blocks bound the size of the temporaries; threads would only contend for the GIL.
 BLOCK = 2**15
@@ -61,11 +61,6 @@ def sample_count(t_src: float, rate: int) -> int:
     while n / rate > t_src:
         n -= 1
     return n + 1
-
-
-def _curve(knots: Knots, **ends: float) -> Curve:
-    """Make the curve through a patch's (ms, value) knots, in seconds."""
-    return Curve([ms / 1000 for ms, _ in knots], [v for _, v in knots], **ends)
 
 
 def lagrange(u: NDArray[np.float64], q: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -121,14 +116,14 @@ class Voice:
         # Each mode: its ratio, its gain re the sine, and its decay rate, from the time it takes to fall 60 dB.
         self.modes = [(ratio, 10.0 ** (db / 20.0), math.log(1000.0) / (ms / 1000)) for ratio, db, ms in b.modes]
         self.body_gain: float = 10.0 ** (b.level_db / 20.0) / math.sqrt(1.0 + b.h2 * b.h2)  # g_b / √(1 + h2²)
-        self.pitch = _curve(b.pitch, last=0.0)  # lands smoothly on the tuning
+        self.pitch = Curve.of(b.pitch, last=0.0)  # lands smoothly on the tuning
         # Amplitude shapes have zero end slopes, so they join silence smoothly.
-        self.body_amp = _curve(b.amp, first=0.0, last=0.0)
-        self.attack_amp = _curve(a.amp, first=0.0, last=0.0)
+        self.body_amp = Curve.of(b.amp, first=0.0, last=0.0)
+        self.attack_amp = Curve.of(a.amp, first=0.0, last=0.0)
         self.attack_gain: float = 10.0 ** (a.level_db / 20.0)
         self.tone_hz = a.tone_hz
         # A flat pitch curve is the fixed tone, whose phase 2π f_t t needs no integral.
-        self.tone_pitch = _curve(a.pitch, last=0.0) if any(r != 1.0 for _, r in a.pitch) else None
+        self.tone_pitch = Curve.of(a.pitch, last=0.0) if any(r != 1.0 for _, r in a.pitch) else None
         self.tone_weight, self.noise_weight = mix_weights(a.noise_mix)
         uses_noise = self.attack_gain != 0.0 and self.noise_weight != 0.0
         self.noise = noise.table(p.seed, *a.noise_band_hz, rate) if uses_noise else None
@@ -136,7 +131,7 @@ class Voice:
         # No curve at all at 0 dB. Asymmetry adds the even term k S²(1 - S²), with k up to the monotonic limit 1/2.
         self.curve = shaper.Tanh(self.alpha, p.drive.asymmetry / 2) if self.alpha != 0.0 else None
         self.mix = p.drive.mix
-        self.sub_amp = None if p.sub is None else _curve(p.sub.amp, first=0.0, last=0.0)
+        self.sub_amp = None if p.sub is None else Curve.of(p.sub.amp, first=0.0, last=0.0)
         self.sub_gain = 0.0 if p.sub is None else 10.0 ** (p.sub.level_db / 20.0)
         # The sub is the sine the body's tail meets: φ0 + 2π f0 (t − c), with c = t_n − ∫₀^{t_n} R from the onset.
         self.sub_lag = 0.0 if self.tail else float(self.pitch.t[-1] - self.pitch.total)

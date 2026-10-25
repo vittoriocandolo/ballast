@@ -311,7 +311,7 @@ def swept(tight: patch.Patch, hz: float, q: float, sweep: patch.Knots) -> patch.
 
 def state_variable(x: NDArray[np.float64], e: patch.EQ, rate: int) -> NDArray[np.float64]:
     """Low-pass x through the state-variable filter at every sample's cutoff, from the first sample to the last."""
-    curve = Curve([ms / 1000 for ms, _ in e.sweep], [r for _, r in e.sweep], last=0.0)
+    curve = Curve.of(e.sweep, last=0.0)
     g = np.tan(math.pi * e.cutoff_hz * curve(np.arange(x.size) / rate) / rate)
     out, s1, s2 = np.empty_like(x), 0.0, 0.0
     for n, (v, gn) in enumerate(zip(x.tolist(), g.tolist(), strict=True)):

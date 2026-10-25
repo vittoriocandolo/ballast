@@ -27,6 +27,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from numpy.typing import ArrayLike, NDArray
 
     type Floats = NDArray[np.float64]
@@ -80,6 +82,11 @@ class Curve:
         self._before = np.concatenate(([0.0], np.cumsum(full)))
         self._after = np.concatenate((np.cumsum(full[::-1])[::-1], [0.0]))
         self.total: float = self._before[-1]  # the integral over the knot span
+
+    @classmethod
+    def of(cls, knots: Sequence[tuple[float, float]], **ends: float) -> Curve:
+        """Make the curve through a patch's (ms, value) knots, in seconds; `ends` fixes end slopes, as above."""
+        return cls([ms / 1000 for ms, _ in knots], [v for _, v in knots], **ends)
 
     def _segment(self, x: Floats) -> tuple[NDArray[np.intp], Floats, Floats, Floats, Floats, Floats]:
         """Return the segment of each x: its index, width, end values and end slopes."""
