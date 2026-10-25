@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "ballast-synth"  # the command is still ballast
 version = "0.1.0"
 description = "A kick drum synthesizer that renders a text patch to a tuned, sampler-ready WAV"
-readme = "README.md"
+dynamic = ["readme"]  # README.md, its links made absolute for PyPI by hatch_build.py
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.12"
@@ -26,6 +26,13 @@ classifiers = [
 ]
 dependencies = ["numpy>=2.5", "scipy>=1.18"]
 
+# Replace OWNER with the repository's account before releasing: the release workflow refuses the placeholder.
+[project.urls]
+Repository = "https://github.com/OWNER/ballast"
+Documentation = "https://github.com/OWNER/ballast/tree/master/docs"
+Changelog = "https://github.com/OWNER/ballast/blob/master/CHANGELOG.md"
+Issues = "https://github.com/OWNER/ballast/issues"
+
 [project.optional-dependencies]
 audition = ["sounddevice>=0.5"]
 
@@ -34,6 +41,8 @@ ballast = "ballast_synth.cli:main"
 
 [dependency-groups]
 dev = ["mypy>=2.4", "pytest>=9.1", "ruff>=0.17", "typos>=1.51", "zizmor>=1.31"]
+
+[tool.hatch.metadata.hooks.custom]  # hatch_build.py
 
 [tool.uv]
 required-version = ">=0.13"

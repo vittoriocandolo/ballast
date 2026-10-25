@@ -4,13 +4,23 @@
 """The documentation's links lead somewhere, every figure and sound in docs/ is shown, and its example is real."""
 
 import re
+import tomllib
 from pathlib import Path
+from typing import Any
 
 import pytest
+
+from tools import readme
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGES = sorted([*ROOT.glob("*.md"), *(ROOT / "docs").glob("*.md")])
 LINK = re.compile(r"\]\(([^)\s]+)\)")  # the target of a Markdown link or image
+
+
+@pytest.fixture
+def read_pyproject() -> dict[str, Any]:
+    """Return the project's pyproject.toml, parsed."""
+    return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
 
 def prose(page: Path) -> str:
@@ -52,3 +62,16 @@ def test_the_patch_reference_shows_the_tight_preset_as_it_ships(tight_text: str)
     page = (ROOT / "docs" / "patch.md").read_text(encoding="utf-8")
     start = page.index("```toml\n") + len("```toml\n")
     assert page[start : page.index("```", start)] == tight_text
+
+
+def test_the_readme_on_pypi_links_into_the_repository_at_the_release(read_pyproject: dict[str, Any]) -> None:
+    """Make the README's links absolute as the build does: pages in the repository, media raw, all at the tag."""
+    repository = read_pyproject["project"]["urls"]["Repository"]
+    text = readme.absolute((ROOT / "README.md").read_text(encoding="utf-8"), repository, "v1.2.3")
+    found = LINK.findall(text)
+    assert found
+    assert all(t.startswith(("https://", "#")) for t in found)
+    raw = repository.replace("https://github.com/", "https://raw.githubusercontent.com/")
+    assert f"]({raw}/v1.2.3/docs/figures/presets.svg)" in text
+    assert f"]({repository}/blob/v1.2.3/docs/usage.md)" in text
+    assert all(url.startswith(repository) for url in read_pyproject["project"]["urls"].values())
