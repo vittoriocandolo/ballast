@@ -18,9 +18,9 @@ ballast init round --tune F1 -o kick.toml
 | [`driven`](#driven) | 50 Hz, G1 +35.0 cents | 400 ms | 6× to the note in 55 ms | 21 dB | −6.8 LUFS | [driven.wav](audio/driven.wav) |
 | [`trance`](#trance) | 48.999 Hz, G1 | 480 ms | 6× to the note in 60 ms | 12 dB | −9.6 LUFS | [trance.wav](audio/trance.wav) |
 | [`round`](#round) | 48.999 Hz, G1 | 600 ms | 4.5× to the note in 90 ms | 3 dB | −11.3 LUFS | [round.wav](audio/round.wav) |
-| [`kit`](#kit) | 55 Hz, A1 | 1356 ms | 1.12× to the note in 40 ms | 3 dB | −15.2 LUFS | [kit.wav](audio/kit.wav) |
+| [`kit`](#kit) | 55 Hz, A1 | 1356 ms | 1.12× to the note in 40 ms | 3 dB | −18.9 LUFS | [kit.wav](audio/kit.wav) |
 | [`long`](#long) | 41.203 Hz, E1 | 1450 ms | 3.5× to the note in 70 ms | 2 dB | −12.0 LUFS | [long.wav](audio/long.wav) |
-| [`deep`](#deep) | 48.999 Hz, G1 | 1920 ms | 2.5× to the note in 60 ms | 8 dB | −11.2 LUFS | [deep.wav](audio/deep.wav) |
+| [`deep`](#deep) | 48.999 Hz, G1 | 1920 ms | 2.5× to the note in 60 ms | 8 dB | −8.8 LUFS | [deep.wav](audio/deep.wav) |
 
 ![Waveforms of the presets, tech-house, tight, fat, sampled, house, driven, trance, round, kit, long, deep, rendered at 48 kHz](figures/presets.svg)
 

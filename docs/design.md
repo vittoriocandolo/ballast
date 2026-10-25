@@ -268,11 +268,18 @@ its two nearest bands, linearly in octaves; the weights sum to exactly 1, so
 the tail starts as plain white noise. Measured in third octaves, each falls
 60 dB within 10% of its designed time.
 
-Ballast builds the tail at the family's base rate and brings it up to the
-internal rate with the frozen filter, as it does a transient, so every rate
-of a family shares it, and scales it to unit energy, so that `level_db = 0`
-gives the tail the kick's energy. It lasts 1.5 × `decay_ms`, to −90 dB, and
-fades out smoothly over its last tenth. The room joins after the drive,
+The tail lives at the family's base rate, since it holds nothing above
+20 kHz, and lasts 1.5 × `decay_ms`, to −90 dB, fading out smoothly over its
+last tenth. The room hears the kick as it sounds: the frozen filter brings
+the kick down to the base rate, where it meets the tail, and brings the
+result back up, in parallel chunks that match a single pass bit for bit, so
+every rate of a family shares it and a long room costs a convolution at the
+base rate rather than at 32 times that. What the kick makes of the tail is
+then scaled so that its energy is exactly `level_db` against the kick's own:
+at 0 dB the room holds as much energy as the kick. So the level says how
+much room and the decay only how long, and the same level suits a kick of any
+spectrum, where a tail of fixed gain would ring louder under a kick whose
+energy sits low, where it decays slowest. The room joins after the drive,
 because saturating a tail of noise only fills it with grit, and before the
 EQ and the clipper, so they shape the whole sound and its exact true peak.
 

@@ -8,7 +8,7 @@ import math
 import numpy as np
 import pytest
 
-from ballast_synth import family, grit, patch, render
+from ballast_synth import family, grit, patch
 
 BASE = 48000
 _, INTERNAL, FACTOR = family.rates(BASE)
@@ -34,7 +34,7 @@ def test_the_staircase_is_averaged_exactly() -> None:
 
 def tones(y: np.ndarray, g: patch.Grit) -> tuple[np.ndarray, np.ndarray]:
     """Pass y through the sampler and the decimator, and return a steady quarter second's levels, 4 Hz apart."""
-    out = render.decimate(family.decimator(BASE), grit.apply(y, g, BASE, INTERNAL), FACTOR)
+    out = family.decimate(family.decimator(BASE), grit.apply(y, g, BASE, INTERNAL), FACTOR)
     steady = out[BASE // 10 : BASE // 10 + BASE // 4]
     return 4.0 * np.arange(steady.size // 2 + 1), np.abs(np.fft.rfft(steady)) / (steady.size / 2)
 

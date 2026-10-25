@@ -147,8 +147,11 @@ class Voice:
             self.count = max(self.count, first + v.size)
 
     def samples(self) -> NDArray[np.float64]:
-        """Compute y[n] for 0 ≤ n < N, in blocks aligned to the trigger."""
-        return np.concatenate([self._block(n, min(n + BLOCK, self.count)) for n in range(0, self.count, BLOCK)])
+        """Compute y[n] for 0 ≤ n < N, in blocks aligned to the trigger, each written into place."""
+        y = np.empty(self.count)
+        for n in range(0, self.count, BLOCK):
+            y[n : min(n + BLOCK, self.count)] = self._block(n, min(n + BLOCK, self.count))
+        return y
 
     def _block(self, n0: int, n1: int) -> NDArray[np.float64]:
         """Compute y[n] for n0 ≤ n < n1, from the sources two samples either side, which the drive averages over."""

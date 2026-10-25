@@ -26,7 +26,6 @@ import math
 from typing import TYPE_CHECKING
 
 import numpy as np
-from scipy.signal import upfirdn
 
 from . import family
 from .voice import lagrange
@@ -41,9 +40,7 @@ def heard(y: NDArray[np.float64], base: int) -> NDArray[np.float64]:
     """Band-limit the internal signal to 20 kHz, as the sampler hears it: to the base rate and back up."""
     taps = family.decimator(base)
     _, _, factor = family.rates(base)
-    down: NDArray[np.float64] = upfirdn(taps, y, down=factor)
-    up: NDArray[np.float64] = upfirdn(factor * taps, down, up=factor)
-    return up
+    return family.interpolate(taps, family.decimate(taps, y, factor), factor)
 
 
 def convert(x: NDArray[np.float64], bits: int, gain: float) -> NDArray[np.float64]:

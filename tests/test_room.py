@@ -10,8 +10,10 @@ import pytest
 from scipy.signal import butter, sosfilt
 
 from ballast_synth import family, patch, render, room, voice
+from ballast_synth.voice import Voice
 
-_, INTERNAL, FACTOR = family.rates(48000)
+BASE = 48000
+_, INTERNAL, FACTOR = family.rates(BASE)
 ROOM = patch.Room(-10.0, 600.0, 4000.0, 8.0)
 DECAY_ERROR = 0.1  # how close each third octave's decay comes to the designed one
 T30 = (-5.0, -35.0)  # the slope a decay time is read from, as ISO 3382 reads T30, then doubled to 60 dB
@@ -30,11 +32,11 @@ def test_the_tail_has_unit_energy_and_is_the_same_every_time() -> None:
 def test_each_frequency_falls_60_db_in_its_designed_time(hz: float) -> None:
     """Measure the tail's decay in a third octave by Schroeder's backward integral, against T(f)."""
     h = room.impulse(1, ROOM.decay_ms, ROOM.damping_hz, 48000)
-    band = sosfilt(butter(4, [hz * 2 ** -(1 / 6), hz * 2 ** (1 / 6)], btype="band", fs=INTERNAL, output="sos"), h)
+    band = sosfilt(butter(4, [hz * 2 ** -(1 / 6), hz * 2 ** (1 / 6)], btype="band", fs=BASE, output="sos"), h)
     energy = np.cumsum((band * band)[::-1])[::-1]
     level = 10 * np.log10(energy / energy[0])
     start, end = (int(np.argmax(level < db)) for db in T30)
-    t60 = 2 * (end - start) / INTERNAL * 1000
+    t60 = 2 * (end - start) / BASE * 1000  # the tail lives at the base rate
     assert t60 == pytest.approx(ROOM.decay_ms / (1 + hz / ROOM.damping_hz), rel=DECAY_ERROR)
 
 
@@ -50,3 +52,13 @@ def test_the_room_rings_after_its_delay_and_lengthens_the_kick(tight: patch.Patc
     silent = patch.edit(roomed, "room.level_db", -math.inf)
     reach = (voice.sample_count(tight.length_ms / 1000, INTERNAL) - 1) // FACTOR + 1  # outputs from the kick alone
     assert np.array_equal(render.synthesize(silent)[:reach], plain[:reach])
+
+
+@pytest.mark.parametrize(("level", "decay"), [(0.0, 600.0), (-12.0, 600.0), (-12.0, 2000.0), (6.0, 300.0)])
+def test_the_room_holds_exactly_its_level_of_the_kicks_energy(tight: patch.Patch, level: float, decay: float) -> None:
+    """Add a room at a level, and find its tail's energy exactly that far from the kick's, however long it rings."""
+    p = patch.edit(tight, "room", patch.Room(level, decay, 4000.0, 8.0))
+    y = Voice(p, INTERNAL).samples()
+    assert p.room is not None
+    wet = room.add(y, p.room, p.seed, BASE, INTERNAL) - y
+    assert 10 * math.log10(math.fsum(wet * wet) / math.fsum(y * y)) == pytest.approx(level, abs=1e-6)

@@ -144,14 +144,14 @@ of Gaussian noise, drawn from the patch's seed, that the kick is heard in.
 Each frequency falls 60 dB in decay_ms / (1 + f / damping_hz), so the tail
 darkens as it fades. It joins after the drive and the sub, clean, and before
 the EQ, the low cut and the clipper. The kick runs on for the whole tail:
-`predelay_ms`, then 1.5 × `decay_ms`, to −90 dB. A room costs time and memory
-with its length: the `deep` preset's 800 ms room renders in about a second,
-in under half a gigabyte, while the longest room behind the longest body, a
-kick of over 14 s, takes several seconds and nearly 2 GB.
+`predelay_ms`, then 1.5 × `decay_ms`, to −90 dB. The room works at the base
+rate, so it costs little: the `deep` preset's 800 ms room adds about 0.2 s,
+and the longest room behind the longest body, a kick of over 14 s, renders in
+about 2.5 s, in a little over a gigabyte.
 
 | Field | Type | Range | Meaning |
 |---|---|---|---|
-| `level_db` | number | −60 – +12 dB, or `-inf` | The tail's level against the kick: at 0 dB its energy equals the kick's. `-inf` silences it. |
+| `level_db` | number | −60 – +12 dB, or `-inf` | The tail's energy against the kick's, exactly: at 0 dB they are equal, whatever the decay or the kick's spectrum. `-inf` silences it. |
 | `decay_ms` | number | 50 – 4000 ms | How long the low frequencies take to fall 60 dB. |
 | `damping_hz` | number | 200 Hz – 20 kHz | Where the tail fades twice as fast as at its lowest frequencies. |
 | `predelay_ms` | number | 0 – 200 ms | How long after the kick the tail begins: the distance to the walls. |

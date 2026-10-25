@@ -1096,7 +1096,7 @@ def worst_alias(tone: int, db: float, *, anti_aliased: bool) -> float:
     x = np.sin(2 * np.pi * tone * t)
     curve = shaper.Tanh(drive_alpha(db))
     y = shaper.apply(curve, x) if anti_aliased else curve(x[2:-2])
-    out = render.decimate(family.decimator(RATE), y, factor)[RATE // 50 : RATE // 50 + RATE // 4]
+    out = family.decimate(family.decimator(RATE), y, factor)[RATE // 50 : RATE // 50 + RATE // 4]
     spectrum = np.abs(np.fft.rfft(out))
     f = 4 * np.arange(spectrum.size)
     band = (f >= PASSBAND_HZ / KILO) & (f <= PASSBAND_HZ) & (f % tone != 0)
@@ -1250,11 +1250,11 @@ def figure_room(k: Kick) -> str:
     decay = Panel(LEFT, Axis(0, seconds), Axis(-70, 3))
     body = [decay.frame(Ticks(steps(seconds, 300), num, "ms"), Ticks((-60, -40, -20, 0), num, "Energy left, dB"))]
     for cls, center in THIRDS:
-        band = sosfilt(butter(4, [center * 2 ** (-1 / 6), center * 2 ** (1 / 6)], "band", fs=INTERNAL, output="sos"), h)
+        band = sosfilt(butter(4, [center * 2 ** (-1 / 6), center * 2 ** (1 / 6)], "band", fs=RATE, output="sos"), h)
         energy = np.cumsum((band * band)[::-1])[::-1]
         level = 10 * np.log10(energy / energy[0] + 1e-30)
-        t = np.arange(h.size) / INTERNAL * KILO
-        pick = slice(None, None, 64)
+        t = np.arange(h.size) / RATE * KILO  # the tail lives at the base rate
+        pick = slice(None, None, 2)
         body.append(decay.clip("room", decay.line(cls, t[pick], level[pick])))
         designed = ROOM.decay_ms / (1 + center / ROOM.damping_hz)
         body.append(decay.clip("room", decay.dots(f"d{cls}", [designed], [-60.0], 4.0)))
@@ -1288,7 +1288,7 @@ def figure_grit(k: Kick) -> str:
     _, rate, factor = family.rates(RATE)
     t = np.arange(round(0.6 * rate)) / rate
     sampler = patch.Grit(GRIT.rate_hz, 16, 0.0)
-    out = render.decimate(
+    out = family.decimate(
         family.decimator(RATE),
         grit.apply(np.sin(2 * math.pi * 15000 * t), sampler, RATE, rate),
         factor,

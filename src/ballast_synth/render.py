@@ -24,48 +24,29 @@ earlier samples.
 from __future__ import annotations
 
 import math
-import os
 import platform
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, NamedTuple, override
 
 import numpy as np
 import scipy
 from scipy.optimize import brentq
-from scipy.signal import fftconvolve, sosfilt, upfirdn
+from scipy.signal import fftconvolve, sosfilt
 
 from . import __version__, grit, noise, room, shaper, wav
-from .family import DECIMATORS, decimator, rates
+from .family import DECIMATORS, decimate, decimator, rates
 from .patch import EQ, Output, Patch, describe_tuning
 from .voice import Voice
 
 if TYPE_CHECKING:
+    import os
+    from collections.abc import Iterator
+
     from numpy.typing import NDArray
 
-CHUNK = 2048  # decimator outputs per parallel chunk
+PEAK_BLOCK = 1 << 20  # internal samples of the reconstruction measured at once
 FORMATS = {"float32": None, "pcm24": 24, "pcm16": 16}  # the PCM bit depth of each export format
-POOL = ThreadPoolExecutor(os.cpu_count())  # upfirdn releases the GIL
-
-
-def decimate(taps: NDArray[np.float64], y: NDArray[np.float64], factor: int) -> NDArray[np.float64]:
-    """Compute upfirdn(taps, y, down=factor) in parallel chunks that match it bit for bit.
-
-    Each output of upfirdn is one sequential sum over its own inputs. A chunk is
-    given every input its outputs need, starting on the factor's grid, so each
-    output is computed by exactly the same operations as in a single call.
-    """
-    n_out = (y.size + taps.size - 2) // factor + 1
-
-    def chunk(m0: int) -> NDArray[np.float64]:
-        m1 = min(m0 + CHUNK, n_out)
-        start = max(0, m0 * factor - (taps.size - 1)) // factor * factor
-        # Since the filter is longer than the factor, the last chunk's slice reaches the end of y.
-        out: NDArray[np.float64] = upfirdn(taps, y[start : (m1 - 1) * factor + 1], down=factor)
-        return out[m0 - start // factor : m1 - start // factor]
-
-    return np.concatenate(list(POOL.map(chunk, range(0, n_out, CHUNK))))
 
 
 def low_cut(hz: float, rate: int) -> NDArray[np.float64]:
@@ -177,8 +158,32 @@ def true_peak(z: NDArray[np.float64], base: int) -> float:
     The decimator's output at every internal sample, before it keeps one in K, is the file's own band-limited
     reconstruction, at 32 times the base rate and true to 116 dB, so its peak is the peak between the file's
     samples, as an ideal converter would play them, found to within 0.000001 dB. Every rate of a family shares it.
+    It is measured a block at a time, so a long kick costs no more memory than a short one.
     """
-    return float(np.max(crests(fftconvolve(z, decimator(base))), initial=0.0)) if z.size else 0.0
+    return max((float(np.max(crests(w)[inner])) for _, w, inner in _blocks(z, base)), default=0.0)
+
+
+def reconstruction(z: NDArray[np.float64], base: int) -> NDArray[np.float64]:
+    """Return the decimator's output at every internal sample, the file's reconstruction, built a block at a time."""
+    out = np.empty(z.size + decimator(base).size - 1 if z.size else 0)
+    for b0, w, inner in _blocks(z, base):
+        out[b0 : b0 + inner.stop - inner.start] = w[inner]
+    return out
+
+
+def _blocks(z: NDArray[np.float64], base: int) -> Iterator[tuple[int, NDArray[np.float64], slice]]:
+    """Yield the reconstruction a block at a time: where the block starts, its values, and which of them are its own.
+
+    Each block carries a sample either side of its own, for the parabolas through its crests.
+    """
+    taps = decimator(base)
+    n = z.size + taps.size - 1 if z.size else 0
+    for b0 in range(0, n, PEAK_BLOCK):
+        b1 = min(n, b0 + PEAK_BLOCK)
+        lo, hi = max(0, b0 - 1), min(n, b1 + 1)
+        s0 = max(0, lo - taps.size + 1)  # the first input that reaches output lo
+        w: NDArray[np.float64] = fftconvolve(z[s0 : min(hi, z.size)], taps)[lo - s0 : hi - s0]
+        yield b0, w, slice(b0 - lo, b1 - lo)
 
 
 def clipped(y: NDArray[np.float64], threshold: float, knee_db: float) -> NDArray[np.float64]:
@@ -210,7 +215,7 @@ def clip_threshold(y: NDArray[np.float64], db: float, knee_db: float, base: int)
     if peak == 0.0:
         return None
     taps, curve, padded = decimator(base), shaper.Clip(knee_db), np.pad(y, 2)  # silent beyond either end
-    plain = fftconvolve(y, taps)  # the unclipped file's reconstruction, at every internal sample
+    plain = reconstruction(y, base)  # the unclipped file's reconstruction, at every internal sample
     goal = math.log(float(np.max(crests(plain)))) - db * math.log(10) / 20
     linear = line(np.pad(plain, 2))  # what the curves' averaging alone makes of it, since filters commute
     tops = crests(linear)

@@ -14,11 +14,15 @@ octave bands, each with T at its center, and weights every component across
 its two nearest bands, linearly in octaves: the weights sum to exactly 1, so
 h starts as plain white noise.
 
-The tail is built at the family's base rate and brought up to the internal
-rate by the family's frozen filter, as a transient is, so every rate of a
-family shares it, and normalized to unit energy, so that 0 dB puts its energy
-level with the kick's. It lasts ROOM_TAIL × decay, to -90 dB, and fades out
-over its last tenth.
+The tail lives at the family's base rate and lasts ROOM_TAIL × decay, to
+-90 dB, fading out over its last tenth. What the kick makes of it is scaled so
+that its energy is exactly level_db against the kick's own: at 0 dB, the room
+holds as much energy as the kick. So the level says how much room, the decay
+only how long, and the same level suits a kick of any spectrum. The room hears the kick as it sounds:
+the family's frozen filter brings it down to the base rate, where it meets
+the tail, and brings the result back up, in parallel chunks that match one
+pass bit for bit. Every rate of a family shares it, and a long room costs a
+base rate's convolution, not one at 32 times that.
 """
 
 from __future__ import annotations
@@ -28,7 +32,7 @@ import math
 from typing import TYPE_CHECKING
 
 import numpy as np
-from scipy.signal import fftconvolve, upfirdn
+from scipy.signal import fftconvolve
 
 from . import family, noise
 from .patch import ROOM_TAIL
@@ -46,7 +50,7 @@ FADE = 0.1  # the share of the tail over which it fades out
 
 @functools.lru_cache(maxsize=4)
 def impulse(seed: int, decay_ms: float, damping_hz: float, base: int) -> NDArray[np.float64]:
-    """Compute the tail at its family's internal rate, with unit energy (read-only)."""
+    """Compute the tail at its family's base rate, with unit energy (read-only)."""
     length_s = ROOM_TAIL * decay_ms / 1000
     seconds = math.ceil(length_s)
     count = round(TOP_HZ * seconds)
@@ -64,18 +68,21 @@ def impulse(seed: int, decay_ms: float, damping_hz: float, base: int) -> NDArray
         h += band * np.exp(-t * math.log(1000.0) / (decay_ms / 1000 / (1 + center / damping_hz)))
     fade = round(FADE * n)
     h[n - fade :] *= np.cos(np.linspace(0.0, math.pi / 2, fade)) ** 2  # to exactly 0 at its last sample
-    _, _, factor = family.rates(base)
-    up: NDArray[np.float64] = upfirdn(factor * family.decimator(base), h, up=factor)
-    up /= math.sqrt(math.fsum(up * up))
-    up.flags.writeable = False
-    return up
+    h /= math.sqrt(math.fsum(h * h))
+    h.flags.writeable = False
+    return h
 
 
 def add(y: NDArray[np.float64], r: Room, seed: int, base: int, rate: int) -> NDArray[np.float64]:
     """Add the room to the internal signal y, which runs on long enough to hold its tail."""
-    h = impulse(seed, r.decay_ms, r.damping_hz, base)
+    taps, factor = family.decimator(base), rate // base
+    heard = family.decimate(taps, y, factor)  # the kick at the base rate, as it sounds
+    wet = family.interpolate(taps, fftconvolve(heard, impulse(seed, r.decay_ms, r.damping_hz, base)), factor)
     delay = round(r.predelay_ms * rate / 1000)
-    wet = fftconvolve(y, h)[: max(0, y.size - delay)]
+    reach = min(wet.size, y.size - delay)
+    kick, tail = math.fsum(y * y), math.fsum(wet[:reach] * wet[:reach])
+    if tail == 0.0:  # a silent kick leaves a silent room
+        return y.copy()
     out = y.copy()
-    out[delay : delay + wet.size] += 10.0 ** (r.level_db / 20.0) * wet
+    out[delay : delay + reach] += math.sqrt(kick / tail * 10.0 ** (r.level_db / 10.0)) * wet[:reach]
     return out

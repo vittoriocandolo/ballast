@@ -58,16 +58,31 @@ def test_parallel_decimation_matches_one_upfirdn_call_bit_for_bit(
     """Decimate in chunks of three sizes, and compare every output with one call to upfirdn."""
     y = np.random.default_rng(size).standard_normal(size)
     taps = family.decimator(48000)
-    monkeypatch.setattr(render, "CHUNK", chunk)
+    monkeypatch.setattr(family, "CHUNK", chunk)
     for factor in (8, 16, 32):  # the factors of the three rates of a family
-        assert np.array_equal(render.decimate(taps, y, factor), upfirdn(taps, y, down=factor))
+        assert np.array_equal(family.decimate(taps, y, factor), upfirdn(taps, y, down=factor))
+
+
+@pytest.mark.parametrize("size", [1, 10, 200, 3000])
+@pytest.mark.parametrize("chunk", [1, 7, 2048])
+def test_parallel_interpolation_matches_one_upfirdn_call_bit_for_bit(
+    size: int,
+    chunk: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Interpolate in chunks of three sizes, and compare every output with one call to upfirdn."""
+    x = np.random.default_rng(size).standard_normal(size)
+    taps = family.decimator(44100)
+    monkeypatch.setattr(family, "CHUNK", chunk)
+    for factor in (8, 16, 32):
+        assert np.array_equal(family.interpolate(taps, x, factor), upfirdn(factor * taps, x, up=factor))
 
 
 def test_decimation_is_causal() -> None:
     """Decimate the start of a signal alone, and get the outputs that depend only on it unchanged."""
     y = np.random.default_rng(0).standard_normal(50_000)
     taps = family.decimator(44100)
-    whole, part = render.decimate(taps, y, 32), render.decimate(taps, y[:20_000], 32)
+    whole, part = family.decimate(taps, y, 32), family.decimate(taps, y[:20_000], 32)
     n = 20_000 // 32  # outputs whose inputs all lie in the first 20 000 samples
     assert np.array_equal(part[:n], whole[:n])
 

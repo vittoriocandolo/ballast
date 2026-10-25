@@ -128,7 +128,7 @@ wrote kick.wav
 | Low cut | optional 12 dB/octave Butterworth high-pass, 10 Hz – 1 kHz |
 | Tuning | 20 Hz – 1 kHz, by frequency or note name; the sweep spans 10 Hz – 20 kHz |
 | Length | body up to 8 s, attack and transient up to 1 s, and a room's tail up to 6.2 s after them |
-| Render time | about 60 ms for a 240 ms kick and a third of a second for a 1.45 s one, on a 12-core laptop; the clipper, a room or grit each add from a tenth of a second to about a second |
+| Render time | about 60 ms for a 240 ms kick and a third of a second for a 1.45 s one, on a 12-core laptop; the clipper, a room or grit each add a few tenths of a second |
 
 ## Documentation
 

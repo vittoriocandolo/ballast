@@ -83,7 +83,7 @@ def test_the_worst_setting_aliases_at_least_104_db_down(base: int) -> None:
     _, rate, factor = family.rates(base)
     hz = 19996
     driven = shaper.apply(shaper.Tanh(drive_alpha(48.0)), tone(hz, rate, 0.27))
-    out = render.decimate(family.decimator(base), driven, factor)
+    out = family.decimate(family.decimator(base), driven, factor)
     spectrum = np.abs(np.fft.rfft(out[base // 50 : base // 50 + base // 4]))  # a steady quarter second
     f = 4 * np.arange(spectrum.size)
     band = (f >= BAND_HZ[0]) & (f <= BAND_HZ[1]) & (f % hz != 0)
@@ -125,7 +125,7 @@ def test_the_clipper_matches_quadrature_and_takes_exactly_its_db_off(knee_db: fl
 
 def worst_alias(hz: int, factor: int, base: int, signal: NDArray[np.float64]) -> float:
     """Return the strongest component of the band that is no harmonic of hz, in dB re hz, over a steady 1/4 s."""
-    out = render.decimate(family.decimator(base), signal, factor)
+    out = family.decimate(family.decimator(base), signal, factor)
     spectrum = np.abs(np.fft.rfft(out[base // 50 : base // 50 + base // 4]))
     f = 4 * np.arange(spectrum.size)
     band = (f >= BAND_HZ[0]) & (f <= BAND_HZ[1]) & (f % hz != 0)

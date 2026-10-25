@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Vittorio Candolo
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""The rate families: the base and internal rates of every sample rate, and each family's frozen filter.
+"""The rate families: the base and internal rates of every sample rate, each family's frozen filter, and its use.
 
 Every sample rate belongs to the family of 44.1 or 48 kHz. A family computes
 at the internal rate F = 32 × its base rate, and one frozen minimum-phase FIR
@@ -14,10 +14,13 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import os
+from concurrent.futures import ThreadPoolExecutor
 from importlib import resources
 from typing import TYPE_CHECKING
 
 import numpy as np
+from scipy.signal import upfirdn
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -30,6 +33,10 @@ DECIMATORS = {
     44100: ("decimator-44100x32.f64", "f74810b0e955e0aada486f9f064b82435ea11a64e155afd2905c29d99e662efd"),
     48000: ("decimator-48000x32.f64", "229115e8e64a113a77c5c008c7cd2272c87431cd9b682007de8b21b47d24b41d"),
 }
+
+
+CHUNK = 2048  # outputs per parallel chunk, at the lower rate when decimating
+POOL = ThreadPoolExecutor(os.cpu_count())  # upfirdn releases the GIL
 
 
 def rates(sample_rate: int) -> tuple[int, int, int]:
@@ -48,3 +55,42 @@ def decimator(base: int) -> NDArray[np.float64]:
         msg = f"{name} does not match its checksum"
         raise RuntimeError(msg)
     return np.frombuffer(raw, dtype="<f8")  # read-only, like the bytes it views
+
+
+def decimate(taps: NDArray[np.float64], y: NDArray[np.float64], factor: int) -> NDArray[np.float64]:
+    """Compute upfirdn(taps, y, down=factor) in parallel chunks that match it bit for bit.
+
+    Each output of upfirdn is one sequential sum over its own inputs. A chunk is
+    given every input its outputs need, starting on the factor's grid, so each
+    output is computed by exactly the same operations as in a single call.
+    """
+    n_out = (y.size + taps.size - 2) // factor + 1
+
+    def chunk(m0: int) -> NDArray[np.float64]:
+        m1 = min(m0 + CHUNK, n_out)
+        start = max(0, m0 * factor - (taps.size - 1)) // factor * factor
+        # Since the filter is longer than the factor, the last chunk's slice reaches the end of y.
+        out: NDArray[np.float64] = upfirdn(taps, y[start : (m1 - 1) * factor + 1], down=factor)
+        return out[m0 - start // factor : m1 - start // factor]
+
+    return np.concatenate(list(POOL.map(chunk, range(0, n_out, CHUNK))))
+
+
+def interpolate(taps: NDArray[np.float64], x: NDArray[np.float64], factor: int) -> NDArray[np.float64]:
+    """Compute upfirdn(factor * taps, x, up=factor) in parallel chunks that match it bit for bit.
+
+    Output n sums taps[n - j K] x[j] over the inputs j it reaches. A chunk is given every input its outputs reach,
+    from the first on the factor's grid, so each output is computed by exactly the same operations as in a single
+    call.
+    """
+    scaled = factor * taps
+    n_out = (x.size - 1) * factor + taps.size
+    step = CHUNK * factor
+
+    def chunk(n0: int) -> NDArray[np.float64]:
+        n1 = min(n0 + step, n_out)
+        j0 = max(0, -(-(n0 - taps.size + 1) // factor))  # the first input that reaches output n0
+        out: NDArray[np.float64] = upfirdn(scaled, x[j0 : (n1 - 1) // factor + 1], up=factor)
+        return out[n0 - j0 * factor : n1 - j0 * factor]
+
+    return np.concatenate(list(POOL.map(chunk, range(0, n_out, step))))
