@@ -40,7 +40,7 @@ audition = ["sounddevice>=0.5"]
 ballast = "ballast_synth.cli:main"
 
 [dependency-groups]
-dev = ["mypy>=2.4", "pytest>=9.1", "ruff>=0.17", "typos>=1.51", "zizmor>=1.31"]
+dev = ["coverage>=7.17", "mypy>=2.4", "pytest>=9.1", "ruff>=0.17", "typos>=1.51", "zizmor>=1.31"]
 
 [tool.hatch.metadata.hooks.custom]  # hatch_build.py
 
@@ -75,6 +75,15 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 strict = true
 filterwarnings = ["error"]
+
+[tool.coverage.run]
+source_pkgs = ["ballast_synth"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 100  # every line and every branch: each behavior has a test
+show_missing = true
+skip_covered = true
 
 [tool.ruff]
 line-length = 120

@@ -6,3 +6,4 @@ dist/
 *.wav
 !docs/audio/*.wav
 .venv/
+.coverage

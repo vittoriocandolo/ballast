@@ -13,7 +13,8 @@ uv sync --all-extras
 ## Check a change
 
 ```
-uv run pytest
+uv run coverage run -m pytest
+uv run coverage report
 uv run ruff check
 uv run ruff format --check
 uv run mypy
@@ -21,9 +22,11 @@ uv run typos
 uv run zizmor --persona auditor .
 ```
 
-Ruff runs every stable rule, mypy checks all the code strictly, as Python
-3.12 would run it, pytest turns any warning into an error, typos checks the
-spelling of code and documentation, and zizmor audits the GitHub workflows.
+Coverage runs the tests and requires every line and every branch of
+`ballast_synth` to run, ruff runs every stable rule, mypy checks all the code
+strictly, as Python 3.12 would run it, pytest turns any warning into an error,
+typos checks the spelling of code and documentation, and zizmor audits the
+GitHub workflows. `uv run pytest` alone runs the tests faster.
 
 `uv run ruff check --fix`, then `uv run ruff format`, fix most of what ruff
 finds; in that order, the formatter keeps the trailing commas the linter
@@ -54,7 +57,9 @@ versions.
 - **Every behavior has a test,** written as a property that holds on every
   platform, such as "rendering in blocks never changes a sample", rather than
   as a stored hash of a render, which rounding would break. The one stored
-  reference, samples of every preset, allows for rounding.
+  reference, samples of every preset, allows for rounding. Coverage checks
+  that the tests run every line and every branch; code no test can reach is
+  removed, not excluded.
 - **Errors say where and what.** They name the file or the field path, and the
   problem.
 - **NumPy and SciPy are the only dependencies,** and `sounddevice` only for
