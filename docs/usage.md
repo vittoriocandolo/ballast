@@ -229,7 +229,7 @@ float file with overs, for a DAW to bring down.
 ```
 tuning   43.654 Hz, F1 +0.0 cents
 length   240.0 ms source, 241.9 ms exported (11612 samples at 48000 Hz, 24-bit PCM)
-peak     -1.08 dBFS sample, -1.00 dBTP true
+peak     -1.09 dBFS sample, -1.00 dBTP true
 loudness -14.4 LUFS momentary, at its loudest
 render   66 ms
 ```
@@ -237,9 +237,10 @@ render   66 ms
 - **tuning**: `tune_hz`, and the nearest note with its offset in cents.
 - **length**: the patch's length, and the exported length, which adds the
   decimator's tail: 1.9 ms at 48 or 96 kHz, 3.7 ms at 44.1 or 88.2 kHz.
-- **peak**: the highest sample, and the true peak between samples, estimated
-  with 4× oversampling. A render over full scale or over the PCM ceiling says
-  by how much.
+- **peak**: the highest sample, and the true peak between samples, read on
+  the file's own reconstruction at 32 times the base rate, to within
+  0.000001 dB: a converter cannot play the file louder. A render over full
+  scale or over the PCM ceiling says by how much.
 - **loudness**: the highest momentary loudness, in LUFS: EBU R128's 400 ms
   window, slid one sample at a time over the kick played once, with the
   K-weighting of ITU-R BS.1770 derived for the file's sample rate. It

@@ -1510,24 +1510,25 @@ def figure_output_stage(p: patch.Patch) -> str:
         0.0,
     )
     audio, report = render.render(hot)
-    fine = render.oversample(audio)  # as the report estimates the true peak
-    at = int(np.argmax(np.abs(fine))) / 4
-    sign = math.copysign(1.0, fine[round(at * 4)])
+    _, _, factor = family.rates(RATE)
+    fine = report.gain * fftconvolve(render.internal(hot)[0], family.decimator(RATE))  # the reconstruction it measures
+    at = int(np.argmax(np.abs(fine))) / factor
+    sign = math.copysign(1.0, fine[round(at * factor)])
     lo, hi = math.floor(at) - 4, math.ceil(at) + 4
     zoom = Panel(LEFT, Axis(lo * KILO / RATE, hi * KILO / RATE), Axis(-1, 1))
     n = np.arange(lo, hi + 1)
-    m = np.arange(lo * 4, hi * 4 + 1)
+    m = np.arange(lo * factor, hi * factor + 1)
     body = [
         zoom.frame(Ticks(inner(zoom.xs), num, "ms"), Ticks((-1, -0.5, 0, 0.5, 1), num, "A 15 kHz click on tight")),
         zoom.hline(sign * report.true_peak, "s2") + zoom.hline(sign * report.peak, "s1"),
-        zoom.line("ref", m * KILO / (4 * RATE), fine[m]),
+        zoom.line("ref", m * KILO / (factor * RATE), fine[m]),
         zoom.dots("dot1", n * KILO / RATE, audio[n]),
     ]
     keys = [
         ("key2", f"true peak, {num(round(render.db(report.true_peak), 2))} dBTP"),
         ("key1", f"highest sample, {num(round(render.db(report.peak), 2))} dBFS"),
     ]
-    body.append(legend(below(zoom), [*keys, ("kref", "the waveform between samples, 4× oversampled")]))
+    body.append(legend(below(zoom), [*keys, ("kref", "the waveform between samples: the file's own reconstruction")]))
     d = noise.dither(p.seed, 200_000)
     counts, edges = np.histogram(d, bins=40, range=(-1, 1))
     density = counts / (d.size * (edges[1] - edges[0]))

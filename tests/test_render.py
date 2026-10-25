@@ -14,6 +14,8 @@ from scipy.signal import sosfreqz, upfirdn
 from ballast_synth import family, patch, render
 
 PASSBAND_HZ = 20000
+PEAK_DB = 0.00002  # how close the true peak comes to a sine's amplitude: the decimator's ripple
+CLIP_DB = 1e-7  # how close the clipper comes to taking exactly its db off the true peak
 EQ_MATCH_DB = 0.004  # how close the EQ comes to its analog prototypes, up to 20 kHz
 LOW_PASS_MATCH_DB = 0.012  # and the low-pass, whose -12 dB/oct slope shows the warping, 40 log10(tan x / x)
 RIPPLE_DB = 0.001  # the specified flatness of the passband
@@ -280,3 +282,25 @@ def test_the_low_pass_matches_its_analog_prototype(tight: patch.Patch, base: int
     _, h = sosfreqz(bands, worN=f, fs=rate)
     s = 1j * f / hz
     assert np.max(np.abs(20 * np.log10(np.abs(h * (s * s + s / q + 1))))) < LOW_PASS_MATCH_DB
+
+
+@pytest.mark.parametrize("base", [44100, 48000])
+def test_the_true_peak_is_read_between_the_samples_exactly(base: int) -> None:
+    """Measure a 19 kHz sine, whose peaks fall between the file's samples, and find its amplitude to 0.00002 dB."""
+    _, rate, _ = family.rates(base)
+    n = np.arange(round(0.05 * rate))
+    amplitude = 0.7
+    sine = (
+        amplitude * np.sin(2 * math.pi * 19000 * n / rate + 0.3) * np.sin(math.pi * n / n.size) ** 2
+    )  # faded in and out
+    assert 20 * math.log10(render.true_peak(sine, base) / amplitude) == pytest.approx(0.0, abs=PEAK_DB)
+
+
+@pytest.mark.parametrize(("db", "knee_db"), [(0.5, 0.0), (4.0, 0.0), (4.0, 6.0), (12.0, 3.0)])
+def test_the_clipper_takes_exactly_its_db_off_the_true_peak(tight: patch.Patch, db: float, knee_db: float) -> None:
+    """Clip the tight preset, and find its true peak, read on the reconstruction, lower by db within 1e-7 dB."""
+    plain, _ = render.internal(tight)
+    clipped, threshold = render.internal(patch.edit(patch.edit(tight, "clip.db", db), "clip.knee_db", knee_db))
+    assert threshold is not None
+    drop = 20 * math.log10(render.true_peak(plain, 48000) / render.true_peak(clipped, 48000))
+    assert drop == pytest.approx(db, abs=CLIP_DB)

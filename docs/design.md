@@ -355,8 +355,16 @@ without cancellation, and the clipper is anti-aliased like the drive.
 threshold follows the kick's own peak, as the output stage's peak modes do,
 so the same setting clips every kick, and every key of a multisample, by the
 same amount. The decimator's phase rebuilds part of a clipped peak, so the
-threshold is solved for: each trial clips and decimates only the outputs it
-can change, and the true peak lands within 0.000001 dB of the setting.
+threshold is solved for, on the file's own reconstruction (see
+[the output stage](#the-output-stage)). Where the curve does not bend, the
+clipper is the 5-tap linear filter its averaging makes of a straight line, so
+a trial clips only the runs of samples within two of a clipped one, convolves
+their difference from that filter with the decimator, and adds it to the
+reconstruction of the filtered kick, made once: it costs what clips, not what
+the kick lasts. The first trial clips the internal peak by `clip.db`; secant
+steps on the slope the trials measure bracket the threshold, and Brent's method
+finishes, in four to ten trials. The true peak lands within 0.0000001 dB of the
+setting.
 Everything below the knee keeps its level, so with a peak or true-peak target
 in `[output]`, the decibels taken off the peaks come back as loudness.
 
@@ -420,17 +428,28 @@ it.
 
 In `gain` mode the output is multiplied by 10^(db/20). In `peak` mode it is
 scaled so its highest sample reaches the target, capped at the format's
-ceiling. In `true-peak` mode it is scaled so its true peak, estimated with 4×
-oversampling, reaches the target, or its highest sample reaches the ceiling,
-whichever comes first; the estimate is linear, so one scale does it. Then the
+ceiling. In `true-peak` mode it is scaled so its true peak reaches the target,
+or its highest sample reaches the ceiling, whichever comes first. Then the
 polarity applies, and the result is converted once to float32.
+
+The true peak is the peak between the file's samples, as an ideal converter
+plays them back. Ballast does not estimate it from the file, as a meter does by
+oversampling it 4 times, which can read a peak near 20 kHz low by tenths of a
+decibel. It reads it on the file's own reconstruction: the decimator's output
+at every internal sample, before it keeps one in K, which is band-limited to
+116 dB, so its samples, 32 to each of the file's, are the waveform between the
+file's samples. A parabola through each crest and its two neighbors finds the
+peak between them to within 0.000001 dB. The reconstruction comes from one FFT
+convolution, used only to measure; the file itself comes from the exact
+decimation. Every rate of a family shares the true peak, and no filter is
+designed to find it, so it cannot drift with SciPy.
 
 PCM exports have a ceiling 2 LSB below full scale. They add TPDF dither of
 ±1 LSB, the difference of two 32-bit uniforms from SHAKE-256 keyed by
 `ballast/dither/v1` and the seed, and round. A render within the ceiling stays
 within range after dither, and exact zeros stay zero.
 
-![A 15 kHz click whose true peak lies between samples, above the highest sample, and the triangular density of the seeded dither](figures/output-stage.svg)
+![A 15 kHz click whose true peak lies between samples, above the highest sample, on the file's own reconstruction, and the triangular density of the seeded dither](figures/output-stage.svg)
 
 Nothing trims or fades, and only the low cut, when it is on, high-passes or
 removes DC.

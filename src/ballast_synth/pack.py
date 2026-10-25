@@ -146,7 +146,7 @@ def _kit(p: Patch, stem: str, bits: int | None, layers: int, robins: int) -> lis
         s = hardest if hit is p else render.synthesized(hit, hardest.threshold)
         hits.append((path, hit, s, velocity, robin))
     ceiling = render.ceiling_of(bits)
-    gain = min(render.output_gain(s.signal, p.output, ceiling) for _, _, s, _, _ in hits)
+    gain = min(render.output_gain(s, p.output, ceiling) for _, _, s, _, _ in hits)
     kicks = []
     for path, hit, s, velocity, robin in hits:
         audio, report = render.finish(hit, s, bits, gain, solved=False)

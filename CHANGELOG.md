@@ -48,6 +48,9 @@ The first public release.
 - Eleven presets at −1 dBTP: kicks for house, tech house and trance; four
   along the line from machine to band, from a sampled drum machine to an
   acoustic drum played in a room; and four shapes to start from.
+- An exact true peak, read on the file's own reconstruction at 32 times the
+  base rate, for true-peak targets, the report and the clipper, whose
+  threshold is solved in four to ten trials to within 0.0000001 dB.
 - The report's loudness: the highest momentary loudness of EBU R128, slid
   sample by sample, K-weighted at every sample rate.
 - Kits: `ballast vary` writes seeded variations of a patch, the same in every

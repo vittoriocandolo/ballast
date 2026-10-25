@@ -103,7 +103,7 @@ ballast pack vars -o kit --rate 44100 --rate 48000  # a finished kit, with a man
 ```
 tuning   43.654 Hz, F1 +0.0 cents
 length   240.0 ms source, 241.9 ms exported (11612 samples at 48000 Hz, 24-bit PCM)
-peak     -1.08 dBFS sample, -1.00 dBTP true
+peak     -1.09 dBFS sample, -1.00 dBTP true
 loudness -14.4 LUFS momentary, at its loudest
 render   66 ms
 wrote kick.wav
@@ -120,6 +120,7 @@ wrote kick.wav
 | Stopband | at least 116.4 dB down from half the base rate (specified 110 dB) |
 | Aliasing | at least 104 dB down for a full-scale tone at any frequency up to 20 kHz, at any drive and asymmetry, and through the clipper; more than 130 dB down with up to 24 dB of drive. `[grit]` aliases on purpose, as the sampler it models |
 | Levels | a gain, or a sample or true peak target; nothing is ever clipped |
+| True peak | read on the file's own reconstruction at 32 times the base rate, to within 0.000001 dB, where a 4× meter can read tenths of a decibel low; the clipper takes its `clip.db` off it within 0.0000001 dB |
 | Loudness | the highest momentary loudness, EBU R128's 400 ms window slid sample by sample, K-weighted at every rate |
 | PCM headroom | peaks stay 2 LSB below full scale, so dither never clips |
 | Low cut | optional 12 dB/octave Butterworth high-pass, 10 Hz – 1 kHz |

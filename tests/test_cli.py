@@ -420,7 +420,7 @@ def test_pack_writes_nothing_unless_every_kick_passes_its_gates(run: Run, tmp_pa
     assert (status, out) == (REFUSED, "")
     assert err.splitlines()[0] == "not written: these kicks fail the pack's gates"
     assert "  loud-A1.wav: over the format's ceiling by" in err
-    assert "  loud-A1.wav: true peak +12.34 dBTP, above 0 dBTP" in err
+    assert "  loud-A1.wav: true peak +12.35 dBTP, above 0 dBTP" in err
     assert not (tmp_path / "kit").exists()
 
 

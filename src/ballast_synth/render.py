@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple, override
 import numpy as np
 import scipy
 from scipy.optimize import brentq
-from scipy.signal import resample_poly, sosfilt, upfirdn
+from scipy.signal import fftconvolve, sosfilt, upfirdn
 
 from . import __version__, grit, noise, room, shaper, wav
 from .family import DECIMATORS, decimator, rates
@@ -122,10 +122,11 @@ def _shelf(hz: float, db: float, rate: int, *, high: bool) -> list[float]:
 
 
 class Synthesis(NamedTuple):
-    """A kick at unity gain, before the output stage: its signal, its clipper's threshold, and when it began."""
+    """A kick at unity gain, before the output stage: its signal, its clipper's threshold, its true peak, and when."""
 
     signal: NDArray[np.float64]
     threshold: float | None
+    true_peak: float  # the peak between its samples, at unity gain
     start: float  # time.perf_counter() as its render began
 
 
@@ -135,13 +136,23 @@ def synthesize(p: Patch) -> NDArray[np.float64]:
 
 
 def synthesized(p: Patch, threshold: float | None = None) -> Synthesis:
-    """Compute the decimated signal at unity gain, and the clipper's threshold, solved for or as given.
+    """Compute the decimated signal at unity gain, its true peak, and the clipper's threshold, solved for or given.
 
-    The low cut and the clipper work on the internal signal, so every rate of a family still shares it. A given
-    threshold plays this kick through a clipper set for another, as the hits of one kit share one clipper.
+    A given threshold plays this kick through a clipper set for another, as the hits of one kit share one clipper.
     """
     start = time.perf_counter()
-    base, rate, factor = rates(p.output.sample_rate)
+    base, _, factor = rates(p.output.sample_rate)
+    z, threshold = internal(p, threshold)
+    return Synthesis(decimate(decimator(base), z, factor), threshold, true_peak(z, base), start)
+
+
+def internal(p: Patch, threshold: float | None = None) -> tuple[NDArray[np.float64], float | None]:
+    """Compute the kick at the internal rate, everything but the decimator, and the clipper's threshold.
+
+    The room, the grit, the EQ, the low cut and the clipper work on the internal signal, so every rate of a family
+    shares it.
+    """
+    base, rate, _ = rates(p.output.sample_rate)
     y = Voice(p, rate).samples()
     if p.room is not None and p.room.level_db != -math.inf:
         y = room.add(y, p.room, p.seed, base, rate)
@@ -154,10 +165,20 @@ def synthesized(p: Patch, threshold: float | None = None) -> Synthesis:
         y = sosfilt(low_cut(p.output.low_cut_hz, rate), y)
     if p.clip.db != 0.0:
         if threshold is None:
-            threshold = clip_threshold(y, p.clip.db, p.clip.knee_db, base, factor)
+            threshold = clip_threshold(y, p.clip.db, p.clip.knee_db, base)
         if threshold is not None:
             y = clipped(y, threshold, p.clip.knee_db)
-    return Synthesis(decimate(decimator(base), y, factor), threshold, start)
+    return y, threshold
+
+
+def true_peak(z: NDArray[np.float64], base: int) -> float:
+    """Return the file's true peak at unity gain, from the internal signal z: the highest crest of its reconstruction.
+
+    The decimator's output at every internal sample, before it keeps one in K, is the file's own band-limited
+    reconstruction, at 32 times the base rate and true to 116 dB, so its peak is the peak between the file's
+    samples, as an ideal converter would play them, found to within 0.000001 dB. Every rate of a family shares it.
+    """
+    return float(np.max(crests(fftconvolve(z, decimator(base))), initial=0.0)) if z.size else 0.0
 
 
 def clipped(y: NDArray[np.float64], threshold: float, knee_db: float) -> NDArray[np.float64]:
@@ -166,60 +187,105 @@ def clipped(y: NDArray[np.float64], threshold: float, knee_db: float) -> NDArray
     return out
 
 
-def clip(y: NDArray[np.float64], db: float, knee_db: float, base: int, factor: int) -> NDArray[np.float64]:
+def clip(y: NDArray[np.float64], db: float, knee_db: float, base: int) -> NDArray[np.float64]:
     """Clip the internal signal so that the file's true peak comes down by exactly db, and nothing below the knee."""
-    threshold = clip_threshold(y, db, knee_db, base, factor)
+    threshold = clip_threshold(y, db, knee_db, base)
     return y if threshold is None else clipped(y, threshold, knee_db)
 
 
-def clip_threshold(y: NDArray[np.float64], db: float, knee_db: float, base: int, factor: int) -> float | None:
+def clip_threshold(y: NDArray[np.float64], db: float, knee_db: float, base: int) -> float | None:
     """Solve for the threshold that brings the file's true peak down by exactly db; None for silence.
 
     The threshold follows the kick's own true peak, as the output stage's peak modes do, so the same setting clips
     every kick and every key by the same amount. The decimator's phase rebuilds part of a clipped peak, so the
-    threshold is solved for rather than set: each trial clips and decimates only the outputs it can change, and the
-    unclipped kick stands for the rest.
+    threshold is solved for rather than set, to within 1e-8 dB, on the file's own reconstruction (see crests).
+
+    Clipping is the curves' linear filter everywhere, plus a difference Δ only within two samples of a clipped one.
+    So a trial computes Δ only on the runs around clipped samples, convolves each with the decimator, and adds it
+    to the reconstruction of the linear part, made once: it costs what clips, not what the kick lasts. The first
+    guess clips the internal peak by db; secant steps on the measured slope bracket the root, and Brent's method
+    finishes within that bracket.
     """
     peak = float(np.max(np.abs(y), initial=0.0))
     if peak == 0.0:
         return None
     taps, curve, padded = decimator(base), shaper.Clip(knee_db), np.pad(y, 2)  # silent beyond either end
-    plain = decimate(taps, y, factor)
-    between = np.abs(oversample(plain))  # the unclipped kick between its samples, 4 to each
-    before, after = np.maximum.accumulate(between), np.maximum.accumulate(between[::-1])[::-1]
-    reach, edge = taps.size // factor + 2, 32  # outputs one input reaches; outputs the oversampler's edge spoils
-    goal = math.log(true_peak(plain)) - db * math.log(10) / 20
+    plain = fftconvolve(y, taps)  # the unclipped file's reconstruction, at every internal sample
+    goal = math.log(float(np.max(crests(plain)))) - db * math.log(10) / 20
+    linear = line(np.pad(plain, 2))  # what the curves' averaging alone makes of it, since filters commute
+    tops = crests(linear)
+    reach = taps.size - 1  # how far after a changed sample its reconstruction changes
+    tried: dict[float, float] = {}
 
     def miss(log_t: float) -> float:
         """Return how far above the goal the true peak lands, in nepers, when the threshold is e^log_t."""
+        if log_t in tried:
+            return tried[log_t]
         t = math.exp(log_t)
-        hot = np.flatnonzero(np.abs(y) > curve.start * t)
-        if hot.size == 0:
-            return math.log(float(before[-1])) - goal
-        m0 = max(0, (hot[0] - 2) // factor - edge)
-        m1 = min(plain.size - 1, (hot[-1] + 2) // factor + reach + edge)
-        s0 = max(0, (m0 * factor - taps.size + 1) // factor * factor)
-        s1 = min(y.size, m1 * factor + 1)
-        part = decimate(taps, t * shaper.apply(curve, padded[s0 : s1 + 4] / t), factor)[m0 - s0 // factor :]
-        first = 0 if m0 == 0 else edge  # at either end of the kick, the oversampler's edge is the kick's own silence
-        last = m1 - m0 + 1 - (0 if m1 == plain.size - 1 else edge)
-        inside = np.abs(oversample(part[: m1 - m0 + 1]))[4 * first : 4 * last if last < m1 - m0 + 1 else None]
-        outside = max(
-            float(before[4 * (m0 + first) - 1]) if m0 + first > 0 else 0.0,
-            float(after[4 * (m0 + last)]) if 4 * (m0 + last) < after.size else 0.0,
-        )
-        return math.log(max(float(np.max(inside, initial=0.0)), outside)) - goal
+        near = np.convolve(np.abs(y) > curve.start * t, np.ones(5), "same") > 0  # stencils that meet a clipped sample
+        edges = np.flatnonzero(np.diff(np.concatenate(([False], near, [False])).astype(np.int8)))
+        groups: list[list[tuple[int, int]]] = []  # runs whose reconstructions overlap, gathered together
+        for a, b in zip(edges[::2], edges[1::2], strict=True):
+            if groups and a - 1 <= groups[-1][-1][1] + reach + 1:
+                groups[-1].append((a, b))
+            else:
+                groups.append([(a, b)])
+        level, last = 0.0, 0  # the highest crest found, and where the unchanged reconstruction resumes
+        for runs in groups:
+            lo, hi = max(0, runs[0][0] - 1), min(linear.size, runs[-1][1] + reach + 1)  # where a crest can change
+            s0, s1 = max(0, lo - 1), min(linear.size, hi + 1)  # and the neighbors those crests are drawn through
+            delta = np.zeros(runs[-1][1] - runs[0][0])
+            for a, b in runs:
+                window = padded[a : b + 4]  # with the two samples either side that the curve reads
+                delta[a - runs[0][0] : b - runs[0][0]] = t * shaper.apply(curve, window / t) - line(window)
+            w = linear[s0:s1].copy()
+            w[runs[0][0] - s0 : runs[-1][1] + reach - s0] += fftconvolve(delta, taps)
+            level = max(level, float(np.max(crests(w)[lo - s0 : hi - s0])), float(np.max(tops[last:lo], initial=0.0)))
+            last = hi
+        tried[log_t] = math.log(max(level, float(np.max(tops[last:], initial=0.0)))) - goal
+        return tried[log_t]
 
-    top = math.log(peak / curve.start) + 1e-9  # nothing clips here
-    low = math.log(peak / curve.ratio(db))
-    while miss(low) > 0:
-        low -= math.log(2)
-    return math.exp(brentq(miss, low, top, xtol=1e-7))  # to within 1e-6 dB
+    # Step by the secant until the root is bracketed: the peak rises with the threshold, by a measured slope, or by
+    # one neper for one at first, and never more than four times the last step at once.
+    u0 = math.log(peak / curve.ratio(db))
+    u1 = u0 - miss(u0)
+    while (miss(u0) > 0) == (miss(u1) > 0):
+        slope = (miss(u1) - miss(u0)) / (u1 - u0)
+        step = -miss(u1) / slope if slope > 0 else -miss(u1)
+        u0, u1 = u1, u1 + math.copysign(min(abs(step), 4 * abs(u1 - u0)), step)
+    return math.exp(brentq(miss, min(u0, u1), max(u0, u1), xtol=1e-8))  # within 1e-7 dB
 
 
-def output_gain(out: NDArray[np.float64], o: Output, ceiling: float) -> float:
+def line(window: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Apply what the anti-aliased curves make of a straight line to a window with two more samples either side.
+
+    That is their averaging, then their 3-tap correction: where the clipper does not bend, it is this 5-tap
+    filter, flat within 0.00002 dB up to 20 kHz.
+    """
+    mean = (window[:-2] + 4 * window[1:-1] + window[2:]) / 6
+    out: NDArray[np.float64] = mean[1:-1] + (2 * mean[1:-1] - mean[:-2] - mean[2:]) / 6
+    return out
+
+
+def crests(w: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Return |w|, each local peak raised to the top of the parabola through it and its two neighbors.
+
+    w is a reconstruction at 32 times the base rate, where a parabola finds a peak between its samples to within
+    0.000001 dB; the largest value is the true peak.
+    """
+    level = np.abs(w)
+    out = level.copy()
+    left, mid, right = level[:-2], level[1:-1], level[2:]
+    bend = left - 2 * mid + right
+    top = (mid >= left) & (mid >= right) & (bend < 0)
+    with np.errstate(divide="ignore", invalid="ignore"):  # only where it is a peak, where the bend is negative
+        out[1:-1] = np.where(top, mid - (left - right) ** 2 / (8 * bend), mid)
+    return out
+
+
+def output_gain(s: Synthesis, o: Output, ceiling: float) -> float:
     """Return the output gain: `db` itself, or what brings the sample or true peak to it, within the `ceiling`."""
-    peak = float(np.max(np.abs(out), initial=0.0))
+    peak = float(np.max(np.abs(s.signal), initial=0.0))
     target: float = 10.0 ** (o.db / 20.0)
     if o.mode == "gain":
         return target
@@ -227,7 +293,7 @@ def output_gain(out: NDArray[np.float64], o: Output, ceiling: float) -> float:
         return 1.0
     if o.mode == "peak":
         return min(target, ceiling) / peak
-    return min(target / true_peak(out), ceiling / peak)  # true-peak: the estimate is linear, so it scales alike
+    return min(target / s.true_peak, ceiling / peak)
 
 
 def output_stage(out: NDArray[np.float64], gain: float, polarity: int) -> NDArray[np.float32]:
@@ -236,20 +302,6 @@ def output_stage(out: NDArray[np.float64], gain: float, polarity: int) -> NDArra
     if polarity < 0:
         scaled = -scaled
     return scaled.astype(np.float32)
-
-
-def oversample(audio: NDArray[np.floating[Any]]) -> NDArray[np.float64]:
-    """Interpolate the audio 4×, to show the peaks between its samples.
-
-    The result runs on past the end of the audio, for as long as the interpolation rings.
-    """
-    fine: NDArray[np.float64] = resample_poly(np.concatenate((audio.astype(float), np.zeros(32))), 4, 1)
-    return fine
-
-
-def true_peak(audio: NDArray[np.floating[Any]]) -> float:
-    """Estimate the peak between samples, by 4× oversampling."""
-    return max(float(np.max(np.abs(oversample(audio)))), float(np.max(np.abs(audio), initial=0.0)))
 
 
 def k_weighting(rate: int) -> NDArray[np.float64]:
@@ -354,7 +406,7 @@ def ceiling_of(bits: int | None) -> float:
 def render(p: Patch, bits: int | None = None) -> tuple[NDArray[np.float32], Report]:
     """Render the float32 audio and its report, for export as float32 or, with `bits`, as PCM of that depth."""
     s = synthesized(p)
-    return finish(p, s, bits, output_gain(s.signal, p.output, ceiling_of(bits)), solved=True)
+    return finish(p, s, bits, output_gain(s, p.output, ceiling_of(bits)), solved=True)
 
 
 def finish(
@@ -379,7 +431,7 @@ def finish(
         sample_rate=p.output.sample_rate,
         bits=bits,
         peak=peak,
-        true_peak=true_peak(audio),
+        true_peak=max(gain * s.true_peak, peak),  # the float32 rounding of the samples aside
         loudness=loudness(audio, p.output.sample_rate),
         ceiling=ceiling,
         over=(p.output.mode == "gain" or not solved) and peak > ceiling,
