@@ -64,10 +64,13 @@ def test_the_input_gain_is_undone_and_drives_the_converter_into_clipping() -> No
 
 
 def test_bits_are_whole_and_grit_reads_back(tight: patch.Patch) -> None:
-    """Refuse 12.0 bits, and read a patch with grit back the same."""
+    """Refuse 12.0 bits and 3 bits, and read a patch with grit back the same."""
     p = patch.edit(tight, "grit", SP)
     assert patch.loads(patch.dumps(p)) == p
     data = patch.to_dict(p)
     data["grit"]["bits"] = 12.0
     with pytest.raises(patch.PatchError, match=r"grit\.bits: expected an integer, found a float"):
+        patch.from_dict(data)
+    data["grit"]["bits"] = 3
+    with pytest.raises(patch.PatchError, match=r"grit\.bits: 3 is outside 4 … 16"):
         patch.from_dict(data)

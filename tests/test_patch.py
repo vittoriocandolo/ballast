@@ -188,6 +188,8 @@ def test_modes_read_back_from_their_canonical_table(tight: patch.Patch) -> None:
         ([{"ratio": 0.2, "db": -6.0, "decay_ms": 50.0}], "body.modes[0].ratio: 0.2 is outside 0.5 … 40"),
         ([{"ratio": 1.5, "db": -6.0, "decay_ms": 0.5}], "body.modes[0].decay_ms: 0.5 is outside 1 … 8000"),
         ("x", "body.modes: expected an array of { ratio, db, decay_ms } tables, found a string"),
+        ([{"ratio": 1.5, "db": -6.0, "decay_ms": 50.0}] * 17, "body.modes: needs 0 to 16 rows, found 17"),
+        ([1.5], "body.modes[0]: expected a { ratio, db, decay_ms } table, found a float"),
     ],
 )
 def test_mode_rules(raw: dict[str, Any], modes: object, message: str) -> None:

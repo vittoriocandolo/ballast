@@ -33,6 +33,25 @@ def test_the_hardest_hit_is_the_patch_and_the_softest_loses_what_play_says(playe
     assert half.body.level_db == played.body.level_db + PLAY.soft_db / 2
 
 
+def test_a_soft_hit_moves_the_sub_with_the_body_and_the_transient_with_the_click(
+    layered: patch.Patch,
+) -> None:
+    """Hit a kick with a sub and a transient softly, at full punch, and find the pitch curve as it was.
+
+    The sub falls with the body, and the transient with the click.
+    """
+    full = patch.edit(layered, "sub", patch.Sub(-6.0, ((0.0, 0.0), (5.0, 1.0), (200.0, 0.0))))
+    full = patch.edit(full, "play", patch.Play(-18.0, -6.0, 1.0, 0.0))
+    soft = play.softer(full, 0.0)
+    assert full.sub is not None
+    assert full.transient is not None
+    assert soft.sub is not None
+    assert soft.transient is not None
+    assert soft.sub.level_db == full.sub.level_db - 18.0
+    assert soft.transient.level_db == round(full.transient.level_db - 24.0, 3)
+    assert soft.body.pitch == full.body.pitch
+
+
 def test_a_silent_source_stays_silent_however_softly_it_is_hit(played: patch.Patch) -> None:
     """Hit a kick whose attack is off, which stays off."""
     silent = patch.edit(played, "attack.level_db", -math.inf)

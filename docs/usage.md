@@ -267,9 +267,10 @@ Readers skip chunks they do not know.
 Each WAV works on its own: drop it on a DAW's drum pad or sampler, which
 reads its root key from the `smpl` chunk. The SFZ maps that `pack` and
 `multisample` write play a whole set as one instrument, in any SFZ player,
-such as the free sfizz or Sforzando, loaded on an instrument track. A map
-names its samples by file name, so keep it in the folder beside them, as
-Ballast writes it.
+such as the free sfizz or Sforzando, loaded on an instrument track: both
+run as plugins in FL Studio, Ableton Live and Logic Pro, and sfizz on Linux
+too. A map names its samples by file name, so keep it in the folder beside
+them, as Ballast writes it.
 
 - **A played kit** sits on key 36, General MIDI's bass drum, where drum
   patterns and pad controllers expect the kick. Ballast calls it C2, as

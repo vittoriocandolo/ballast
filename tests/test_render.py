@@ -162,8 +162,10 @@ def test_the_report(tight: patch.Patch) -> None:
 
 @pytest.mark.parametrize("mode", ["gain", "peak", "true-peak"])
 def test_silence_renders_and_says_so(tight: patch.Patch, mode: str) -> None:
-    """Render silence in every output mode, and report it as silent."""
+    """Render silence in every output mode, through the clipper and a room, and report it as silent."""
     silent = patch.edit(patch.edit(tight, "body.level_db", -math.inf), "attack.level_db", -math.inf)
+    silent = patch.edit(patch.edit(silent, "clip.db", 4.0), "room", patch.Room(-10.0, 600.0, 4000.0, 8.0))
+    assert render.internal(silent)[1] is None  # no threshold clips silence
     audio, report = render.render(with_output(silent, mode=mode, db=-1.0))
     assert not np.any(audio)
     assert "silent" in str(report)
@@ -321,9 +323,18 @@ def state_variable(x: NDArray[np.float64], e: patch.EQ, rate: int) -> NDArray[np
     return out
 
 
-@pytest.mark.parametrize("sweep", [((0.0, 1.0), (5.0, 1.0)), ((0.0, 12.0), (3.0, 0.5), (20.0, 1.0))])
+@pytest.mark.parametrize(
+    "sweep",
+    [
+        ((0.0, 1.0), (5.0, 1.0)),
+        ((0.0, 12.0), (3.0, 0.5), (20.0, 1.0)),
+        ((0.0, 12.0), (900.0, 1.0)),  # still sweeping when the kick ends, so there is nothing to hand over
+    ],
+)
 def test_a_sweep_hands_over_to_the_static_low_pass_exactly(tight: patch.Patch, sweep: patch.Knots) -> None:
     """Sweep the tight kick's low-pass, and find it as the state-variable filter run throughout, to rounding.
+
+    The kick lasts 240 ms, so the last sweep outlasts it.
 
     A still sweep is the static biquad itself, its transfer function the same and its handover exact.
     """

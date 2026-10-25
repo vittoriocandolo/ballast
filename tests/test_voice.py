@@ -104,6 +104,7 @@ def test_silent_sources_render_nothing(tight: patch.Patch) -> None:
     v = Voice(silent, INTERNAL)
     assert v.noise is None
     assert not np.any(v.samples())
+    assert not np.any(v.sub(np.linspace(0.0, 0.1, 100)))  # the patch has no sub
 
 
 @pytest.mark.parametrize(("mix", "tone", "noise"), [(0.0, True, False), (1.0, False, True)])

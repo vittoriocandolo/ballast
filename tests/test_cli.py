@@ -424,6 +424,44 @@ def test_pack_writes_nothing_unless_every_kick_passes_its_gates(run: Run, tmp_pa
     assert not (tmp_path / "kit").exists()
 
 
+def test_commands_name_the_files_they_cannot_read_or_write(run: Run, tmp_path: Path) -> None:
+    """Refuse a missing WAV, a file that is not one, and a folder where a file stands, each named."""
+    run("init", "tight", "-o", "kick.toml")
+    assert run("transient", "kick.toml", "missing.wav") == (BAD_INPUT, "", "missing.wav: No such file or directory\n")
+    (tmp_path / "notes.wav").write_text("not a WAV", encoding="utf-8")
+    status, out, err = run("transient", "kick.toml", "notes.wav")
+    assert (status, out) == (BAD_INPUT, "")
+    assert err.startswith("notes.wav: ")
+    (tmp_path / "taken").write_text("", encoding="utf-8")
+    assert run("vary", "kick.toml", "-o", "taken", "-n", "1") == (BAD_INPUT, "", "taken: File exists\n")
+    assert run("pack", "kick.toml", "-o", "taken") == (BAD_INPUT, "", "taken: File exists\n")
+
+
+def test_pack_and_vary_refuse_kits_too_large_or_unplayable(
+    run: Run,
+    tmp_path: Path,
+    read_preset: Callable[[str], str],
+) -> None:
+    """Refuse a grid of more than 999 combinations, 17 layers, and hits too soft for any patch to hold."""
+    run("init", "tight", "-o", "kick.toml")
+    drives, seconds = ",".join(str(db) for db in range(40)), ",".join(str(h / 100) for h in range(30))
+    axes = ("--along", "drive.db", drives, "--along", "body.h2", seconds)
+    status, _, err = run("vary", "kick.toml", "-o", "grid", *axes)
+    assert (status, err) == (BAD_INPUT, "the grid has 1200 combinations; at most 999\n")
+    assert not (tmp_path / "grid").exists()
+    play = "\n[play]\nsoft_db       = -40.0\nsoft_click_db = -24.0\nsoft_punch    = 0.6\nspread        = 0.5\n"
+    (tmp_path / "soft.toml").write_text(read_preset("tight") + play, encoding="utf-8")
+    status, out, err = run("pack", "soft.toml", "-o", "kit", "--velocities", "3")
+    assert (status, out) == (BAD_INPUT, "")
+    assert err == (
+        "not written: these hits cannot be played\n"
+        "  soft-A1-v1.wav: attack.level_db: -80 is outside -60 … 24 (or -inf)\n"
+    )
+    with pytest.raises(SystemExit) as caught:
+        run("pack", "kick.toml", "-o", "kit", "--velocities", "17")
+    assert caught.value.code == BAD_INPUT
+
+
 def test_pack_refuses_names_it_cannot_tell_apart(run: Run, tmp_path: Path) -> None:
     """Refuse two patches of one name from two folders, and an empty folder."""
     for folder, name in (("a", "tight"), ("b", "house")):

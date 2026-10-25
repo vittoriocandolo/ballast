@@ -94,3 +94,7 @@ def test_a_grid_reports_every_invalid_combination_and_unknown_field(tight: patch
     ]
     with pytest.raises(patch.PatchError, match="only a number or a curve can be multiplied"):
         vary.step(tight, "body.phase_ref", "x2")
+    with pytest.raises(patch.PatchError, match=r"body\.nope: no such field"):
+        vary.step(tight, "body.nope", "1")
+    with pytest.raises(patch.PatchError, match=r"drive\.db: 'xfast' is not a factor such as x1\.5"):
+        vary.step(tight, "drive.db", "xfast")
