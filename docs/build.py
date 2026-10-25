@@ -1254,7 +1254,7 @@ def figure_room(k: Kick) -> str:
         energy = np.cumsum((band * band)[::-1])[::-1]
         level = 10 * np.log10(energy / energy[0] + 1e-30)
         t = np.arange(h.size) / RATE * KILO  # the tail lives at the base rate
-        pick = slice(None, None, 2)
+        pick = slice(None, None, 32)  # some 1350 points to a curve: several to each unit of the panel's width
         body.append(decay.clip("room", decay.line(cls, t[pick], level[pick])))
         designed = ROOM.decay_ms / (1 + center / ROOM.damping_hz)
         body.append(decay.clip("room", decay.dots(f"d{cls}", [designed], [-60.0], 4.0)))
