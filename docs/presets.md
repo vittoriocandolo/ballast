@@ -95,6 +95,9 @@ high_hz   = 8000.0          # high shelf
 high_db   = 0.0             # 0 = off
 cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
 resonance = 0.707           # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 
 [clip]
 db      = 4.0               # off the peaks; 0 = off
@@ -179,6 +182,9 @@ high_hz   = 8000.0          # high shelf
 high_db   = 0.0             # 0 = off
 cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
 resonance = 0.707           # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 
 [clip]
 db      = 0.0               # off the peaks; 0 = off
@@ -268,6 +274,9 @@ high_hz   = 8000.0          # high shelf
 high_db   = 0.0             # 0 = off
 cutoff_hz = 3000.0          # low-pass, 12 dB/oct; 0 = off
 resonance = 1.0             # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 
 [clip]
 db      = 5.0               # off the peaks; 0 = off
@@ -364,6 +373,9 @@ high_hz   = 8000.0          # high shelf
 high_db   = 0.0             # 0 = off
 cutoff_hz = 2500.0          # low-pass, 12 dB/oct; 0 = off
 resonance = 2.0             # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 
 [clip]
 db      = 3.0               # off the peaks; 0 = off
@@ -449,6 +461,9 @@ high_hz   = 8000.0          # high shelf
 high_db   = 0.0             # 0 = off
 cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
 resonance = 0.707           # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 
 [clip]
 db      = 4.0               # off the peaks; 0 = off
@@ -533,6 +548,9 @@ high_hz   = 8000.0          # high shelf
 high_db   = 0.0             # 0 = off
 cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
 resonance = 0.707           # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 
 [clip]
 db      = 0.0               # off the peaks; 0 = off
@@ -628,6 +646,9 @@ high_hz   = 8000.0          # high shelf
 high_db   = 0.0             # 0 = off
 cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
 resonance = 0.707           # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 
 [clip]
 db      = 4.0               # off the peaks; 0 = off
@@ -712,6 +733,9 @@ high_hz   = 8000.0          # high shelf
 high_db   = 0.0             # 0 = off
 cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
 resonance = 0.707           # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 
 [clip]
 db      = 0.0               # off the peaks; 0 = off
@@ -807,6 +831,9 @@ high_hz   = 8000.0          # high shelf
 high_db   = 0.0             # 0 = off
 cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
 resonance = 0.707           # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 
 [clip]
 db      = 0.0               # off the peaks; 0 = off
@@ -900,6 +927,9 @@ high_hz   = 8000.0          # high shelf
 high_db   = 0.0             # 0 = off
 cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
 resonance = 0.707           # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 
 [clip]
 db      = 0.0               # off the peaks; 0 = off
@@ -999,6 +1029,9 @@ high_hz   = 8000.0          # high shelf
 high_db   = 0.0             # 0 = off
 cutoff_hz = 900.0           # low-pass, 12 dB/oct; 0 = off
 resonance = 0.707           # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 
 [clip]
 db      = 3.0               # off the peaks; 0 = off

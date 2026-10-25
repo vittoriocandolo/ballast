@@ -41,11 +41,13 @@ SCHEMA = 3  # each older schema lacks fields, which ADDED fills so that its patc
 SAMPLE_RATES = (44100, 48000, 88200, 96000, 176400, 192000)
 MAX_BODY_MS = 8000.0
 MAX_ATTACK_MS = 1000.0
+MAX_SWEEP_MS = 1000.0  # how long the low-pass may sweep, which it computes a sample at a time
 MIN_SPACING_MS = Decimal("0.01")  # 10 µs, compared on the decimal values as written
 MAX_SEED = 2**63 - 1
 PEAK_MODES = ("peak", "true-peak")  # the modes whose `db` is a target at or below full scale
 BODY_HZ = (10.0, 20000.0)  # where the body's frequency must lie at every pitch knot
 ROOM_TAIL = 1.5  # a room rings for this many times its decay: until it has fallen 90 dB
+CUTOFF_HZ = (20.0, 20000.0)  # where the low-pass cutoff must lie, at every sweep knot too
 TONE_HZ = (20.0, 20000.0)  # where the attack tone's frequency must lie, at every pitch knot too
 
 
@@ -373,9 +375,9 @@ def _pitch(reference: str, name: str, hz: tuple[float, float]) -> Check:
 
     def check(path: str, curve: Knots, problems: list[str], section: dict[str, Any]) -> None:
         if curve[0][0] != 0.0:
-            problems.append(f"{path}[0].ms: the pitch curve must start at 0 ms")
+            problems.append(f"{path}[0].ms: the curve must start at 0 ms")
         if curve[-1][1] != 1.0:
-            problems.append(f"{path}[{len(curve) - 1}].ratio: the pitch curve must end at ratio 1")
+            problems.append(f"{path}[{len(curve) - 1}].ratio: the curve must end at ratio 1")
         f0 = section[reference]
         lo, hi = hz
         for i, (_, r) in enumerate(curve):
@@ -385,6 +387,12 @@ def _pitch(reference: str, name: str, hz: tuple[float, float]) -> Check:
                 problems.append(f"{path}[{i}].ratio: must be positive")
 
     return check
+
+
+def _sweep(path: str, curve: Knots, problems: list[str], section: dict[str, Any]) -> None:
+    """Check the sweep as a pitch curve of cutoff_hz; with the low-pass off, its ratios need only be positive."""
+    off = section["cutoff_hz"] == 0.0
+    _pitch("cutoff_hz", "cutoff", CUTOFF_HZ)(path, curve, problems, section | {"cutoff_hz": None} if off else section)
 
 
 def _shape(path: str, curve: Knots, problems: list[str], _section: dict[str, Any]) -> None:
@@ -471,8 +479,15 @@ class EQ:
     bell_q: float = number(0.3, 10.0, "0.3 = wide … 10 = narrow")
     high_hz: float = number(1000.0, 20000.0, "high shelf")
     high_db: float = number(-12.0, 12.0, "0 = off")
-    cutoff_hz: float = number(20.0, 20000.0, "low-pass, 12 dB/oct; 0 = off", off=0.0)
+    cutoff_hz: float = number(*CUTOFF_HZ, "low-pass, 12 dB/oct; 0 = off", off=0.0)
     resonance: float = number(0.5, 10.0, "Q: 0.707 = flat … 10")
+    sweep: tuple[tuple[float, float], ...] = knots(
+        "ratio",
+        (1, 32),
+        MAX_SWEEP_MS,
+        _sweep,
+        "ratio to cutoff_hz; starts at 0 ms, ends at 1",
+    )
 
 
 @dataclass(frozen=True)
@@ -620,6 +635,7 @@ EQ_OFF = {  # every band at 0 dB
     "high_db": 0.0,
     "cutoff_hz": 0.0,
     "resonance": 0.707,
+    "sweep": ((0.0, 1.0),),
 }
 # What each older schema lacks, with the values that render its patches exactly as they always sounded; None for
 # an optional section it could not have, so that its patches have none.
@@ -835,7 +851,7 @@ def stretch(p: Patch, curve: str, factor: float, anchor_ms: float | None = None)
     """Rescale a curve's knot times after `anchor_ms` by `factor`, rounded to 1 µs.
 
     The default anchor is the shape's highest point for an amplitude curve (so
-    the rise is kept) and 0 ms for the pitch curve. This rewrites the points
+    the rise is kept) and 0 ms for a curve of ratios, a pitch or the cutoff's sweep. This rewrites the points
     themselves: the patch gains no parameter.
     """
     if curve not in CURVES:
@@ -850,7 +866,8 @@ def stretch(p: Patch, curve: str, factor: float, anchor_ms: float | None = None)
         raise PatchError([f"{section}: the patch has none"])
     pairs = getattr(part, name)
     if anchor_ms is None:
-        anchor_ms = 0.0 if name == "pitch" else next(ms for ms, g in pairs if g == 1.0)
+        ratios = next(f for f in fields(type(part)) if f.name == name).metadata["key"] == "ratio"
+        anchor_ms = 0.0 if ratios else next(ms for ms, g in pairs if g == 1.0)
     moved = tuple((ms if ms <= anchor_ms else round(anchor_ms + factor * (ms - anchor_ms), 3), v) for ms, v in pairs)
     return edit(p, curve, moved)
 

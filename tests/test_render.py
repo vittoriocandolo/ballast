@@ -9,15 +9,18 @@ import math
 import numpy as np
 import pytest
 from numpy.typing import NDArray
-from scipy.signal import sosfreqz, upfirdn
+from scipy.signal import hilbert, sosfilt, sosfreqz, upfirdn
 
 from ballast_synth import family, patch, render
+from ballast_synth.curve import Curve
 
 PASSBAND_HZ = 20000
 PEAK_DB = 0.00002  # how close the true peak comes to a sine's amplitude: the decimator's ripple
 CLIP_DB = 1e-7  # how close the clipper comes to taking exactly its db off the true peak
 EQ_MATCH_DB = 0.004  # how close the EQ comes to its analog prototypes, up to 20 kHz
 LOW_PASS_MATCH_DB = 0.012  # and the low-pass, whose -12 dB/oct slope shows the warping, 40 log10(tan x / x)
+SWEEP_ROUNDING = 1e-10  # of the peak, -200 dB: poles this near 1 amplify the rounding of different algebra
+FOLLOW_DB = 0.05  # how close a slow sweep stays to the analog low-pass at each moment's cutoff: 0.021 dB measured
 RIPPLE_DB = 0.001  # the specified flatness of the passband
 STOPBAND_DB = -110  # the specified attenuation from half the base rate up
 
@@ -244,7 +247,7 @@ def test_the_eq_matches_its_analog_prototypes(
 ) -> None:
     """Design one band at the internal rate, and find its response within 0.004 dB of the analog one to 20 kHz."""
     kind, hz, db, q = band
-    e = dataclasses.replace(tight.eq, **{f"{kind}_hz": hz, f"{kind}_db": db}, bell_q=q)
+    e = dataclasses.replace(patch.edit(patch.edit(tight, f"eq.{kind}_hz", hz), f"eq.{kind}_db", db).eq, bell_q=q)
     _, rate, _ = family.rates(base)
     bands = render.eq(e, rate)
     assert bands.shape == (1, 6)
@@ -297,6 +300,67 @@ def test_the_low_pass_matches_its_analog_prototype(tight: patch.Patch, base: int
     _, h = sosfreqz(bands, worN=f, fs=rate)
     s = 1j * f / hz
     assert np.max(np.abs(20 * np.log10(np.abs(h * (s * s + s / q + 1))))) < LOW_PASS_MATCH_DB
+
+
+def swept(tight: patch.Patch, hz: float, q: float, sweep: patch.Knots) -> patch.EQ:
+    """Return the tight preset's EQ with its low-pass at hz and q, swept."""
+    return dataclasses.replace(tight.eq, cutoff_hz=hz, resonance=q, sweep=sweep)
+
+
+def state_variable(x: NDArray[np.float64], e: patch.EQ, rate: int) -> NDArray[np.float64]:
+    """Low-pass x through the state-variable filter at every sample's cutoff, from the first sample to the last."""
+    curve = Curve([ms / 1000 for ms, _ in e.sweep], [r for _, r in e.sweep], last=0.0)
+    g = np.tan(math.pi * e.cutoff_hz * curve(np.arange(x.size) / rate) / rate)
+    out, s1, s2 = np.empty_like(x), 0.0, 0.0
+    for n, (v, gn) in enumerate(zip(x.tolist(), g.tolist(), strict=True)):
+        h = (v - s2 - (gn + 1 / e.resonance) * s1) / (1 + gn * (gn + 1 / e.resonance))  # the high-pass
+        band = gn * h + s1
+        low = gn * band + s2
+        s1, s2 = gn * h + band, gn * band + low
+        out[n] = low
+    return out
+
+
+@pytest.mark.parametrize("sweep", [((0.0, 1.0), (5.0, 1.0)), ((0.0, 12.0), (3.0, 0.5), (20.0, 1.0))])
+def test_a_sweep_hands_over_to_the_static_low_pass_exactly(tight: patch.Patch, sweep: patch.Knots) -> None:
+    """Sweep the tight kick's low-pass, and find it as the state-variable filter run throughout, to rounding.
+
+    A still sweep is the static biquad itself, its transfer function the same and its handover exact.
+    """
+    _, rate, _ = family.rates(48000)
+    x, _ = render.internal(tight)
+    e = swept(tight, 1500.0, 4.0, sweep)
+    low = render.eq(e, rate)[-1]
+    y = render.sweep(x, e, low, rate)
+    scale = float(np.max(np.abs(y)))
+    assert np.max(np.abs(y - state_variable(x, e, rate))) < SWEEP_ROUNDING * scale
+    if all(r == 1.0 for _, r in sweep):
+        assert np.max(np.abs(y - sosfilt(low[None], x))) < SWEEP_ROUNDING * scale
+
+
+def test_a_slow_sweep_follows_the_analog_low_pass(tight: patch.Patch) -> None:
+    """Sweep a 1 kHz sine's low-pass from 4 kHz to 500 Hz in a second: its level is the analog filter's at each cutoff.
+
+    The level is read by the Hilbert transform, from 0.1 s to 1.1 s, away from its edges.
+    """
+    _, rate, _ = family.rates(48000)
+    e = swept(tight, 500.0, 0.707, ((0.0, 8.0), (1000.0, 1.0)))
+    t = np.arange(round(1.2 * rate)) / rate
+    y = render.sweep(np.sin(2 * math.pi * 1000.0 * t), e, render.eq(e, rate)[-1], rate)
+    s = 1j * 1000.0 / (500.0 * Curve([0.0, 1.0], [8.0, 1.0], last=0.0)(t))
+    level = np.abs(hilbert(y)) * np.abs(s * s + s / 0.707 + 1)
+    inside = slice(round(0.1 * rate), round(1.1 * rate))
+    assert np.max(np.abs(20 * np.log10(level[inside]))) < FOLLOW_DB
+
+
+def test_a_sweep_changes_only_the_low_pass(tight: patch.Patch) -> None:
+    """Render a still sweep exactly as the static low-pass, and a moving one differently, through the whole chain."""
+    dark = patch.edit(tight, "eq.cutoff_hz", 1500.0)
+    still, _ = render.internal(dark)
+    assert np.array_equal(render.internal(patch.edit(dark, "eq.sweep", ((0.0, 1.0), (5.0, 1.0))))[0], still)
+    plucked, _ = render.internal(patch.edit(dark, "eq.sweep", ((0.0, 8.0), (50.0, 1.0))))
+    assert plucked.size == still.size
+    assert not np.allclose(plucked, still)
 
 
 @pytest.mark.parametrize("base", [44100, 48000])

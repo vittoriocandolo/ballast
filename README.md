@@ -31,7 +31,8 @@ patch.
   at every pitch, so its weight carries to small speakers. The drive adds
   density, `drive.asymmetry` warmth that grows as the body decays, and the
   clipper loudness: `clip.db` takes exactly that many decibels off the file's
-  true peak. `[eq]` has shelves, a bell for knock and a resonant low-pass.
+  true peak. `[eq]` has shelves, a bell for knock and a resonant low-pass
+  whose cutoff can sweep down as the kick strikes.
 - **From machine to band.** `[grit]` samples the kick as the drum samplers of
   the 1980s did, aliasing and staircase included, computed exactly: the only
   place Ballast aliases, and only when asked. At the other end, `body.modes`
@@ -128,7 +129,7 @@ wrote kick.wav
 | Low cut | optional 12 dB/octave Butterworth high-pass, 10 Hz – 1 kHz |
 | Tuning | 20 Hz – 1 kHz, by frequency or note name; the sweep spans 10 Hz – 20 kHz |
 | Length | body up to 8 s, attack and transient up to 1 s, and a room's tail up to 6.2 s after them |
-| Render time | about 60 ms for a 240 ms kick and a third of a second for a 1.45 s one, on a 12-core laptop; the clipper, a room or grit each add a few tenths of a second |
+| Render time | about 60 ms for a 240 ms kick and a third of a second for a 1.45 s one, on a 12-core laptop; the clipper, a room, grit or a second-long sweep each add a few tenths of a second |
 
 ## Documentation
 

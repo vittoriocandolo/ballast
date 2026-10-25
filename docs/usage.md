@@ -297,7 +297,7 @@ Sixteen of the moves below are made on the `tight` preset, each with a link
 to its sound, to compare with [tight itself](audio/tight.wav); the figure
 shows what they do.
 
-![The tight preset and sixteen moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a brighter body, a zap, a sampled click, a sub, a room, grit, more drive, a knock, a low-pass, a low cut, warmth and clipping](figures/design.svg)
+![The tight preset and seventeen moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a brighter body, a zap, a sampled click, a sub, a room, grit, more drive, a knock, a low-pass, a pluck, a low cut, warmth and clipping](figures/design.svg)
 
 - **Tune it to the track.** A kick in the key of the bass sits in the mix. Use
   `ballast tune kick.toml E1`, or `--tune` with `init`.
@@ -424,6 +424,23 @@ shows what they do.
   above 1.2 kHz at 12 dB per octave: the filtered thud of a sampled disco
   kick. `eq.resonance` above 0.707 rings at the corner, as an analog filter
   does. [Hear the dark kick](audio/tight-dark.wav).
+- **A sweep plucks.** `eq.sweep` moves the cutoff, in ratios to
+  `cutoff_hz`, as a pitch curve moves the body: this one closes the low-pass
+  from 6 kHz to 400 Hz in the kick's first 80 ms, and the resonance rings
+  down with it, the "dow" of an analog drum machine's filtered kick. A sweep
+  lasts up to a second; after it, the cutoff stays at `cutoff_hz`:
+
+  ```toml
+  [eq]
+  cutoff_hz = 400.0           # low-pass, 12 dB/oct; 0 = off
+  resonance = 3.0             # Q: 0.707 = flat … 10
+  sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+    { ms = 0.0,  ratio = 15.0 },
+    { ms = 80.0, ratio = 1.0 },
+  ]
+  ```
+
+  [Hear the pluck](audio/tight-pluck.wav).
 - **Cut what you cannot hear.** `output.low_cut_hz = 30.0` high-passes the
   kick at 30 Hz with a 12 dB/octave Butterworth filter, which removes DC and
   sub-sonic energy. The presets leave it off, so what you design is what you

@@ -451,6 +451,11 @@ def design_moves(tight: Kick) -> list[tuple[str, Kick]]:
         ("tight-drive", "drive.db = 18.0", patch.edit(p, "drive.db", 18.0)),
         ("tight-knock", "eq.bell_db = 6.0", patch.edit(p, "eq.bell_db", 6.0)),
         ("tight-dark", "eq.cutoff_hz = 1200.0", patch.edit(p, "eq.cutoff_hz", 1200.0)),
+        (
+            "tight-pluck",
+            "eq.sweep: 6 kHz to 400 Hz in 80 ms",
+            patch.edit(p, "eq", dataclasses.replace(p.eq, cutoff_hz=400.0, resonance=3.0, sweep=PLUCK)),
+        ),
         ("tight-cut", "output.low_cut_hz = 30.0", patch.edit(p, "output.low_cut_hz", 30.0)),
         ("tight-warm", "drive.asymmetry = 1.0", patch.edit(p, "drive.asymmetry", 1.0)),
         ("tight-clip", "clip.db = 4.0", patch.edit(p, "clip.db", 4.0)),
@@ -923,6 +928,7 @@ def figure_attack(p: patch.Patch) -> str:
 
 
 ZAP = ((0.0, 4.0), (2.0, 1.0))  # the usage guide's zap: two octaves down into tone_hz, in 2 ms
+PLUCK = ((0.0, 15.0), (80.0, 1.0))  # the usage guide's pluck: the cutoff from 15 times cutoff_hz down to it, in 80 ms
 
 
 def click(rate: int) -> NDArray[np.float64]:

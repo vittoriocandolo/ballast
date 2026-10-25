@@ -41,8 +41,10 @@ The first public release.
   against aliasing, its bits without dither, and its staircase, averaged
   exactly so that Ballast adds no aliasing of its own.
 - A three-band EQ after the drive, low shelf, bell and high shelf, within
-  0.004 dB of its analog prototypes up to 20 kHz, and a static resonant
-  low-pass within 0.012 dB of its own.
+  0.004 dB of its analog prototypes up to 20 kHz, and a resonant low-pass
+  within 0.012 dB of its own, whose cutoff `eq.sweep` moves for up to a
+  second through a topology-preserving state-variable filter, at the
+  internal rate, before the static biquad takes over exactly.
 - Sampled transients: `ballast transient` layers a short WAV over the attack,
   stored in the patch as base64 float32, brought up by the family's frozen
   filter and played at any pitch and from either rate family within 140 dB of

@@ -35,9 +35,10 @@ from scipy.optimize import brentq
 from scipy.signal import fftconvolve, sosfilt
 
 from . import __version__, grit, noise, room, shaper, wav
+from .curve import Curve
 from .family import DECIMATORS, decimate, decimator, rates
 from .patch import EQ, Output, Patch, describe_tuning
-from .voice import Voice
+from .voice import Voice, sample_count
 
 if TYPE_CHECKING:
     import os
@@ -83,6 +84,46 @@ def eq(e: EQ, rate: int) -> NDArray[np.float64]:
         alpha, low = math.sin(w) / (2 * e.resonance), 2 * math.sin(w / 2) ** 2  # 1 - cos ω, without cancellation
         sections.append([low / 2, low, low / 2, 1 + alpha, -2 * math.cos(w), 1 - alpha])
     return np.array([[*(x / s[3] for x in s[:3]), 1.0, s[4] / s[3], s[5] / s[3]] for s in sections]).reshape(-1, 6)
+
+
+def sweeps(e: EQ) -> bool:
+    """Tell whether the EQ's low-pass is on and its cutoff moves."""
+    return e.cutoff_hz != 0.0 and any(r != 1.0 for _, r in e.sweep)
+
+
+def sweep(y: NDArray[np.float64], e: EQ, low: NDArray[np.float64], rate: int) -> NDArray[np.float64]:
+    """Low-pass y as the cutoff follows its sweep, then hand over to `low`, the static low-pass at cutoff_hz.
+
+    While the cutoff moves, a topology-preserving state-variable filter (Zavalishin's, in Simper's form) runs a
+    sample at a time: g = tan(π f_c / F) and k = 1 / Q, at every sample's own cutoff. Its states are its two
+    integrators', as in the analog filter, so moving the cutoff changes how fast they integrate and nothing else: a
+    sweep as fast as the curve allows neither clicks nor goes unstable. At any fixed cutoff it is the same bilinear
+    transform of the same analog low-pass as `low`.
+
+    From the sweep's last knot on, the cutoff stays at cutoff_hz. Two samples later, the filter's outputs obey
+    `low`'s difference equation exactly, whatever its state, as any second-order filter's do, so `low` continues
+    from its last two inputs and outputs, vectorized: the loop costs what the sweep lasts, never what the kick does.
+    """
+    curve = Curve([ms / 1000 for ms, _ in e.sweep], [r for _, r in e.sweep], last=0.0)  # lands on the cutoff
+    head = min(y.size, sample_count(float(curve.t[-1]), rate) + 2)  # every later sample's cutoff is cutoff_hz
+    g = np.tan(math.pi * e.cutoff_hz * curve(np.arange(head) / rate) / rate)
+    a1 = 1 / (1 + g * (g + 1 / e.resonance))
+    a2 = g * a1
+    a3 = g * a2
+    out = np.empty_like(y)
+    s1 = s2 = 0.0
+    for n, (x, c1, c2, c3) in enumerate(zip(y[:head].tolist(), a1.tolist(), a2.tolist(), a3.tolist(), strict=True)):
+        v3 = x - s2
+        v1 = c1 * s1 + c2 * v3
+        v2 = s2 + c2 * s1 + c3 * v3
+        s1, s2 = 2 * v1 - s1, 2 * v2 - s2
+        out[n] = v2
+    if head < y.size:  # `low`'s transposed direct form, in the state these inputs and outputs leave it
+        b1, b2, f1, f2 = low[[1, 2, 4, 5]]
+        x1, x2, y1, y2 = y[head - 1], y[head - 2], out[head - 1], out[head - 2]
+        state = [[b1 * x1 - f1 * y1 + b2 * x2 - f2 * y2, b2 * x1 - f2 * y1]]
+        out[head:] = sosfilt(low[None], y[head:], zi=state)[0]
+    return out
 
 
 def _shelf(hz: float, db: float, rate: int, *, high: bool) -> list[float]:
@@ -140,8 +181,11 @@ def internal(p: Patch, threshold: float | None = None) -> tuple[NDArray[np.float
     if p.grit is not None:
         y = grit.apply(y, p.grit, base, rate)
     bands = eq(p.eq, rate)
-    if bands.size:
-        y = sosfilt(bands, y)
+    moving = sweeps(p.eq)  # then the low-pass, the last section, follows its sweep
+    if bands.size > 6 * moving:
+        y = sosfilt(bands[: bands.shape[0] - moving], y)
+    if moving:
+        y = sweep(y, p.eq, bands[-1], rate)
     if p.output.low_cut_hz != 0.0:
         y = sosfilt(low_cut(p.output.low_cut_hz, rate), y)
     if p.clip.db != 0.0:

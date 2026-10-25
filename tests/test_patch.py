@@ -91,8 +91,8 @@ def test_a_peak_target_cannot_exceed_full_scale(raw: dict[str, Any]) -> None:
 @pytest.mark.parametrize(
     ("curve", "index", "change", "message"),
     [
-        ("pitch", 0, {"ms": 1.0}, "body.pitch[0].ms: the pitch curve must start at 0 ms"),
-        ("pitch", 2, {"ratio": 1.5}, "body.pitch[2].ratio: the pitch curve must end at ratio 1"),
+        ("pitch", 0, {"ms": 1.0}, "body.pitch[0].ms: the curve must start at 0 ms"),
+        ("pitch", 2, {"ratio": 1.5}, "body.pitch[2].ratio: the curve must end at ratio 1"),
         ("pitch", 0, {"ratio": 400.0}, "body.pitch[0].ratio: body frequency 22000 Hz is outside 10 … 20000 Hz"),
         ("amp", 0, {"gain": 0.1}, "body.amp[0].gain: an amplitude shape must start at 0"),
         ("amp", 1, {"gain": 0.9}, "body.amp: the highest gain must be exactly 1, found 0.9"),
@@ -113,8 +113,8 @@ def test_curve_rules(raw: dict[str, Any], curve: str, index: int, change: dict[s
 @pytest.mark.parametrize(
     ("pitch", "message"),
     [
-        ([{"ms": 1.0, "ratio": 1.0}], "attack.pitch[0].ms: the pitch curve must start at 0 ms"),
-        ([{"ms": 0.0, "ratio": 2.0}], "attack.pitch[0].ratio: the pitch curve must end at ratio 1"),
+        ([{"ms": 1.0, "ratio": 1.0}], "attack.pitch[0].ms: the curve must start at 0 ms"),
+        ([{"ms": 0.0, "ratio": 2.0}], "attack.pitch[0].ratio: the curve must end at ratio 1"),
         (
             [{"ms": 0.0, "ratio": 10.0}, {"ms": 1.0, "ratio": 1.0}],
             "attack.pitch[0].ratio: tone frequency 25000 Hz is outside 20 … 20000 Hz",
@@ -130,6 +130,43 @@ def test_the_tone_pitch_follows_the_body_pitch_rules_within_the_tone_range(
     """Break one rule of the attack's pitch curve, and get exactly that problem."""
     raw["attack"]["pitch"] = pitch
     assert problems(raw) == [message]
+
+
+@pytest.mark.parametrize(
+    ("cutoff_hz", "sweep", "message"),
+    [
+        (500.0, [{"ms": 1.0, "ratio": 1.0}], "eq.sweep[0].ms: the curve must start at 0 ms"),
+        (500.0, [{"ms": 0.0, "ratio": 2.0}], "eq.sweep[0].ratio: the curve must end at ratio 1"),
+        (
+            500.0,
+            [{"ms": 0.0, "ratio": 50.0}, {"ms": 10.0, "ratio": 1.0}],
+            "eq.sweep[0].ratio: cutoff frequency 25000 Hz is outside 20 … 20000 Hz",
+        ),
+        (
+            500.0,
+            [{"ms": 0.0, "ratio": 8.0}, {"ms": 1000.5, "ratio": 1.0}],
+            "eq.sweep[1].ms: 1000.5 is outside 0 … 1000",
+        ),
+        (0.0, [{"ms": 0.0, "ratio": 0.0}, {"ms": 10.0, "ratio": 1.0}], "eq.sweep[0].ratio: must be positive"),
+        (500.0, [], "eq.sweep: needs 1 to 32 knots, found 0"),
+    ],
+)
+def test_the_sweep_follows_the_pitch_rules_within_the_cutoff_range(
+    raw: dict[str, Any],
+    cutoff_hz: float,
+    sweep: list[dict[str, float]],
+    message: str,
+) -> None:
+    """Break one rule of the cutoff's sweep, and get exactly that problem; with the low-pass off, only positivity."""
+    raw["eq"].update(cutoff_hz=cutoff_hz, sweep=sweep)
+    assert problems(raw) == [message]
+
+
+def test_a_sweep_may_wait_while_the_low_pass_is_off(raw: dict[str, Any]) -> None:
+    """Keep a sweep whose cutoffs only make sense once the low-pass is on."""
+    sweep = [{"ms": 0.0, "ratio": 100.0}, {"ms": 50.0, "ratio": 1.0}]
+    raw["eq"].update(cutoff_hz=0.0, sweep=sweep)
+    assert patch.from_dict(raw).eq.sweep == ((0.0, 100.0), (50.0, 1.0))
 
 
 DRUM = ((1.59, -9.0, 60.0), (2.14, -14.0, 35.0), (2.65, -20.0, 20.0))  # three modes of a struck head
@@ -281,6 +318,12 @@ def test_stretch_scales_the_tone_pitch_curve_from_its_start(tight: patch.Patch) 
     """Stretch a sweep of the attack's tone, which moves every knot."""
     zap = patch.edit(tight, "attack.pitch", ((0.0, 4.0), (0.5, 2.0), (2.0, 1.0)))
     assert patch.stretch(zap, "attack.pitch", 1.5).attack.pitch == ((0.0, 4.0), (0.75, 2.0), (3.0, 1.0))
+
+
+def test_stretch_scales_the_cutoff_sweep_from_its_start(tight: patch.Patch) -> None:
+    """Stretch the cutoff's sweep, which moves every knot."""
+    pluck = patch.edit(patch.edit(tight, "eq.cutoff_hz", 400.0), "eq.sweep", ((0.0, 15.0), (80.0, 1.0)))
+    assert patch.stretch(pluck, "eq.sweep", 0.5).eq.sweep == ((0.0, 15.0), (40.0, 1.0))
 
 
 def test_stretch_after_an_explicit_time(tight: patch.Patch) -> None:

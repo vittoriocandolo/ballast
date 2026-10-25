@@ -67,6 +67,9 @@ high_hz   = 8000.0          # high shelf
 high_db   = 0.0             # 0 = off
 cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
 resonance = 0.707           # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
 
 [clip]
 db      = 0.0               # off the peaks; 0 = off
@@ -188,6 +191,7 @@ and the low-pass at 0 Hz, is not there at all.
 | `high_db` | number | −12 – +12 dB | The high shelf's gain above its corner; 0 turns it off. |
 | `cutoff_hz` | number | 20 Hz – 20 kHz, or 0 | A resonant low-pass, 12 dB/octave above this frequency; 0 turns it off. |
 | `resonance` | number | 0.5 – 10 | The low-pass's Q: 0.707 is flat to the corner, higher rings and lifts it, 10 by 20 dB. |
+| `sweep` | curve | 1 – 32 knots of `{ ms, ratio }`, up to 1000 ms | The cutoff as a ratio to `cutoff_hz`, moving as a pitch curve does. It starts at 0 ms and ends at ratio 1, where the cutoff then stays, and `cutoff_hz × ratio` stays within 20 Hz – 20 kHz at every knot. One knot, `{ ms = 0.0, ratio = 1.0 }`, holds the cutoff still; a curve that falls into 1 plucks. With the low-pass off, the ratios need only be positive. |
 
 ### `[clip]`: the clipper
 

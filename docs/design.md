@@ -323,9 +323,21 @@ corner. Designed by the bilinear transform at 32 times the base rate, they
 barely warp: the bands stay within 0.004 dB of their analog prototypes all
 the way to 20 kHz, where an EQ running at 48 kHz bends its top end, and the
 low-pass within 0.012 dB, where its falling slope shows the last of the
-warping. The low-pass is static, the same for the whole kick: a sweep belongs
-to a track, across its bars. A band at 0 dB, or the low-pass at 0 Hz, is not
-there at all.
+warping. A band at 0 dB, or the low-pass at 0 Hz, is not there at all.
+
+`eq.sweep` moves the low-pass's cutoff as a pitch curve moves the body, for
+the plucked, resonant fall of an analog drum machine's filter. A biquad's
+coefficients mix past samples, so moving them fast clicks, or worse; while
+the cutoff moves, Ballast runs a topology-preserving state-variable filter
+instead (Zavalishin's, in Simper's form), whose states are its two
+integrators', as in the analog circuit, so a sweep only changes how fast they
+integrate. At any fixed cutoff it is the same bilinear transform of the same
+analog low-pass, just as true to it, and nothing is resampled. It runs a
+sample at a time, so a sweep lasts at most a second, at the internal rate
+about 0.4 s of rendering. Two samples after the last knot, its outputs obey
+the static biquad's difference equation exactly, so the biquad takes over
+from its last two inputs and outputs, vectorized, for the rest of the kick:
+the sweep costs what it lasts, never what the kick does.
 
 ![The EQ's shelves at four gains and its bell at three widths, as they respond at the internal rate](figures/eq.svg)
 
