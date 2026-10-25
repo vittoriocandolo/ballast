@@ -21,7 +21,6 @@ import csv
 import hashlib
 import io
 import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -87,7 +86,7 @@ def gates(kick: Kick) -> list[str]:
     if r.true_peak > 1.0:
         problems.append(f"true peak {render.db(r.true_peak):+.2f} dBTP, above 0 dBTP")
     for edge, sample in (("first", kick.audio[0]), ("last", kick.audio[-1])):
-        level = render.db(abs(float(sample))) if kick.audio.size else -math.inf
+        level = render.db(abs(float(sample)))  # a render always has samples: at least the decimator's tail
         if level > EDGE_DB:
             problems.append(f"{edge} sample at {level:.1f} dBFS, above {EDGE_DB:g} dBFS: it would click")
     return problems

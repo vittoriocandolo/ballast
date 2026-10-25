@@ -236,12 +236,6 @@ def clipped(y: NDArray[np.float64], threshold: float, knee_db: float) -> NDArray
     return out
 
 
-def clip(y: NDArray[np.float64], db: float, knee_db: float, base: int) -> NDArray[np.float64]:
-    """Clip the internal signal so that the file's true peak comes down by exactly db, and nothing below the knee."""
-    threshold = clip_threshold(y, db, knee_db, base)
-    return y if threshold is None else clipped(y, threshold, knee_db)
-
-
 def clip_threshold(y: NDArray[np.float64], db: float, knee_db: float, base: int) -> float | None:
     """Solve for the threshold that brings the file's true peak down by exactly db; None for silence.
 
@@ -298,7 +292,7 @@ def clip_threshold(y: NDArray[np.float64], db: float, knee_db: float, base: int)
     # one neper for one at first, and never more than four times the last step at once.
     u0 = math.log(peak / curve.ratio(db))
     u1 = u0 - miss(u0)
-    while (miss(u0) > 0) == (miss(u1) > 0):
+    while miss(u0) * miss(u1) > 0:  # a miss of exactly 0 ends the search: brentq returns it, even from [u, u]
         slope = (miss(u1) - miss(u0)) / (u1 - u0)
         step = -miss(u1) / slope if slope > 0 else -miss(u1)
         u0, u1 = u1, u1 + math.copysign(min(abs(step), 4 * abs(u1 - u0)), step)

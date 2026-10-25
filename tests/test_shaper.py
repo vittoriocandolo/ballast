@@ -140,7 +140,9 @@ def test_asymmetry_and_hard_clipping_alias_no_more_than_the_drive(base: int) -> 
     x = tone(hz, rate, 0.27)
     driven = shaper.apply(shaper.Tanh(drive_alpha(48.0), 0.5), x)
     assert worst_alias(hz, factor, base, driven) < WORST_ALIAS_DB
-    clipped = render.clip(x[2:-2], 12.0, 0.0, base)
+    threshold = render.clip_threshold(x[2:-2], 12.0, 0.0, base)
+    assert threshold is not None
+    clipped = render.clipped(x[2:-2], threshold, 0.0)
     assert worst_alias(hz, factor, base, clipped) < WORST_ALIAS_DB
 
 

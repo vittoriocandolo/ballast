@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from scipy.optimize import brentq
-from scipy.signal import upfirdn
 
 from . import family, noise, shaper
 from .curve import Curve
@@ -91,7 +90,7 @@ def place(t: Transient, rate: int) -> tuple[int, NDArray[np.float64]]:
     when the families match, the pitch is 1 and the start falls on a sample, and lagrange() between them otherwise.
     """
     base, internal, factor = family.rates(t.rate)
-    u: NDArray[np.float64] = upfirdn(factor * family.decimator(base), decode(t.samples).astype(float), up=factor)
+    u = family.interpolate(family.decimator(base), decode(t.samples).astype(float), factor)
     step = t.pitch * internal / rate
     start = t.start_ms * rate / 1000
     first = math.floor(start - 3 / step) + 1

@@ -80,7 +80,7 @@ def add(y: NDArray[np.float64], r: Room, seed: int, base: int, rate: int) -> NDA
     wet = family.interpolate(taps, fftconvolve(heard, impulse(seed, r.decay_ms, r.damping_hz, base)), factor)
     delay = round(r.predelay_ms * rate / 1000)
     reach = min(wet.size, y.size - delay)
-    kick, tail = math.fsum(y * y), math.fsum(wet[:reach] * wet[:reach])
+    kick, tail = float(np.sum(y * y)), float(np.sum(wet[:reach] * wet[:reach]))  # pairwise: within 1e-15
     if tail == 0.0:  # a silent kick leaves a silent room
         return y.copy()
     out = y.copy()
