@@ -2,8 +2,10 @@
 
 All notable changes to Ballast are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
-[Semantic Versioning](https://semver.org/). Within a version, renders are bit
-for bit the same; a change to the sound of an existing patch is a new version.
+[Semantic Versioning](https://semver.org/). Within a version, a patch renders
+the same samples bit for bit on one platform with the same NumPy and SciPy, and
+the same sound on any other, the same samples to within a millionth of full
+scale; a change to the sound of an existing patch is a new version.
 
 ## [0.1.0] - Unreleased
 

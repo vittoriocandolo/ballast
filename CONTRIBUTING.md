@@ -38,9 +38,12 @@ versions.
 
 - **Correct, simple, minimal, elegant, in that order.** A change that makes
   the code shorter but less obviously correct is not an improvement.
-- **Renders stay bit for bit the same.** A change to any rendered sample
-  changes the sound of existing patches. It needs a reason, a changelog entry
-  and a new version.
+- **Renders stay bit for bit the same.** On one platform with the same NumPy
+  and SciPy, a change to any rendered sample changes the sound of existing
+  patches. It needs a reason, a changelog entry, a new version and new
+  references (`uv run python tools/references.py --force`). Across platforms
+  and library versions, samples may differ by rounding, which is no change:
+  the references allow a millionth of full scale.
 - **Patches have no defaults.** A new field means a new schema version, and
   older schemas keep rendering exactly as before.
 - **Seeds and names are forever.** The keys that seed the noise, the dither,
@@ -50,7 +53,8 @@ versions.
   takes a new key.
 - **Every behavior has a test,** written as a property that holds on every
   platform, such as "rendering in blocks never changes a sample", rather than
-  as a stored hash of a render.
+  as a stored hash of a render, which rounding would break. The one stored
+  reference, samples of every preset, allows for rounding.
 - **Errors say where and what.** They name the file or the field path, and the
   problem.
 - **NumPy and SciPy are the only dependencies,** and `sounddevice` only for

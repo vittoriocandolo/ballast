@@ -52,7 +52,9 @@ patch.
   note exactly, whatever the sweep did before.
 - **Deterministic.** Every sample is a pure function of the patch and its
   time, and the filters ship as checksummed data. The same patch renders the
-  same samples, run after run.
+  same samples bit for bit, run after run, on one platform with the same NumPy
+  and SciPy, and the same sound on any other: only rounding can differ, under
+  a millionth of full scale, which the tests check on every platform.
 - **The patch travels with the sound.** Every WAV embeds its patch, and
   `ballast extract` gives it back byte for byte, comments included.
 - **Strict patches.** Every field is required and nothing is clamped. An

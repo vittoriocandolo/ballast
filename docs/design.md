@@ -477,10 +477,17 @@ time. Each WAV records the renderer version, the decimator checksum, the
 platform and the library versions next to the patch.
 
 Across platforms or library versions, the elementary functions (sine, tanh,
-logarithm, dilogarithm) and the FFT may round their last bit differently, so a
-few samples may differ at the level of rounding, far below audibility. The
-inputs that define the sound are exact and portable: the patch, the SHAKE-256
-bytes behind the noise and the dither, and the filter taps.
+logarithm, dilogarithm) and the FFT may round their last bit differently, so
+samples may differ at the level of rounding. One solved value can carry that
+further: the clipper's threshold settles within its tolerance, 10⁻⁸ of
+itself, so a clipped kick may differ by up to that, 160 dB down, under the
+smallest step of a 24-bit file. Making every platform agree to the bit would
+take correctly rounded elementary functions of Ballast's own and fixed sums
+throughout, slower and with nothing to hear. Instead, the tests compare
+samples of every preset, at both base rates, with stored references, within a
+millionth of full scale, on every platform CI runs. The inputs that define the
+sound are exact and portable: the patch, the SHAKE-256 bytes behind the noise,
+the room, the variations, the repeats and the dither, and the filter taps.
 
 ## Audition
 
