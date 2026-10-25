@@ -74,8 +74,8 @@ def test_an_exported_render_carries_its_patch_and_root_note(tmp_path: Path, tigh
     bits = 24
     text = tight_text.replace("seed = 1", "seed = 1  # my favourite kick")  # the text is kept as written
     p = patch.loads(text)
-    audio, _ = render.render(p, bits)
-    render.export(tmp_path / "kick.wav", p, text, audio, bits)
+    audio, report = render.render(p, bits)
+    render.export(tmp_path / "kick.wav", p, text, audio, report)
     found = wav.chunks(tmp_path / "kick.wav")
     meta = json.loads(found[wav.PRIVATE])
     assert meta["patch"] == text

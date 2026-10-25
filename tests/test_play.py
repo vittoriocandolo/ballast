@@ -3,11 +3,14 @@
 
 """Playing: softer hits as [play] describes them, repeats drawn the same way in every version, and played kits."""
 
+import json
 import math
+from pathlib import Path
 
+import numpy as np
 import pytest
 
-from ballast_synth import pack, patch, play
+from ballast_synth import pack, patch, play, render, wav
 
 PLAY = patch.Play(-18.0, -6.0, 0.6, 0.5)
 DRAWS = (856659851727918938, [-0.6616851628848233, 0.5125035092305257, -0.9384975636726016, 0.17258370779338672])
@@ -109,3 +112,23 @@ def test_a_kit_refuses_hits_that_no_patch_can_hold(played: patch.Patch) -> None:
     with pytest.raises(patch.PatchError) as caught:
         pack.kicks([("kick", "", soft)], [], 24, 3, 1)
     assert caught.value.problems == ["kick-A1-v1.wav: attack.level_db: -80 is outside -60 … 24 (or -inf)"]
+
+
+def test_every_hit_of_a_kit_renders_again_from_what_its_file_records(played: patch.Patch, tmp_path: Path) -> None:
+    """Pack a clipped kit, and render each hit again from its WAV's patch and chain: the very samples written.
+
+    The patch alone renders a kick of its own, and a kick packed on its own records no chain.
+    """
+    clipped = patch.edit(played, "clip.db", 3.0)
+    kicks = pack.kicks([("kick", patch.dumps(clipped), clipped)], [], None, 3, 2)
+    pack.write(tmp_path, kicks, None)
+    for k in kicks:
+        meta = json.loads(wav.chunks(tmp_path / k.path)[wav.PRIVATE])
+        hit, chain = patch.loads(meta["patch"]), render.Chain(meta["kit"]["clip_threshold"], meta["kit"]["gain"])
+        written = wav.read(tmp_path / k.path)[1][:, 0]
+        assert np.array_equal(render.render(hit, None, chain)[0], written)
+    soft = kicks[0]
+    assert not np.array_equal(render.render(soft.patch)[0], soft.audio)
+    single = pack.kicks([("kick", patch.dumps(clipped), clipped)], [], None)
+    pack.write(tmp_path / "single", single, None)
+    assert "kit" not in json.loads(wav.chunks(tmp_path / "single" / single[0].path)[wav.PRIVATE])

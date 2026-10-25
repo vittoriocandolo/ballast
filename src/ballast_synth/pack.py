@@ -145,10 +145,10 @@ def _kit(p: Patch, stem: str, bits: int | None, layers: int, robins: int) -> lis
         s = hardest if hit is p else render.synthesized(hit, hardest.threshold)
         hits.append((path, hit, s, velocity, robin))
     ceiling = render.ceiling_of(bits)
-    gain = min(render.output_gain(s, p.output, ceiling) for _, _, s, _, _ in hits)
+    chain = render.Chain(hardest.threshold, min(render.output_gain(s, p.output, ceiling) for _, _, s, _, _ in hits))
     kicks = []
     for path, hit, s, velocity, robin in hits:
-        audio, report = render.finish(hit, s, bits, gain, solved=False)
+        audio, report = render.finish(hit, s, bits, chain)
         kicks.append(Kick(path, hit, dumps(hit), audio, report, velocity, robin, stem))
     return kicks
 
@@ -160,7 +160,7 @@ def write(folder: str | Path, items: list[Kick], bits: int | None) -> None:
     for k in items:
         target = root / k.path
         target.parent.mkdir(parents=True, exist_ok=True)
-        render.export(target, k.patch, k.text, k.audio, bits)
+        render.export(target, k.patch, k.text, k.audio, k.report)
         patch_path = Path(k.path).with_suffix(".toml").as_posix()
         wav.save(root / patch_path, k.text.encode("utf-8"))
         r = k.report

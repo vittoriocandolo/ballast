@@ -443,6 +443,12 @@ The output gain is the smallest any hit needs, so the kit's loudest hit,
 whichever it is, sits at the target, and every other keeps its level against
 it.
 
+A hit's patch alone therefore renders a kick of its own, clipped and
+normalized for itself. So each hit's WAV records its kit's chain beside its
+patch, the clipper's threshold and the output gain, exactly, and
+`render.render(hit, bits, chain)` plays the patch through them: the same
+samples `ballast pack` wrote.
+
 ## The output stage
 
 In `gain` mode the output is multiplied by 10^(db/20). In `peak` mode it is

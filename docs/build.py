@@ -1746,9 +1746,9 @@ def main() -> None:
     audio.mkdir(exist_ok=True)
     wavfile.write(audio / "click.wav", RATE, click(RATE).astype(np.float32))  # a WAV from elsewhere, to layer
     drummed = kick("drum", patch.dumps(drum(kicks["tight"].p)))
-    render.export(audio / "drum.wav", drummed.p, drummed.text, drummed.audio, 16)
+    render.export(audio / "drum.wav", drummed.p, drummed.text, drummed.audio, drummed.report)
     for k in [*kicks.values(), *(k for _, k in moves[1:])]:
-        render.export(audio / f"{k.name}.wav", k.p, k.text, k.audio, 16)
+        render.export(audio / f"{k.name}.wav", k.p, k.text, k.audio, k.report)
         summary = str(k.report).replace("\n", " | ")
         sys.stdout.write(f"{k.name}: {summary}\n")
     tight = kicks["tight"].p

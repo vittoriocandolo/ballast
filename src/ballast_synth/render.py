@@ -389,6 +389,13 @@ def row(label: str, text: str) -> str:
     return f"{label:<9}{text}"
 
 
+class Chain(NamedTuple):
+    """The chain the hits of a played kit share: its clipper's threshold, set by its hardest hit, and its gain."""
+
+    threshold: float | None  # None when no threshold was solved: no clipper, or a silent hardest hit
+    gain: float
+
+
 @dataclass(frozen=True)
 class Report:
     """What a render made, as `ballast render` reports it."""
@@ -406,6 +413,12 @@ class Report:
     gain: float  # the output gain it was scaled by
     threshold: float | None  # the clipper's threshold, when it clips
     render_s: float
+    kit: bool  # a hit of a played kit, through the clipper and the gain its kit's hits share
+
+    @property
+    def chain(self) -> Chain | None:
+        """The chain a hit of a played kit shares with its kit, which its WAV records; None for a kick on its own."""
+        return Chain(self.threshold, self.gain) if self.kit else None
 
     @property
     def over_db(self) -> float:
@@ -446,25 +459,22 @@ def ceiling_of(bits: int | None) -> float:
     return 1.0 if bits is None else 1.0 - 2.0 ** (2 - bits)
 
 
-def render(p: Patch, bits: int | None = None) -> tuple[NDArray[np.float32], Report]:
-    """Render the float32 audio and its report, for export as float32 or, with `bits`, as PCM of that depth."""
-    s = synthesized(p)
-    return finish(p, s, bits, output_gain(s, p.output, ceiling_of(bits)), solved=True)
+def render(p: Patch, bits: int | None = None, chain: Chain | None = None) -> tuple[NDArray[np.float32], Report]:
+    """Render the float32 audio and its report, for export as float32 or, with `bits`, as PCM of that depth.
+
+    With `chain`, render a hit of a played kit as the kit plays it, through the clipper and the gain its hits
+    share, which its WAV records: the same samples `ballast pack` wrote.
+    """
+    return finish(p, synthesized(p, None if chain is None else chain.threshold), bits, chain)
 
 
-def finish(
-    p: Patch,
-    s: Synthesis,
-    bits: int | None,
-    gain: float,
-    *,
-    solved: bool,
-) -> tuple[NDArray[np.float32], Report]:
-    """Scale a synthesized kick by `gain`, and report it; `solved` when the gain is its own output stage's.
+def finish(p: Patch, s: Synthesis, bits: int | None, chain: Chain | None = None) -> tuple[NDArray[np.float32], Report]:
+    """Scale a synthesized kick by its output stage's gain, or by its kit's `chain`, and report it.
 
-    A gain set for another kick, as for the hits of a played kit, reports an over in any output mode.
+    A hit of a played kit takes a gain set for its loudest hit, so it reports an over in any output mode.
     """
     ceiling = ceiling_of(bits)
+    gain = output_gain(s, p.output, ceiling) if chain is None else chain.gain
     audio = output_stage(s.signal, gain, p.output.polarity)
     peak = float(np.max(np.abs(audio), initial=0.0))
     return audio, Report(
@@ -477,10 +487,11 @@ def finish(
         true_peak=max(gain * s.true_peak, peak),  # the float32 rounding of the samples aside
         loudness=loudness(audio, p.output.sample_rate),
         ceiling=ceiling,
-        over=(p.output.mode == "gain" or not solved) and peak > ceiling,
+        over=(p.output.mode == "gain" or chain is not None) and peak > ceiling,
         gain=gain,
         threshold=s.threshold,
         render_s=time.perf_counter() - s.start,
+        kit=chain is not None,
     )
 
 
@@ -500,9 +511,14 @@ def export(
     p: Patch,
     text: str,
     audio: NDArray[np.float32],
-    bits: int | None = None,
+    report: Report,
 ) -> None:
-    """Write the WAV, as float32 or dithered PCM, with its root note, the patch text and provenance."""
+    """Write the audio rendered with `report`, in its format, with its root note, the patch text and provenance.
+
+    The format is the report's, float32 or dithered PCM, which the render's ceiling was set for. A hit of a played
+    kit records the chain its kit shares, without which its patch alone does not render it.
+    """
+    bits, chain = report.bits, report.chain
     base, rate, factor = rates(p.output.sample_rate)
     meta: dict[str, object] = {
         "patch": text,
@@ -513,6 +529,8 @@ def export(
         "numpy": np.__version__,
         "scipy": scipy.__version__,
     }
+    if chain is not None:
+        meta["kit"] = {"clip_threshold": chain.threshold, "gain": chain.gain}  # exact: JSON keeps every bit
     samples: NDArray[np.float32] | NDArray[np.int32] = audio
     if bits is not None:
         meta["pcm"] = {

@@ -258,7 +258,9 @@ audio it holds:
   a semitone off;
 - a `blst` chunk with JSON: the patch text, the renderer version, the
   decimator's checksum and rates, the platform and the Python, NumPy and SciPy
-  versions, and for PCM the dither's bit depth, key and seed.
+  versions, for PCM the dither's bit depth, key and seed, and for a hit of a
+  played kit, under `kit`, the clipper threshold and the gain its kit's hits
+  share, without which its patch alone renders a kick of its own.
 
 Readers skip chunks they do not know.
 
@@ -504,9 +506,24 @@ kick = patch.edit(kick, "body.tune_hz", patch.parse_tune("G1"))
 audio, report = render.render(kick, 24)  # float32 at kick.output.sample_rate
 print(report)
 if not report.over:
-    render.export("kick-g1.wav", kick, patch.dumps(kick), audio, 24)
+    render.export("kick-g1.wav", kick, patch.dumps(kick), audio, report)
 ```
 
 `render.render` returns the audio as a float32 NumPy array and a report;
-`render.export` writes it, as float32 when `bits` is `None` and as dithered
-PCM otherwise, with the patch text embedded.
+`render.export` writes it in the format it was rendered for, as float32 when
+`bits` is `None` and as dithered PCM otherwise, with the patch text embedded.
+
+A hit of a played kit renders again from what its WAV records, its patch and
+its kit's chain:
+
+```python
+import json
+
+from ballast_synth import patch, render, wav
+
+meta = json.loads(wav.chunks("kit/kick-A1-v1-rr1.wav")[wav.PRIVATE])
+chain = render.Chain(meta["kit"]["clip_threshold"], meta["kit"]["gain"])
+hit = patch.loads(meta["patch"])
+audio, report = render.render(hit, 24, chain)  # for pack's default format, 24-bit PCM
+render.export("again.wav", hit, meta["patch"], audio, report)  # the same samples as the kit's file
+```

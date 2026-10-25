@@ -62,7 +62,8 @@ The first public release.
   manifest, refused whole unless every kick passes its gates.
 - Played kits: `[play]` says how a kick sounds hit softer and how much each
   repeat differs, and `ballast pack --velocities --round-robins` renders the
-  layers and repeats through one chain, with an SFZ map.
+  layers and repeats through one chain, with an SFZ map; each hit's WAV
+  records that chain, so its patch renders it again exactly.
 - The `ballast` command: `init` from the presets, `tune`, `stretch`,
   `transient`, `vary`, `render`, `pack`, `multisample` for one sample per key
   with an SFZ map, `audition` with live re-rendering, tempo, a bed and dropout

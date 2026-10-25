@@ -204,7 +204,7 @@ def cmd_render(a: argparse.Namespace) -> None:
         )
         raise CliError(msg, 1)
     try:
-        export(a.out, p, text, audio, bits)
+        export(a.out, p, text, audio, report)
     except OSError as e:
         raise _os_error(a.out, e) from None
     sys.stdout.write(f"wrote {a.out}\n")
@@ -244,7 +244,7 @@ def cmd_multisample(a: argparse.Namespace) -> None:
         folder.mkdir(parents=True, exist_ok=True)
         for n, tuned, audio, report in kicks:
             name = f"{stem}-{note_name(n)}.wav"
-            export(folder / name, tuned, dumps(tuned), audio, bits)
+            export(folder / name, tuned, dumps(tuned), audio, report)
             sys.stdout.write(
                 f"{note_name(n):<4} {report.tune_hz:9.3f} Hz   peak {db(report.peak):6.2f} dBFS   {name}\n",
             )
