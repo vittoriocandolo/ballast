@@ -262,6 +262,32 @@ audio it holds:
 
 Readers skip chunks they do not know.
 
+### Playing kits and multisamples
+
+Each WAV works on its own: drop it on a DAW's drum pad or sampler, which
+reads its root key from the `smpl` chunk. The SFZ maps that `pack` and
+`multisample` write play a whole set as one instrument, in any SFZ player,
+such as the free sfizz or Sforzando, loaded on an instrument track. A map
+names its samples by file name, so keep it in the folder beside them, as
+Ballast writes it.
+
+- **A played kit** sits on key 36, General MIDI's bass drum, where drum
+  patterns and pad controllers expect the kick. Ballast calls it C2, as
+  scientific pitch does, with middle C, key 60, as C4; DAWs that call middle
+  C C3, such as Ableton Live, Cubase and Logic Pro, call it C1. How hard you
+  play picks the layer, the velocities 1 to 127 split evenly among the
+  layers, softest first. The levels are in the samples, so the map turns off
+  the player's own velocity scaling, `amp_veltrack=0`: a soft hit is the
+  kick played softer, cleaner, with less click and punch, not a quieter copy
+  of the hardest one. Within a layer, each hit takes the next repeat in
+  turn, so a steady pattern never plays one file twice in a row.
+- **A multisample** puts each note's own render on its key, at its root, so
+  nothing is transposed and every note keeps its length and character: play
+  it from a MIDI clip as a bassline. The map leaves polyphony to the player,
+  so overlapping notes ring together; for an 808 line in which each note cuts
+  off the last, write the notes so that they do not overlap, or limit the
+  player to one voice.
+
 ## Audition
 
 `ballast audition` plays the exact buffer `ballast render` would write, at the

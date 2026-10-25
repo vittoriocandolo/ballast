@@ -133,8 +133,8 @@ wrote kick.wav
 
 ## Documentation
 
-- [Usage](docs/usage.md): the commands, rendering for DAWs and samplers,
-  audition, designing a kick, and the Python API.
+- [Usage](docs/usage.md): the commands, rendering for DAWs and samplers and
+  playing kits in them, audition, designing a kick, and the Python API.
 - [Presets](docs/presets.md): every preset, with its sound, curves, spectrum
   and patch.
 - [Patch reference](docs/patch.md): every field, its range and what it does.
