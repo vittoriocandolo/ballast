@@ -149,14 +149,13 @@ the same patches always make the same kit.
 `--velocities` and `--round-robins` play each patch as a drum, for patches
 with a `[play]` section: N velocity layers, softest to hardest, each in M
 repeats, named such as `house-A1-v2-rr3.wav`, and an SFZ map per patch, such
-as `house-A1.sfz`, on key 36, General MIDI's bass drum, whose groups split
-the velocities among the layers and whose regions take the repeats in turn.
-The levels are in the samples, so the map tells the sampler not to scale
-them again, and every hit is a one-shot: it plays out whatever the note's
-length, so a short note never cuts the kick. The hits of a kit go through one chain, as a drum's do: its
-hardest hit sets the clipper's threshold, and its loudest hit, whichever it
-is, sets the gain they all share, so a soft hit stays soft after the output
-stage and every repeat keeps its own small difference.
+as `house-A1.sfz`, on key 36, General MIDI's bass drum, whose groups place
+the layers on a square law of velocity and whose regions take the repeats in
+turn, and every hit is a one-shot: it plays out whatever the note's length,
+so a short note never cuts the kick. The hits of a kit go through one chain,
+as a drum's do: its hardest hit sets the clipper's threshold, and its loudest
+hit, whichever it is, sets the gain they all share, so a soft hit stays soft
+after the output stage and every repeat keeps its own small difference.
 
 ![The house preset played in three velocity layers, and two repeats of its hardest hit](figures/play.svg)
 
@@ -292,11 +291,15 @@ them, as Ballast writes it.
   patterns and pad controllers expect the kick. Ballast calls it C2, as
   scientific pitch does, with middle C, key 60, as C4; DAWs that call middle
   C C3, such as Ableton Live, Cubase and Logic Pro, call it C1. How hard you
-  play picks the layer, the velocities 1 to 127 split evenly among the
-  layers, softest first. The levels are in the samples, so the map turns off
-  the player's own velocity scaling, `amp_veltrack=0`: a soft hit is the
-  kick played softer, cleaner, with less click and punch, not a quieter copy
-  of the hardest one. Within a layer, each hit takes the next repeat in
+  play picks the layer, and the level follows a square law, 40·log₁₀(v/127)
+  dB, as Halyard's and Brightwork's kits do: each layer sits at the velocity
+  where the law reaches its loudness against the loudest, neighbours meet
+  halfway in dB, and the map adds a curve at every velocity of a layer, so
+  the kick grows quieter smoothly, across the layers' boundaries too. The
+  hits keep their own sound as played: a soft hit is the kick played softer,
+  cleaner, with less click and punch, not a quieter copy of the hardest one.
+  A kit whose layers do not grow louder from each to the next is refused,
+  with what to change. Within a layer, each hit takes the next repeat in
   turn, so a steady pattern never plays one file twice in a row.
 - **A multisample** puts each note's own render on its key, at its root, so
   nothing is transposed and every note keeps its length and character: play

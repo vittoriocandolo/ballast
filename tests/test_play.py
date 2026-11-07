@@ -3,6 +3,7 @@
 
 """Playing: softer hits as [play] describes them, repeats drawn the same way in every version, and played kits."""
 
+import itertools
 import json
 import math
 from pathlib import Path
@@ -21,6 +22,10 @@ LAYER_RANGE_DB = 6.0  # how much quieter the softest of three layers is, at leas
 def played(tight: patch.Patch) -> patch.Patch:
     """Return the tight preset with a [play] section."""
     return patch.edit(tight, "play", PLAY)
+
+
+MAX_VELOCITY = 127
+CURVE_DB = 1e-4  # the curve is written to 9 decimals
 
 
 def test_the_hardest_hit_is_the_patch_and_the_softest_loses_what_play_says(played: patch.Patch) -> None:
@@ -79,7 +84,10 @@ def test_a_kit_needs_play_and_its_hits_share_one_chain(played: patch.Patch, tigh
     clipped = patch.edit(played, "clip.db", 3.0)
     kit = pack.kicks([("kick", "", clipped)], [], 24, 3, 2)
     assert [k.path for k in kit] == [f"kick-A1-v{j}-rr{k}.wav" for j in (1, 2, 3) for k in (1, 2)]
-    assert [k.velocity for k in kit[::2]] == [(1, 42), (43, 84), (85, 127)]
+    ranges = [k.velocity for k in kit[::2]]
+    assert ranges[0][0] == 1
+    assert ranges[-1][1] == MAX_VELOCITY
+    assert all(b[0] == a[1] + 1 for a, b in itertools.pairwise(ranges))  # softest first, every velocity once
     assert len({k.report.gain for k in kit}) == 1
     assert len({k.report.threshold for k in kit}) == 1
     assert max(k.report.true_peak for k in kit) == pytest.approx(10 ** (-1 / 20), rel=1e-6)
@@ -89,15 +97,43 @@ def test_a_kit_needs_play_and_its_hits_share_one_chain(played: patch.Patch, tigh
 def test_a_kit_maps_its_layers_and_repeats_for_samplers(played: patch.Patch) -> None:
     """Map a kit of two layers and two repeats: a group per layer on the drum key, one-shot, its repeats in turn."""
     kit = pack.kicks([("kick", "", played)], [], 24, 2, 2)
-    assert pack.sfz("kick-A1", kit).splitlines() == [
-        "// kick-A1: 2 velocity layers, 2 round robins, on key 36",
-        "<group> key=36 lovel=1 hivel=63 amp_veltrack=0 loop_mode=one_shot seq_length=2",
-        "<region> sample=kick-A1-v1-rr1.wav seq_position=1",
-        "<region> sample=kick-A1-v1-rr2.wav seq_position=2",
-        "<group> key=36 lovel=64 hivel=127 amp_veltrack=0 loop_mode=one_shot seq_length=2",
-        "<region> sample=kick-A1-v2-rr1.wav seq_position=1",
-        "<region> sample=kick-A1-v2-rr2.wav seq_position=2",
-    ]
+    lines = pack.sfz("kick-A1", kit).splitlines()
+    assert lines[0] == "// kick-A1: 2 velocity layers, 2 round robins, on key 36"
+    groups = [line for line in lines if line.startswith("<group>")]
+    assert len(groups) == len({k.velocity for k in kit})
+    assert all("key=36 " in g and "amp_veltrack=100" in g and "loop_mode=one_shot seq_length=2" in g for g in groups)
+    regions = [line for line in lines if line.startswith("<region>")]
+    assert regions == [f"<region> sample={k.path} seq_position={k.robin}" for k in kit]
+
+
+def test_the_kit_follows_the_square_law_at_every_velocity(played: patch.Patch) -> None:
+    """Find each velocity's level, its layer's loudness plus the group's volume and curve, on 40·log10(v/127) dB."""
+    kit = pack.kicks([("kick", "", played)], [], 24, 3, 2)
+    loudness = pack.layer_loudness(kit)
+    lines = pack.sfz("kick-A1", kit).splitlines()
+    levels: dict[int, float] = {}
+    volume, layer = 0.0, -1
+    for line in lines:
+        if line.startswith("<group>"):
+            layer += 1
+            volume = float(next(w for w in line.split() if w.startswith("volume=")).split("=")[1])
+        elif line.startswith("amp_velcurve_"):
+            name, value = line.split("=")
+            levels[int(name.removeprefix("amp_velcurve_"))] = loudness[layer] + volume + 20 * math.log10(float(value))
+    assert sorted(levels) == list(range(1, MAX_VELOCITY + 1))
+    for v, level in levels.items():
+        assert level == pytest.approx(40 * math.log10(v / MAX_VELOCITY), abs=CURVE_DB)
+
+
+def test_layers_sit_on_the_square_law_or_are_refused() -> None:
+    """Place layers where the law reaches their loudness, meeting halfway; refuse layers that do not grow louder."""
+    assert pack.velocities([-12.0, -6.0, 0.0]) == [(1, 75), (76, 106), (107, 127)]  # at 63.6, 89.9 and 127
+    assert pack.velocities([0.0]) == [(1, 127)]
+    with pytest.raises(ValueError, match="layers 1 and 2 are too close in loudness"):
+        pack.velocities([-3.0, -3.0, 0.0])
+    volume, gains = pack.curve(-6.0, 76, 106)
+    assert max(gains) == 1.0
+    assert volume + 20 * math.log10(gains[0]) == pytest.approx(40 * math.log10(76 / 127) + 6.0)
 
 
 def test_a_spread_of_zero_repeats_the_hit_exactly(played: patch.Patch) -> None:

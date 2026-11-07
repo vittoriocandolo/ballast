@@ -18,9 +18,12 @@ or stops.
 from __future__ import annotations
 
 import csv
+import dataclasses
 import hashlib
 import io
+import itertools
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -69,6 +72,7 @@ class Kick:
     velocity: tuple[int, int] = (1, 127)  # the MIDI velocities it plays at
     robin: int = 1  # which repeat of its hit it is, from 1
     kit: str = ""  # the played kit it belongs to, as the path of its SFZ map without ".sfz", or "" for none
+    layer: int = 0  # which velocity layer it is, from 0, the softest
 
 
 def label(hz: float) -> str:
@@ -92,9 +96,48 @@ def gates(kick: Kick) -> list[str]:
     return problems
 
 
-def velocities(layers: int) -> list[tuple[int, int]]:
-    """Split the MIDI velocities 1 … 127 among `layers`, softest first."""
-    return [(127 * j // layers + 1, 127 * (j + 1) // layers) for j in range(layers)]
+def velocities(relative_db: list[float]) -> list[tuple[int, int]]:
+    """Return each layer's MIDI velocities, softest first, from its loudness against the loudest, in dB.
+
+    Velocity follows a square law, 40·log₁₀(v/127) dB, as Halyard's and
+    Brightwork's kits do: a layer sits at the velocity where the law reaches its
+    loudness, and neighbours meet halfway in dB, at the geometric mean of their
+    velocities. Layers whose loudness does not rise from each to the next cannot
+    share the velocities so, and are refused.
+    """
+    natural = [127 * 10 ** (d / 40) for d in relative_db]
+    bounds = [0.0, *(math.sqrt(a * b) for a, b in itertools.pairwise(natural)), 127.0]
+    ranges = [(math.floor(bounds[j]) + 1, math.floor(bounds[j + 1])) for j in range(len(natural))]
+    for j, (low, high) in enumerate(ranges):
+        if low > high or (j and not natural[j] > natural[j - 1]):
+            msg = (
+                f"layers {j} and {j + 1} are too close in loudness to get velocities of their own: "
+                "lower [play] soft_db, or play fewer layers"
+            )
+            raise ValueError(msg)
+    return ranges
+
+
+def curve(relative_db: float, low: int, high: int) -> tuple[float, list[float]]:
+    """Return the volume in dB and the amplitude at each velocity low … high that put a layer on the square law.
+
+    At velocity v the level should be 40·log₁₀(v/127) dB, and the layer's own is
+    relative_db, so its gain is (v/127)² / 10^(relative_db/20); the curve is that
+    over its largest value, which becomes the group's volume.
+    """
+    gains = [(v / 127) ** 2 / 10 ** (relative_db / 20) for v in range(low, high + 1)]
+    top = max(gains)
+    return 20 * math.log10(top), [g / top for g in gains]
+
+
+def layer_loudness(items: list[Kick]) -> dict[int, float]:
+    """Return each layer's loudness against the kit's loudest layer, in dB, by its index: the mean of its repeats."""
+    by_layer: dict[int, list[float]] = {}
+    for k in items:
+        by_layer.setdefault(k.layer, []).append(k.report.loudness)
+    mean = {j: sum(v) / len(v) for j, v in by_layer.items()}
+    top = max(mean.values())
+    return {j: m - top for j, m in mean.items()}
 
 
 def kicks(
@@ -129,28 +172,31 @@ def kicks(
 def _kit(p: Patch, stem: str, bits: int | None, layers: int, robins: int) -> list[Kick]:
     """Render every layer and repeat of a played patch through one chain, its loudest hit at the patch's level."""
     played, problems = [], []  # every hit is made before any renders, so that every problem is listed at once
-    for j, velocity in enumerate(velocities(layers)):
+    for j in range(layers):
         x = j / (layers - 1) if layers > 1 else 1.0
         for k in range(robins):
             path = f"{stem}{f'-v{j + 1}' if layers > 1 else ''}{f'-rr{k + 1}' if robins > 1 else ''}.wav"
             try:
-                played.append((path, play.again(play.softer(p, x), k), velocity, k + 1))
+                played.append((path, play.again(play.softer(p, x), k), j, k + 1))
             except PatchError as e:
                 problems += [f"{path}: {problem}" for problem in e.problems]
     if problems:
         raise PatchError(problems)
     hardest = render.synthesized(p)  # the kit's clipper, set by its hardest hit
     hits = []
-    for path, hit, velocity, robin in played:
+    for path, hit, layer, robin in played:
         s = hardest if hit is p else render.synthesized(hit, hardest.threshold)
-        hits.append((path, hit, s, velocity, robin))
+        hits.append((path, hit, s, layer, robin))
     ceiling = render.ceiling_of(bits)
     chain = render.Chain(hardest.threshold, min(render.output_gain(s, p.output, ceiling) for _, _, s, _, _ in hits))
     kicks = []
-    for path, hit, s, velocity, robin in hits:
+    for path, hit, s, layer, robin in hits:
         audio, report = render.finish(hit, s, bits, chain)
-        kicks.append(Kick(path, hit, dumps(hit), audio, report, velocity, robin, stem))
-    return kicks
+        kicks.append(Kick(path, hit, dumps(hit), audio, report, (1, 127), robin, stem, layer))
+    # Each layer's velocities follow from how loud its hits came out, on the square law.
+    loudness = layer_loudness(kicks)
+    ranges = velocities([loudness[j] for j in range(layers)])
+    return [dataclasses.replace(k, velocity=ranges[k.layer]) for k in kicks]
 
 
 def write(folder: str | Path, items: list[Kick], bits: int | None) -> None:
@@ -195,15 +241,30 @@ def write(folder: str | Path, items: list[Kick], bits: int | None) -> None:
 
 
 def sfz(kit: str, items: list[Kick]) -> str:
-    """Map a played kit for samplers: a group per velocity layer on the drum key, its repeats in turn, as recorded."""
+    """Map a played kit for samplers: a group per velocity layer on the drum key, on the square law, repeats in turn.
+
+    Each group keeps its hits' own levels, as played, and adds an amplitude
+    curve at every velocity in its range, so the level follows 40·log₁₀(v/127)
+    dB across the layers' boundaries, as Halyard's and Brightwork's kits do. A
+    kick plays out whatever the note's length, as a drum machine's does.
+    """
     name = Path(kit).name
     robins = max(k.robin for k in items)
-    lines = [f"// {name}: {len({k.velocity for k in items})} velocity layers, {robins} round robins, on key {DRUM_KEY}"]
-    for low, high in dict.fromkeys(k.velocity for k in items):
-        # One-shot: a kick plays out whatever the note's length, as a drum machine's does.
+    loudness = layer_loudness(items)
+    lines = [
+        f"// {name}: {len(loudness)} velocity layers, {robins} round robins, on key {DRUM_KEY}",
+        "// Velocity follows a square law, 40·log10(v/127) dB, across layer boundaries.",
+    ]
+    for j in sorted(loudness):
+        layer = [k for k in items if k.layer == j]
+        low, high = layer[0].velocity
+        volume, gains = curve(loudness[j], low, high)
         lines.append(
-            f"<group> key={DRUM_KEY} lovel={low} hivel={high} amp_veltrack=0 loop_mode=one_shot seq_length={robins}",
+            f"<group> key={DRUM_KEY} lovel={low} hivel={high} amp_veltrack=100 volume={volume:.4f} "
+            f"loop_mode=one_shot seq_length={robins}",
         )
-        layer = [k for k in items if k.velocity == (low, high)]
+        lines += [
+            f"amp_velcurve_{v}={g:.9f}" for v, g in zip(range(low, high + 1), gains, strict=True)
+        ]  # 10⁻⁴ dB at v=1
         lines += [f"<region> sample={Path(k.path).name} seq_position={k.robin}" for k in layer]
     return "\n".join(lines) + "\n"
