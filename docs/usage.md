@@ -265,6 +265,19 @@ audio it holds:
 
 Readers skip chunks they do not know.
 
+### In a kit with Halyard and Brightwork
+
+Ballast's presets peak at −1 dBTP, as loud as a file may be. Halyard's snares
+and claps and Brightwork's hats and cymbals match their own references at a
+lower level, so that a snap or a crash never passes full scale, and dropped
+next to a preset they sit some 18 and 24 dB under the kick in a groove. For a
+working balance, set the kick's `output.db` to −10, 9 dB under the presets,
+and raise theirs as their guides say: in a groove at the genre's tempo, a
+snare or clap on two and four then reads 5 dB under the kick by loudness, the
+hats on the offbeats 10 dB under, and no file peaks above −1 dBFS. It was
+measured with the `house`, `tech-house` and `trance` presets; it is a starting
+balance, and your ears and the track decide the rest.
+
 ### Playing kits and multisamples
 
 Each WAV works on its own: drop it on a DAW's drum pad or sampler, which
