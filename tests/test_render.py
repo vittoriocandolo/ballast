@@ -275,6 +275,18 @@ def test_k_weighting_matches_the_table_of_bs_1770_at_48_khz() -> None:
     assert np.allclose(render.k_weighting(48000), table, rtol=0, atol=1e-10)
 
 
+@pytest.mark.parametrize("rate", [44100, 88200, 96000, 176400, 192000])
+def test_k_weighting_keeps_the_48_khz_response_at_every_rate(rate: int) -> None:
+    """Design the K-weighting at another rate and find the 48 kHz response within 0.01 dB from 20 Hz to 20 kHz."""
+    f = np.geomspace(20, 20000, 400)
+    ref = np.abs(sosfreqz(render.k_weighting(48000), worN=f, fs=48000)[1])
+    got = np.abs(sosfreqz(render.k_weighting(rate), worN=f, fs=rate)[1])
+    assert np.max(np.abs(20 * np.log10(got / ref))) < K_WEIGHTING_DB
+
+
+K_WEIGHTING_DB = 0.01  # every rate's K-weighting against the 48 kHz one
+
+
 @pytest.mark.parametrize("rate", [44100, 48000, 96000, 192000])
 def test_a_full_scale_sine_at_997_hz_is_minus_3_lufs(rate: int) -> None:
     """Measure a full-scale 997 Hz sine of 2 s: -3.01 LUFS, within the 0.1 LU EBU Tech 3341 allows, and silence."""

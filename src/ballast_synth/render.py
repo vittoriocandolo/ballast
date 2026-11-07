@@ -351,7 +351,10 @@ def k_weighting(rate: int) -> NDArray[np.float64]:
     """Design the K-weighting of ITU-R BS.1770 at `rate`, as two sections for sosfilt: a high shelf, then a high-pass.
 
     BS.1770 gives the coefficients at 48 kHz only. These come from the analog parameters behind them, prewarped at
-    each rate, so they match the standard's table at 48 kHz and keep its response at every other rate.
+    each rate, so they match the standard's table at 48 kHz and keep its response at every other rate. The
+    standard's high-pass has the numerator 1, −2, 1, whose passband gain, 1 + k/q + k², would drift with the rate,
+    by 0.032 dB from 48 to 192 kHz; the numerator is scaled to the 48 kHz gain, so a kick reads the same at every
+    rate.
     """
     k = math.tan(math.pi * 1681.974450955533 / rate)
     q = 0.7071752369554196
@@ -360,10 +363,12 @@ def k_weighting(rate: int) -> NDArray[np.float64]:
     a0 = 1 + k / q + k * k
     shelf = [(high + mid * k / q + k * k) / a0, 2 * (k * k - high) / a0, (high - mid * k / q + k * k) / a0]
     shelf += [1.0, 2 * (k * k - 1) / a0, (1 - k / q + k * k) / a0]
-    k = math.tan(math.pi * 38.13547087602444 / rate)
     q = 0.5003270373238773
+    k48 = math.tan(math.pi * 38.13547087602444 / 48000)
+    k = math.tan(math.pi * 38.13547087602444 / rate)
     a0 = 1 + k / q + k * k
-    return np.array([shelf, [1.0, -2.0, 1.0, 1.0, 2 * (k * k - 1) / a0, (1 - k / q + k * k) / a0]])
+    g = (1 + k48 / q + k48 * k48) / a0  # the high-pass's passband gain is a0, held at 48 kHz's
+    return np.array([shelf, [g, -2 * g, g, 1.0, 2 * (k * k - 1) / a0, (1 - k / q + k * k) / a0]])
 
 
 def loudness(audio: NDArray[np.floating[Any]], rate: int) -> float:
