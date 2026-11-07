@@ -152,7 +152,8 @@ repeats, named such as `house-A1-v2-rr3.wav`, and an SFZ map per patch, such
 as `house-A1.sfz`, on key 36, General MIDI's bass drum, whose groups split
 the velocities among the layers and whose regions take the repeats in turn.
 The levels are in the samples, so the map tells the sampler not to scale
-them again. The hits of a kit go through one chain, as a drum's do: its
+them again, and every hit is a one-shot: it plays out whatever the note's
+length, so a short note never cuts the kick. The hits of a kit go through one chain, as a drum's do: its
 hardest hit sets the clipper's threshold, and its loudest hit, whichever it
 is, sets the gain they all share, so a soft hit stays soft after the output
 stage and every repeat keeps its own small difference.

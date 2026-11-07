@@ -200,7 +200,10 @@ def sfz(kit: str, items: list[Kick]) -> str:
     robins = max(k.robin for k in items)
     lines = [f"// {name}: {len({k.velocity for k in items})} velocity layers, {robins} round robins, on key {DRUM_KEY}"]
     for low, high in dict.fromkeys(k.velocity for k in items):
-        lines.append(f"<group> key={DRUM_KEY} lovel={low} hivel={high} amp_veltrack=0 seq_length={robins}")
+        # One-shot: a kick plays out whatever the note's length, as a drum machine's does.
+        lines.append(
+            f"<group> key={DRUM_KEY} lovel={low} hivel={high} amp_veltrack=0 loop_mode=one_shot seq_length={robins}",
+        )
         layer = [k for k in items if k.velocity == (low, high)]
         lines += [f"<region> sample={Path(k.path).name} seq_position={k.robin}" for k in layer]
     return "\n".join(lines) + "\n"

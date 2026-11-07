@@ -87,14 +87,14 @@ def test_a_kit_needs_play_and_its_hits_share_one_chain(played: patch.Patch, tigh
 
 
 def test_a_kit_maps_its_layers_and_repeats_for_samplers(played: patch.Patch) -> None:
-    """Map a kit of two layers and two repeats: a group per layer on the drum key, its repeats in turn."""
+    """Map a kit of two layers and two repeats: a group per layer on the drum key, one-shot, its repeats in turn."""
     kit = pack.kicks([("kick", "", played)], [], 24, 2, 2)
     assert pack.sfz("kick-A1", kit).splitlines() == [
         "// kick-A1: 2 velocity layers, 2 round robins, on key 36",
-        "<group> key=36 lovel=1 hivel=63 amp_veltrack=0 seq_length=2",
+        "<group> key=36 lovel=1 hivel=63 amp_veltrack=0 loop_mode=one_shot seq_length=2",
         "<region> sample=kick-A1-v1-rr1.wav seq_position=1",
         "<region> sample=kick-A1-v1-rr2.wav seq_position=2",
-        "<group> key=36 lovel=64 hivel=127 amp_veltrack=0 seq_length=2",
+        "<group> key=36 lovel=64 hivel=127 amp_veltrack=0 loop_mode=one_shot seq_length=2",
         "<region> sample=kick-A1-v2-rr1.wav seq_position=1",
         "<region> sample=kick-A1-v2-rr2.wav seq_position=2",
     ]
