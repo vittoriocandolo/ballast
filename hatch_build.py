@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 from hatchling.metadata.plugin.interface import MetadataHookInterface
 
@@ -15,6 +15,7 @@ from hatchling.metadata.plugin.interface import MetadataHookInterface
 class ReadmeHook(MetadataHookInterface):
     """Fill the dynamic readme: README.md, with its links pointing at the repository at tag v<version>."""
 
+    @override
     def update(self, metadata: dict[str, Any]) -> None:
         """Set the readme from README.md and [project.urls] Repository."""
         root = Path(self.root)
