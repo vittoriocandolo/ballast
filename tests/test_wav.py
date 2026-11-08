@@ -179,3 +179,61 @@ def test_save_replaces_a_file_whole_or_not_at_all(tmp_path: Path, monkeypatch: p
         wav.save(path, b"a patch that never lands")
     assert path.read_bytes() == b"the new patch"
     assert [p.name for p in tmp_path.iterdir()] == ["kick.toml"]
+
+
+def riff_chunks(data: bytes) -> list[tuple[bytes, bytes]]:
+    """Split a RIFF WAVE file into its chunks, by the spec, independently of the reader under test."""
+    assert data[:4] == b"RIFF"
+    assert data[8:12] == b"WAVE"
+    assert struct.unpack_from("<I", data, 4)[0] == len(data) - 8  # the RIFF size counts every byte after it
+    found, pos = [], 12
+    while pos < len(data):
+        cid, size = data[pos : pos + 4], struct.unpack_from("<I", data, pos + 4)[0]
+        found.append((cid, data[pos + 8 : pos + 8 + size]))
+        pos += 8 + size + size % 2
+    assert pos == len(data)
+    return found
+
+
+@pytest.mark.parametrize("bits", [None, 24, 16])
+def test_every_header_field_is_what_the_spec_asks(tmp_path: Path, bits: int | None) -> None:
+    """Write each format and find every field of fmt, fact and smpl as WAVE defines it, and the data whole."""
+    samples = np.array([0.5, -0.25, 0.125], np.float32) if bits is None else np.array([0x123456 >> (24 - bits), -7, 0])
+    meta: dict[str, object] = {"patch": "# café → kick\n"}
+    wav.write(tmp_path / "x.wav", samples, wav.Format(CD_RATE, bits), (37, 123), meta)
+    chunks = dict(riff_chunks((tmp_path / "x.wav").read_bytes()))
+    width = 4 if bits is None else bits // 8
+    if bits is None:
+        assert chunks[b"fmt "] == struct.pack("<HHIIHHH", 3, 1, CD_RATE, 4 * CD_RATE, 4, 32, 0)  # with cbSize 0
+        assert chunks[b"fact"] == struct.pack("<I", samples.size)
+        assert chunks[b"data"] == samples.astype("<f4").tobytes()
+    else:
+        assert chunks[b"fmt "] == struct.pack("<HHIIHH", 1, 1, CD_RATE, width * CD_RATE, width, bits)
+        assert b"fact" not in chunks
+        assert chunks[b"data"] == b"".join(int(v).to_bytes(width, "little", signed=True) for v in samples)
+    # smpl: no manufacturer or product, the sample period in ns, the root note and its fraction, no SMPTE, no loops.
+    assert chunks[b"smpl"] == struct.pack("<9I", 0, 0, round(1e9 / CD_RATE), 37, 123, 0, 0, 0, 0)
+    assert chunks[wav.PRIVATE].decode("utf-8") == json.dumps(meta, ensure_ascii=False, indent=1)  # UTF-8, as written
+
+
+def test_read_takes_each_byte_of_24_bit_samples_in_its_place(tmp_path: Path) -> None:
+    """Read 24-bit samples whose three bytes all differ, positive and negative, little-endian."""
+    values = np.array([0x123456, -0x123456, 0x7FFFFE, -0x800000, 0x0000FF, 0x00FF00])
+    wav.write(tmp_path / "x.wav", values, wav.Format(RATE, 24), ROOT, {})
+    assert np.array_equal(wav.read(tmp_path / "x.wav")[1][:, 0], values / 2**23)
+
+
+@pytest.mark.parametrize("head", [b"RIFX\4\0\0\0WAVE", b"RIFF\4\0\0\0AVI ", b"FORM\4\0\0\0WAVE"])
+def test_chunks_refuse_a_file_that_is_riff_or_wave_but_not_both(tmp_path: Path, head: bytes) -> None:
+    """Refuse a big-endian RIFX, a RIFF that is not WAVE, and a WAVE id under another container."""
+    (tmp_path / "x.wav").write_bytes(head)
+    with pytest.raises(ValueError, match="not a RIFF WAVE file"):
+        wav.chunks(tmp_path / "x.wav")
+
+
+def test_chunks_end_where_the_riff_size_says(tmp_path: Path) -> None:
+    """Read every chunk up to the declared end, an empty last one included, and nothing appended after it."""
+    body = b"WAVE" + b"abcd" + struct.pack("<I", 3) + b"xyz\0" + b"none" + struct.pack("<I", 0)
+    junk = b"tail" + struct.pack("<I", 2) + b"!!"
+    (tmp_path / "x.wav").write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body + junk)
+    assert wav.chunks(tmp_path / "x.wav") == {b"abcd": b"xyz", b"none": b""}

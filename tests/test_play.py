@@ -90,6 +90,8 @@ def test_a_kit_needs_play_and_its_hits_share_one_chain(played: patch.Patch, tigh
     assert all(b[0] == a[1] + 1 for a, b in itertools.pairwise(ranges))  # softest first, every velocity once
     assert len({k.report.gain for k in kit}) == 1
     assert len({k.report.threshold for k in kit}) == 1
+    assert kit[0].report.threshold == render.synthesized(clipped).threshold  # the hardest hit's, not none
+    assert {(k.report.bits, k.report.ceiling) for k in kit} == {(24, render.ceiling_of(24))}  # the format asked for
     assert max(k.report.true_peak for k in kit) == pytest.approx(10 ** (-1 / 20), rel=1e-6)
     assert kit[0].report.loudness < kit[-1].report.loudness - LAYER_RANGE_DB
 
@@ -173,3 +175,29 @@ def test_every_hit_of_a_kit_renders_again_from_what_its_file_records(played: pat
     single = pack.kicks([("kick", patch.dumps(clipped), clipped)], [], None)
     pack.write(tmp_path / "single", single, None)
     assert "kit" not in json.loads(wav.chunks(tmp_path / "single" / single[0].path)[wav.PRIVATE])
+
+
+def test_each_layer_ends_where_the_law_reaches_the_mean_of_its_hits(played: patch.Patch) -> None:
+    """Find each layer's top velocity where 40·log10(v/127) dB reaches its hits' mean loudness against the loudest."""
+    kit = pack.kicks([("kick", "", patch.edit(played, "play.spread", 1.0))], [], None, 3, 3)
+    layers = dict.fromkeys(k.velocity for k in kit)
+    means = {v: float(np.mean([k.report.loudness for k in kit if k.velocity == v])) for v in layers}
+    top = max(means.values())
+    for (_, high), mean in means.items():
+        assert high == math.floor(MAX_VELOCITY * 10 ** ((mean - top) / 40) + 1e-9)
+
+
+def test_repeats_alone_make_a_kit_of_one_layer(played: patch.Patch) -> None:
+    """Pack two repeats and no layers: one layer over every velocity, its files named by repeat only."""
+    kit = pack.kicks([("kick", "", played)], [], None, 1, 2)
+    assert [(k.path, k.velocity, k.robin) for k in kit] == [
+        ("kick-A1-rr1.wav", (1, MAX_VELOCITY), 1),
+        ("kick-A1-rr2.wav", (1, MAX_VELOCITY), 2),
+    ]
+
+
+def test_a_pack_keeps_every_kit_it_plays(played: patch.Patch) -> None:
+    """Pack two played patches, each into its own kit, every hit of both kept."""
+    kit = pack.kicks([("a", "", played), ("b", "", played)], [], None, 2, 1)
+    assert [k.path for k in kit] == ["a-A1-v1.wav", "a-A1-v2.wav", "b-A1-v1.wav", "b-A1-v2.wav"]
+    assert {k.kit for k in kit} == {"a-A1", "b-A1"}

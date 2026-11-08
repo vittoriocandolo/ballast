@@ -70,6 +70,9 @@ def test_holds_its_end_values_outside_its_knots() -> None:
     assert c.integral(0.0) == -first  # the integral grows linearly before the first knot, for 1 s here
     assert c.integral(5.0) == pytest.approx(c.total + last)
     assert c.remaining(5.0) == -last
+    assert c.remaining(0.0) == pytest.approx(c.total + first)  # and so does what remains, counted back from it
+    x = np.array([-3.0, 0.0, 0.5, 4.5, 9.0])
+    assert np.allclose(c.integral(x) + c.remaining(x), c.total, rtol=1e-14, atol=0)  # either side, as within
 
 
 def test_two_knots_make_a_straight_line() -> None:
