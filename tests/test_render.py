@@ -5,6 +5,9 @@
 
 import dataclasses
 import math
+import multiprocessing
+import sys
+import warnings
 
 import numpy as np
 import pytest
@@ -406,3 +409,28 @@ def test_the_clipper_takes_exactly_its_db_off_the_true_peak(tight: patch.Patch, 
     assert threshold is not None
     drop = 20 * math.log10(render.true_peak(plain, 48000) / render.true_peak(clipped, 48000))
     assert drop == pytest.approx(db, abs=CLIP_DB)
+
+
+def _renders_as(text: str, expected: bytes) -> None:
+    """Render a patch in this process and fail unless it is exactly `expected`."""
+    if render.render(patch.loads(text))[0].tobytes() != expected:
+        raise AssertionError
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no fork")
+def test_a_process_forked_after_a_render_renders_too(tight_text: str) -> None:
+    """Render, fork as multiprocessing does by default on Linux before Python 3.14, and render the same in the child.
+
+    The child inherits the parent's pool of threads but none of the threads; it must make its own, not wait forever.
+    """
+    expected = render.render(patch.loads(tight_text))[0].tobytes()
+    with warnings.catch_warnings():  # Python warns that forking a process with threads may deadlock: the point here
+        warnings.simplefilter("ignore", DeprecationWarning)
+        child = multiprocessing.get_context("fork").Process(target=_renders_as, args=(tight_text, expected))
+        child.start()
+    child.join(timeout=60)
+    alive = child.is_alive()
+    child.kill()
+    child.join()
+    assert not alive, "the forked child hung"
+    assert child.exitcode == 0

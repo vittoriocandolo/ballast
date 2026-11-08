@@ -36,7 +36,19 @@ DECIMATORS = {
 
 
 CHUNK = 2048  # outputs per parallel chunk, at the lower rate when decimating
-POOL = ThreadPoolExecutor(os.cpu_count())  # upfirdn releases the GIL
+_POOLS: dict[int, ThreadPoolExecutor] = {}  # by process ID
+
+
+def pool() -> ThreadPoolExecutor:
+    """Return this process's threads for the chunks, which upfirdn computes with the GIL released.
+
+    A process forked after a render, as multiprocessing's default start method on Linux before Python 3.14 does,
+    inherits its parent's pool but none of its threads, and would wait on it forever; so each process makes its own.
+    """
+    pid = os.getpid()
+    if pid not in _POOLS:
+        _POOLS[pid] = ThreadPoolExecutor(os.cpu_count())
+    return _POOLS[pid]
 
 
 def rates(sample_rate: int) -> tuple[int, int, int]:
@@ -73,7 +85,7 @@ def decimate(taps: NDArray[np.float64], y: NDArray[np.float64], factor: int) -> 
         out: NDArray[np.float64] = upfirdn(taps, y[start : (m1 - 1) * factor + 1], down=factor)
         return out[m0 - start // factor : m1 - start // factor]
 
-    return np.concatenate(list(POOL.map(chunk, range(0, n_out, CHUNK))))
+    return np.concatenate(list(pool().map(chunk, range(0, n_out, CHUNK))))
 
 
 def interpolate(taps: NDArray[np.float64], x: NDArray[np.float64], factor: int) -> NDArray[np.float64]:
@@ -93,4 +105,4 @@ def interpolate(taps: NDArray[np.float64], x: NDArray[np.float64], factor: int) 
         out: NDArray[np.float64] = upfirdn(scaled, x[j0 : (n1 - 1) // factor + 1], up=factor)
         return out[n0 - j0 * factor : n1 - j0 * factor]
 
-    return np.concatenate(list(POOL.map(chunk, range(0, n_out, step))))
+    return np.concatenate(list(pool().map(chunk, range(0, n_out, step))))
