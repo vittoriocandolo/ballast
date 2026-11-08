@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Vittorio Candolo
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""WAV files: a small RIFF writer for mono IEEE float32 or PCM at 24 or 16 bits, and a reader for any WAV.
+"""WAV files: a small RIFF writer for mono IEEE float32 or PCM at 24 or 16 bits, and a reader for PCM and float WAVs.
 
 Files carry fmt, fact (float only), smpl (so samplers map the root key), a
 private chunk with the patch text and provenance, and data. PCM uses the
@@ -16,13 +16,11 @@ import json
 import math
 import os
 import struct
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-from scipy.io import wavfile
 
 from .patch import midi_pitch
 
@@ -31,6 +29,10 @@ if TYPE_CHECKING:
 
 FLOAT = 3  # WAVE_FORMAT_IEEE_FLOAT
 PCM = 1  # WAVE_FORMAT_PCM
+EXTENSIBLE = 0xFFFE  # WAVE_FORMAT_EXTENSIBLE: the real tag opens the subformat GUID
+FMT, EXTENSIBLE_FMT, EXTENSIBLE_TAG = 16, 40, 24  # the plain and extensible fmt chunks' sizes, and where the tag lies
+PCM8, PCM24 = 8, 24  # unsigned bytes, and three bytes a sample
+SAMPLES = {(PCM, 8): "u1", (PCM, 16): "<i2", (PCM, 24): "u1", (PCM, 32): "<i4", (FLOAT, 32): "<f4", (FLOAT, 64): "<f8"}
 PRIVATE = b"blst"  # the chunk that holds the patch text and provenance
 LAYOUTS = {1: "mono", 2: "stereo"}  # the channel counts of the WAVs Ballast takes in
 
@@ -108,18 +110,34 @@ def write(
 def read(path: str | os.PathLike[str]) -> tuple[int, NDArray[np.float64]]:
     """Read a WAV file's sample rate and its frames, one row per frame, as floats with full scale at ±1.
 
-    It may hold PCM of 8 to 32 bits, or floats, as SciPy reads them.
+    It may hold PCM of 8, 16, 24 or 32 bits or floats of 32 or 64, plain or
+    extensible. Every size is checked against what the file holds, so a
+    damaged or crafted file is refused with a ValueError, never misread.
     """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", wavfile.WavFileWarning)  # chunks it does not know
-        rate, data = wavfile.read(path)
-    if data.dtype == np.uint8:
-        frames = (data.astype(float) - 128.0) / 128.0
-    elif data.dtype.kind == "i":  # 16-bit, and 24- or 32-bit left-justified in int32
-        frames = data.astype(float) / float(2 ** (8 * data.dtype.itemsize - 1))
+    found = chunks(path)
+    fmt, data = found.get(b"fmt "), found.get(b"data")
+    if fmt is None or data is None:
+        msg = "missing fmt or data chunk"
+        raise ValueError(msg)
+    if len(fmt) < FMT:
+        msg = "the fmt chunk is cut short"
+        raise ValueError(msg)
+    tag, channels, rate, _, _, bits = struct.unpack_from("<HHIIHH", fmt)
+    if tag == EXTENSIBLE and len(fmt) >= EXTENSIBLE_FMT:
+        tag = struct.unpack_from("<H", fmt, EXTENSIBLE_TAG)[0]
+    if (tag, bits) not in SAMPLES or not channels or not rate:
+        msg = f"unsupported format: tag {tag}, {bits}-bit samples, {channels} channels at {rate} Hz"
+        raise ValueError(msg)
+    width = bits // 8
+    raw = data[: len(data) // (width * channels) * (width * channels)]  # whole frames; a cut tail is dropped
+    if bits == PCM24:
+        b = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 3).astype(np.int32)
+        values = ((b[:, 0] | (b[:, 1] << 8) | (b[:, 2] << 16)) << 8 >> 8).astype(float)  # sign-extend from bit 23
     else:
-        frames = data.astype(float)
-    return rate, frames[:, None] if frames.ndim == 1 else frames
+        values = np.frombuffer(raw, dtype=SAMPLES[tag, bits]).astype(float)
+    if tag == PCM:
+        values = (values - 128.0) / 128.0 if bits == PCM8 else values / float(2 ** (bits - 1))
+    return rate, values.reshape(-1, channels)
 
 
 def chunks(path: str | os.PathLike[str]) -> dict[bytes, bytes]:
