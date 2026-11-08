@@ -306,10 +306,9 @@ them, as Ballast writes it.
   nothing is transposed and every note keeps its length and character: play
   it from a MIDI clip as a bassline. Unlike a kit, it is an instrument: a
   note plays as long as it is held, so its length shapes the bass. The map
-  leaves polyphony to the player,
-  so overlapping notes ring together; for an 808 line in which each note cuts
-  off the last, write the notes so that they do not overlap, or limit the
-  player to one voice.
+  leaves polyphony to the player, so overlapping notes ring together; for an
+  808 line in which each note cuts off the last, write the notes so that they
+  do not overlap, or limit the player to one voice.
 
 ## Audition
 
