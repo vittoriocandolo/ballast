@@ -398,7 +398,7 @@ def test_the_true_peak_is_read_between_the_samples_exactly(base: int) -> None:
     assert 20 * math.log10(render.true_peak(sine, base) / amplitude) == pytest.approx(0.0, abs=PEAK_DB)
 
 
-@pytest.mark.parametrize(("db", "knee_db"), [(0.5, 0.0), (4.0, 0.0), (4.0, 6.0), (12.0, 3.0)])
+@pytest.mark.parametrize(("db", "knee_db"), [(0.01, 0.0), (0.01, 6.0), (0.5, 0.0), (4.0, 0.0), (4.0, 6.0), (12.0, 3.0)])
 def test_the_clipper_takes_exactly_its_db_off_the_true_peak(tight: patch.Patch, db: float, knee_db: float) -> None:
     """Clip the tight preset, and find its true peak, read on the reconstruction, lower by db within 1e-7 dB."""
     plain, _ = render.internal(tight)

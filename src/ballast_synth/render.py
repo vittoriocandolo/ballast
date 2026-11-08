@@ -289,12 +289,14 @@ def clip_threshold(y: NDArray[np.float64], db: float, knee_db: float, base: int)
         return tried[log_t]
 
     # Step by the secant until the root is bracketed: the peak rises with the threshold, by a measured slope, or by
-    # one neper for one at first, and never more than four times the last step at once.
+    # one neper for one at first, and never more than four times the last step at once. Where nothing more clips
+    # the peak does not move, and the step doubles instead, so even a miss of 10⁻¹² nepers brackets in a few
+    # dozen steps rather than crawling by its own size.
     u0 = math.log(peak / curve.ratio(db))
     u1 = u0 - miss(u0)
     while miss(u0) * miss(u1) > 0:  # a miss of exactly 0 ends the search: brentq returns it, even from [u, u]
         slope = (miss(u1) - miss(u0)) / (u1 - u0)
-        step = -miss(u1) / slope if slope > 0 else -miss(u1)
+        step = -miss(u1) / slope if slope > 0 else math.copysign(2 * abs(u1 - u0), -miss(u1))
         u0, u1 = u1, u1 + math.copysign(min(abs(step), 4 * abs(u1 - u0)), step)
     return math.exp(brentq(miss, min(u0, u1), max(u0, u1), xtol=1e-8))  # within 1e-7 dB
 

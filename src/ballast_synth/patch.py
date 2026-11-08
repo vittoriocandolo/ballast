@@ -494,7 +494,8 @@ class EQ:
 class Clip:
     """The clipper before the decimator: how far it brings the kick's peaks down, and how softly it bends."""
 
-    db: float = number(0.0, 12.0, "off the peaks; 0 = off")
+    # Below 0.01 dB the clipper's own anti-aliasing, 0.00002 dB at most, would be most of what it does.
+    db: float = number(0.01, 12.0, "off the peaks; 0 = off", off=0.0)
     knee_db: float = number(0.0, 6.0, "0 = hard … 6 = soft")
 
 

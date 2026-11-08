@@ -441,9 +441,9 @@ shows what they do.
   keeps some of the undriven kick, for density without losing the hit. Even
   harmonics bring a little DC, so pair them with a low cut.
   [Hear `drive.asymmetry = 1.0`](audio/tight-warm.wav).
-- **Loudness is the clipper.** `clip.db` takes exactly that many decibels off
-  the kick's true peak and leaves everything below the knee alone; `knee_db`
-  softens the edge. The presets normalize to −1 dBTP, so the decibels come
+- **Loudness is the clipper.** `clip.db`, 0.01 to 12 or 0 for none, takes
+  exactly that many decibels off the kick's true peak and leaves everything
+  below the knee alone; `knee_db` softens the edge. The presets normalize to −1 dBTP, so the decibels come
   back as loudness: here `tight` goes from −13.4 to −11.4 LUFS. In gain
   mode the kick just peaks lower.
   [Hear `clip.db = 4.0`](audio/tight-clip.wav).

@@ -47,6 +47,7 @@ def test_canonical_text_reads_back_to_the_same_patch(tight: patch.Patch) -> None
         ("body.level_db", math.inf, "body.level_db: must be finite (or -inf)"),
         ("body.level_db", 30.0, "body.level_db: 30 is outside -60 … 24 (or -inf)"),
         ("output.low_cut_hz", 5.0, "output.low_cut_hz: 5 is outside 10 … 1000 (or 0)"),
+        ("clip.db", 5e-324, "clip.db: 4.94066e-324 is outside 0.01 … 12 (or 0)"),
         ("body.h2", 0.6, "body.h2: 0.6 is outside 0 … 0.5"),
         ("body.phase_deg", 360.0, "body.phase_deg: 360 is outside 0 … 360 (exclusive)"),
         ("body.phase_ref", "end", "body.phase_ref: expected one of 'onset', 'tail', found 'end'"),
