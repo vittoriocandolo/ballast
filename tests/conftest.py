@@ -10,12 +10,18 @@ from typing import Any
 
 import numpy as np
 import pytest
+from hypothesis import settings
 from numpy.typing import NDArray
 
 from ballast_synth import patch
 from ballast_synth.cli import PRESETS
 
 CLICK_RATE = 48000
+
+# Fuzzing derives its examples the same way on every run and keeps none between runs, so a run is reproducible
+# from the code alone and leaves no folder behind; a deadline would make the outcome depend on the machine.
+settings.register_profile("reproducible", derandomize=True, database=None, deadline=None)
+settings.load_profile("reproducible")
 
 
 def preset_text(name: str) -> str:
