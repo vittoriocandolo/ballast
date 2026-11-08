@@ -75,3 +75,11 @@ The first public release.
 - A test suite that checks the documented properties on every platform.
 - Type annotations throughout, with a `py.typed` marker so that type checkers
   use them.
+- Input that cannot be misread: a patch whose file name a sampler would read
+  as part of the SFZ map written for it is refused; `extract` never prints
+  control characters, which a terminal would act on; WAVs, embedded chunks and
+  patches are read with every size checked, so a damaged or crafted file is
+  refused with its reason; a bed holding samples that are not numbers is
+  refused before it reaches the device. A process forked after a render
+  renders too. Releases are published with attestations of where they were
+  built.
