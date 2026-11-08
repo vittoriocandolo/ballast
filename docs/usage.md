@@ -292,18 +292,21 @@ them, as Ballast writes it.
   scientific pitch does, with middle C, key 60, as C4; DAWs that call middle
   C C3, such as Ableton Live, Cubase and Logic Pro, call it C1. How hard you
   play picks the layer, and the level follows a square law, 40·log₁₀(v/127)
-  dB, as Halyard's and Brightwork's kits do: each layer sits at the velocity
-  where the law reaches its loudness against the loudest, neighbours meet
-  halfway in dB, and the map adds a curve at every velocity of a layer, so
-  the kick grows quieter smoothly, across the layers' boundaries too. The
+  dB, as Halyard's and Brightwork's kits do: a layer's velocities run up to
+  its own, where the law reaches its loudness against the loudest, and the
+  map adds a curve at every velocity below it, so the kick grows quieter
+  smoothly, across the layers' boundaries too, and no velocity plays a hit
+  louder than it was played. A kit of one layer follows the law as well. The
   hits keep their own sound as played: a soft hit is the kick played softer,
   cleaner, with less click and punch, not a quieter copy of the hardest one.
-  A kit whose layers do not grow louder from each to the next is refused,
-  with what to change. Within a layer, each hit takes the next repeat in
+  A kit whose layers do not grow louder by a velocity step from each to the
+  next is refused, every such kit named, with what to change. Within a layer, each hit takes the next repeat in
   turn, so a steady pattern never plays one file twice in a row.
 - **A multisample** puts each note's own render on its key, at its root, so
   nothing is transposed and every note keeps its length and character: play
-  it from a MIDI clip as a bassline. The map leaves polyphony to the player,
+  it from a MIDI clip as a bassline. Unlike a kit, it is an instrument: a
+  note plays as long as it is held, so its length shapes the bass. The map
+  leaves polyphony to the player,
   so overlapping notes ring together; for an 808 line in which each note cuts
   off the last, write the notes so that they do not overlap, or limit the
   player to one voice.

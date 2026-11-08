@@ -282,6 +282,9 @@ def cmd_pack(a: argparse.Namespace) -> None:
     except PatchError as e:
         msg = "not written: these hits cannot be played"
         raise _listing(msg, e) from None
+    except pack.KitError as e:
+        lines = ["not written: these kits cannot put their layers on the square law of velocity"]
+        raise CliError("\n".join([*lines, *(f"  {m}" for m in e.problems)]), 1) from None
     except ValueError as e:
         raise CliError(str(e)) from None
     if refused := [(k, problems) for k in kicks if (problems := pack.gates(k))]:

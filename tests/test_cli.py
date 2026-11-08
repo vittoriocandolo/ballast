@@ -460,6 +460,16 @@ def test_pack_and_vary_refuse_kits_too_large_or_unplayable(
     with pytest.raises(SystemExit) as caught:
         run("pack", "kick.toml", "-o", "kit", "--velocities", "17")
     assert caught.value.code == BAD_INPUT
+    # Layers struck alike are equally loud, and the law cannot give each velocities of its own: every such kit
+    # is named, and the pack is refused rather than mapped.
+    alike = "\n[play]\nsoft_db       = 0.0\nsoft_click_db = 0.0\nsoft_punch    = 1.0\nspread        = 0.0\n"
+    (tmp_path / "alike.toml").write_text(read_preset("tight") + alike, encoding="utf-8")
+    (tmp_path / "same.toml").write_text(read_preset("house") + alike, encoding="utf-8")
+    status, out, err = run("pack", "alike.toml", "same.toml", "-o", "kit", "--velocities", "2")
+    assert (status, out) == (REFUSED, "")
+    assert "not written: these kits cannot put their layers on the square law of velocity\n" in err
+    assert "alike-A1: layers v1 and v2 are within a velocity step" in err
+    assert "same-A1: layers v1 and v2" in err
 
 
 def test_vary_and_pack_refuse_what_they_cannot_make(run: Run, tmp_path: Path) -> None:

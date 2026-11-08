@@ -107,33 +107,38 @@ def test_a_kit_maps_its_layers_and_repeats_for_samplers(played: patch.Patch) -> 
 
 
 def test_the_kit_follows_the_square_law_at_every_velocity(played: patch.Patch) -> None:
-    """Find each velocity's level, its layer's loudness plus the group's volume and curve, on 40·log10(v/127) dB."""
+    """Find each velocity's level, its layer's loudness plus its curve, on 40·log10(v/127) dB, and never above it."""
     kit = pack.kicks([("kick", "", played)], [], 24, 3, 2)
     loudness = pack.layer_loudness(kit)
-    lines = pack.sfz("kick-A1", kit).splitlines()
     levels: dict[int, float] = {}
-    volume, layer = 0.0, -1
-    for line in lines:
+    gains: list[float] = []
+    layer: tuple[int, int] = (0, 0)
+    for line in pack.sfz("kick-A1", kit).splitlines():
         if line.startswith("<group>"):
-            layer += 1
-            volume = float(next(w for w in line.split() if w.startswith("volume=")).split("=")[1])
+            low, high = (int(w.split("=")[1]) for w in line.split() if w.startswith(("lovel=", "hivel=")))
+            layer = (low, high)
+            assert "volume=" not in line  # a group never raises its hits
         elif line.startswith("amp_velcurve_"):
             name, value = line.split("=")
-            levels[int(name.removeprefix("amp_velcurve_"))] = loudness[layer] + volume + 20 * math.log10(float(value))
+            gains.append(float(value))
+            levels[int(name.removeprefix("amp_velcurve_"))] = loudness[layer] + 20 * math.log10(float(value))
     assert sorted(levels) == list(range(1, MAX_VELOCITY + 1))
+    assert max(gains) <= 1.0  # no velocity plays a hit louder than it was played
     for v, level in levels.items():
         assert level == pytest.approx(40 * math.log10(v / MAX_VELOCITY), abs=CURVE_DB)
 
 
 def test_layers_sit_on_the_square_law_or_are_refused() -> None:
-    """Place layers where the law reaches their loudness, meeting halfway; refuse layers that do not grow louder."""
-    assert pack.velocities([-12.0, -6.0, 0.0]) == [(1, 75), (76, 106), (107, 127)]  # at 63.6, 89.9 and 127
+    """Run each layer's velocities up to its own on the law; refuse layers too close, or a softest out of reach."""
+    assert pack.velocities([-12.0, -6.0, 0.0]) == [(1, 63), (64, 89), (90, 127)]  # their own: 63.6, 89.9 and 127
     assert pack.velocities([0.0]) == [(1, 127)]
-    with pytest.raises(ValueError, match="layers 1 and 2 are too close in loudness"):
+    with pytest.raises(ValueError, match="layers v1 and v2 are within a velocity step"):
         pack.velocities([-3.0, -3.0, 0.0])
-    volume, gains = pack.curve(-6.0, 76, 106)
-    assert max(gains) == 1.0
-    assert volume + 20 * math.log10(gains[0]) == pytest.approx(40 * math.log10(76 / 127) + 6.0)
+    with pytest.raises(ValueError, match=r"layer v1 is 90\.0 dB under the loudest"):
+        pack.velocities([-90.0, 0.0])
+    gains = pack.curve(-6.0, 64, 89)
+    assert max(gains) <= 1.0
+    assert 20 * math.log10(gains[0]) == pytest.approx(pack.law_db(64) + 6.0)
 
 
 def test_a_spread_of_zero_repeats_the_hit_exactly(played: patch.Patch) -> None:
