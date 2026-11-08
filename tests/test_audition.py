@@ -331,6 +331,15 @@ def test_a_render_out_of_memory_keeps_the_last_buffer_playing(tight_text: str, m
     )
 
 
+@pytest.mark.parametrize("value", [np.nan, np.inf])
+def test_load_bed_refuses_samples_that_are_not_numbers(tmp_path: Path, value: float) -> None:
+    """Refuse a float bed holding NaN or infinity, which a device would play as anything up to full scale."""
+    frames = np.zeros(round(4 * RATE * 60 / 128.0), np.float32)
+    frames[100] = value
+    with pytest.raises(AuditionError, match="not numbers or are infinite"):
+        load_bed(write_bed(tmp_path / "bed.wav", frames), RATE, 128.0)
+
+
 def test_load_bed_refuses_what_is_not_a_wav(tmp_path: Path) -> None:
     """Refuse a bed that is not a WAV file, naming it."""
     (tmp_path / "bed.wav").write_bytes(b"not a wave file")

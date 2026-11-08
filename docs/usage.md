@@ -172,7 +172,9 @@ line, under the hits. See [Audition](#audition).
 
 ### `ballast extract WAV [-o FILE]`
 
-Recovers the exact patch text from a WAV that Ballast rendered.
+Recovers the exact patch text from a WAV that Ballast rendered. Text holding
+control characters, which no patch does and a terminal would act on, is
+refused rather than written.
 
 ### Exit status
 
@@ -285,7 +287,10 @@ reads its root key from the `smpl` chunk. The SFZ maps that `pack` and
 such as the free sfizz or Sforzando, loaded on an instrument track: both
 run as plugins in FL Studio, Ableton Live and Logic Pro, and sfizz on Linux
 too. A map names its samples by file name, so keep it in the folder beside
-them, as Ballast writes it.
+them, as Ballast writes it. For the same reason a patch whose file name a
+sampler would read as part of the map, one holding `<`, `>`, `=`, `$`, a
+backslash, a comment's start, a control character or a line break, or
+beginning or ending with a space, is refused: rename it.
 
 - **A played kit** sits on key 36, General MIDI's bass drum, where drum
   patterns and pad controllers expect the kick. Ballast calls it C2, as

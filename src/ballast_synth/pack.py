@@ -22,6 +22,7 @@ import hashlib
 import io
 import json
 import math
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -101,6 +102,27 @@ def law_db(velocity: float) -> float:
     return 40 * math.log10(velocity / TOP_VELOCITY)
 
 
+SFZ_SYNTAX = ("<", ">", "=", "$", "\\", "//", "/*")  # what a sampler reads as syntax even inside a sample's name
+
+
+def sfz_name_problem(name: str) -> str | None:
+    """Return why `name` cannot stand for itself in an SFZ map, or None when it can.
+
+    A sampler reads a map line by line: `<` opens a header, `word=` an opcode,
+    `$` a variable, `//` and `/*` a comment and a backslash a folder, and the space
+    around a value is trimmed. A name holding any of these, a control
+    character or a line break would be read as something else: a crafted file
+    name could add regions or opcodes to the map.
+    """
+    breaks = sorted({f"U+{ord(c):04X}" for c in name if unicodedata.category(c) in {"Cc", "Zl", "Zp"}})
+    found = [*breaks, *(s for s in SFZ_SYNTAX if s in name)]
+    if found:
+        return f"{name!r} cannot name a file in an SFZ map: it holds {' '.join(found)}; rename it"
+    if name != name.strip():
+        return f"{name!r} cannot name a file in an SFZ map: a sampler trims the space around it; rename it"
+    return None
+
+
 class KitError(ValueError):
     """Kits whose layers cannot share the velocities on the square law. `problems` names each kit and why."""
 
@@ -168,6 +190,8 @@ def kicks(
     The layers and repeats of a played patch go through one chain, as the hits of a drum do: its hardest hit sets
     the clipper's threshold, and the kit's loudest hit, whichever it is, sets the output gain they all share.
     """
+    if unnamable := [problem for name, _, _ in patches if (problem := sfz_name_problem(name))]:
+        raise ValueError("\n".join(unnamable))
     played = layers > 1 or robins > 1
     refused: list[str] = []  # every kit is tried, so that each one the law cannot map is named at once
     if played and (unplayed := [name for name, _, p in patches if p.play is None]):

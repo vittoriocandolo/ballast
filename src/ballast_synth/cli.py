@@ -10,6 +10,7 @@ import io
 import json
 import math
 import sys
+import unicodedata
 from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -81,6 +82,16 @@ def _open(path: str) -> tuple[str, Patch]:
     except PatchError as e:
         msg = f"{path}: invalid patch"
         raise _listing(msg, e) from None
+
+
+def _controls(text: str) -> str:
+    """Return the control characters in `text` other than tab and line ends, as code points, or "" for none.
+
+    TOML allows none of C0 in a patch, and a terminal acts on them and on C1
+    rather than showing them, so text from a file holding them is never printed.
+    """
+    found = sorted({c for c in text if unicodedata.category(c) == "Cc" and c not in "\t\n\r"})
+    return ", ".join(f"U+{ord(c):04X}" for c in found)
 
 
 def _emit(text: str, out: str | None) -> None:
@@ -236,6 +247,8 @@ def cmd_multisample(a: argparse.Namespace) -> None:
         msg = f"expected two note names, the lower first, such as C1 C2; found {a.low} {a.high}"
         raise CliError(msg)
     bits = FORMATS[a.format]
+    if problem := pack.sfz_name_problem(Path(a.patch).stem):
+        raise CliError(problem)
     _, p = _open(a.patch)
     kicks = _kicks(a.patch, p, range(low, high + 1), bits)  # every note renders before any file is written
     stem, folder = Path(a.patch).stem, Path(a.out)
@@ -326,10 +339,13 @@ def cmd_extract(a: argparse.Namespace) -> None:
     except KeyError:
         msg = f"{a.wav}: no embedded patch"
         raise CliError(msg) from None
-    except (ValueError, TypeError):  # truncated or garbled, or not the table Ballast writes
+    except (ValueError, TypeError, RecursionError):  # truncated, garbled or made to exhaust the parser
         text = None
     if not isinstance(text, str):
         msg = f"{a.wav}: the embedded patch is damaged"
+        raise CliError(msg)
+    if controls := _controls(text):
+        msg = f"{a.wav}: the embedded patch holds control characters ({controls}), which no patch does; not written"
         raise CliError(msg)
     _emit(text, a.out)
 

@@ -6,6 +6,7 @@
 import hashlib
 import io
 import json
+import re
 import runpy
 import struct
 import sys
@@ -18,7 +19,7 @@ import pytest
 from numpy.typing import NDArray
 from scipy.io import wavfile
 
-from ballast_synth import __version__, cli, patch, wav
+from ballast_synth import __version__, cli, pack, patch, wav
 from ballast_synth.cli import main
 
 BAD_INPUT = 2  # the exit status for input the command cannot use
@@ -308,6 +309,22 @@ def test_extract_reports_a_damaged_or_foreign_patch_chunk(run: Run, tmp_path: Pa
     chunk = b"blst" + len(body).to_bytes(4, "little") + body
     (tmp_path / "odd.wav").write_bytes(b"RIFF" + (4 + len(chunk)).to_bytes(4, "little") + b"WAVE" + chunk)
     assert run("extract", "odd.wav") == (BAD_INPUT, "", "odd.wav: the embedded patch is damaged\n")
+    body = b"[" * 100_000 + b"]" * 100_000
+    chunk = b"blst" + len(body).to_bytes(4, "little") + body
+    (tmp_path / "deep.wav").write_bytes(b"RIFF" + (4 + len(chunk)).to_bytes(4, "little") + b"WAVE" + chunk)
+    assert run("extract", "deep.wav") == (BAD_INPUT, "", "deep.wav: the embedded patch is damaged\n")
+
+
+@pytest.mark.parametrize("control", ["\x1b]52;c;cHduZWQ=\x07", "\x9b2J", "\x00"])
+def test_extract_never_prints_control_characters(run: Run, tmp_path: Path, control: str) -> None:
+    """Refuse an embedded patch holding an escape sequence, C1's CSI or a NUL, which a terminal would act on."""
+    body = json.dumps({"patch": f"# kick{control}\n"}).encode()
+    chunk = b"blst" + len(body).to_bytes(4, "little") + body
+    (tmp_path / "evil.wav").write_bytes(b"RIFF" + (4 + len(chunk)).to_bytes(4, "little") + b"WAVE" + chunk)
+    status, out, err = run("extract", "evil.wav", "-o", "out.toml")
+    assert (status, out) == (BAD_INPUT, "")
+    assert err.startswith("evil.wav: the embedded patch holds control characters (U+")
+    assert not (tmp_path / "out.toml").exists()
 
 
 def test_ctrl_c_stops_quietly_with_status_130(run: Run, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -494,6 +511,45 @@ def test_pack_refuses_names_it_cannot_tell_apart(run: Run, tmp_path: Path) -> No
     assert run("pack", "a", "b", "-o", "kit") == (BAD_INPUT, "", "two patches would share a name in the pack: kick\n")
     (tmp_path / "empty").mkdir()
     assert run("pack", "empty", "-o", "kit")[0] == BAD_INPUT
+
+
+@pytest.mark.parametrize(
+    ("name", "holds"),
+    [
+        ("kick\n<region> sample=other.wav key=1", "U+000A < > ="),
+        ("kick $KEY", "$"),
+        ("kick\\..", "\\"),
+        ("kick\u2028two", "U+2028"),
+        ("kick ", None),
+    ],
+)
+def test_pack_and_multisample_refuse_names_a_map_would_misread(
+    run: Run,
+    tmp_path: Path,
+    name: str,
+    holds: str | None,
+) -> None:
+    """Refuse a patch whose file name would add to, or break, the SFZ map it is named in, writing nothing."""
+    run("init", "tight", "-o", f"{name}.toml")
+    for command in (["pack", f"{name}.toml", "-o", "kit"], ["multisample", f"{name}.toml", "C1", "C2", "-o", "set"]):
+        status, out, err = run(*command)
+        assert (status, out) == (BAD_INPUT, "")
+        assert err.startswith(f"{name!r} cannot name a file in an SFZ map: ")
+        assert (f"it holds {holds};" if holds else "a sampler trims the space around it") in err
+    assert not (tmp_path / "kit").exists()
+    assert not (tmp_path / "set").exists()
+
+
+@pytest.mark.parametrize(("name", "holds"), [("kick // old", "//"), ("kick /* old", "/*")])
+def test_a_pack_from_python_refuses_names_no_file_could_have(
+    read_preset: Callable[[str], str],
+    name: str,
+    holds: str,
+) -> None:
+    """Refuse a comment's start in a name given from Python, where it need not come from a file name."""
+    text = read_preset("tight")
+    with pytest.raises(ValueError, match=f"it holds {re.escape(holds)};"):
+        pack.kicks([(name, text, patch.loads(text))], [], None)
 
 
 def test_vary_writes_seeded_variations(run: Run, tmp_path: Path) -> None:

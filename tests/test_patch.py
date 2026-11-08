@@ -265,6 +265,12 @@ def test_toml_syntax_errors_are_patch_errors() -> None:
     assert caught.value.problems[0].startswith("TOML: ")
 
 
+def test_toml_nested_to_exhaust_the_parser_is_a_patch_error() -> None:
+    """Parse arrays nested a hundred thousand deep, and get a patch error rather than a crash."""
+    with pytest.raises(PatchError, match="nested too deeply to be a patch"):
+        patch.loads("x = " + "[" * 100_000 + "]" * 100_000 + "\n")
+
+
 @pytest.mark.parametrize(
     "encode",
     [

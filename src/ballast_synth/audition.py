@@ -76,6 +76,9 @@ def load_bed(path: str | os.PathLike[str], rate: int, bpm: float) -> Bed:
     if file_rate != rate:
         msg = f"{path}: {file_rate} Hz, but the patch renders at {rate} Hz; audition never resamples"
         raise AuditionError(msg)
+    if not np.all(np.isfinite(frames)):  # a device turns NaN and infinity into anything up to full scale
+        msg = f"{path}: holds samples that are not numbers or are infinite; a bed must be audio"
+        raise AuditionError(msg)
     channels = frames.shape[1]
     if channels not in wav.LAYOUTS:
         msg = f"{path}: {channels} channels; a bed must be mono or stereo"
