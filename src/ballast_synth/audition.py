@@ -283,6 +283,7 @@ def _stream(rate: int, hits: Hits) -> sounddevice.OutputStream:
         if status.output_underflow:
             hits.underflows += 1
 
+    refusals = []  # why each way of opening the device failed, in the order tried
     for settings, note in choices:
         try:
             stream = sd.OutputStream(
@@ -293,9 +294,10 @@ def _stream(rate: int, hits: Hits) -> sounddevice.OutputStream:
                 callback=callback,
                 **settings,
             )
-        except (sd.PortAudioError, ValueError):
+        except (sd.PortAudioError, ValueError) as e:
+            refusals.append(f"{e}{note}")
             continue
         sys.stdout.write(row("device", f"{sd.query_devices(stream.device)['name']}{note}") + "\n")
         return stream
-    msg = f"the output device cannot play {rate} Hz; audition never resamples"
+    msg = f"the output device cannot play {rate} Hz ({'; '.join(refusals)}); audition never resamples"
     raise AuditionError(msg)

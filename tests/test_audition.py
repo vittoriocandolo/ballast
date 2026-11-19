@@ -274,8 +274,8 @@ def test_the_watch_loop_rerenders_every_edit(
 
 @pytest.mark.usefixtures("device")
 def test_audition_refuses_a_rate_the_device_cannot_play(tight: patch.Patch) -> None:
-    """Refuse to audition at a rate the device cannot open, rather than resample."""
-    with pytest.raises(AuditionError, match="cannot play 96000 Hz; audition never resamples"):
+    """Refuse to audition at a rate the device cannot open, rather than resample, saying what the device said."""
+    with pytest.raises(AuditionError, match=r"cannot play 96000 Hz \(Invalid sample rate\); audition never resamples"):
         audition.audition(patch.edit(tight, "output.sample_rate", 96000))
 
 
@@ -295,6 +295,24 @@ def test_windows_falls_back_to_exclusive_wasapi_for_a_rate_the_mixer_does_not_ru
     assert exclusive["device"] == WASAPI_DEVICE
     assert exclusive["extra_settings"] == ("wasapi", True)
     assert capsys.readouterr().out.splitlines()[-1] == "device   Test Device, in exclusive mode"
+
+
+def test_a_device_that_refuses_every_way_says_why_each_failed(
+    tight: patch.Patch,
+    device: types.ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Refuse when WASAPI's shared and exclusive modes both fail, giving each mode's reason in the order tried."""
+
+    def busy(*_args: object, **_settings: object) -> NoReturn:
+        msg = "Device unavailable"
+        raise PortAudioError(msg)
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(device, "OutputStream", busy)
+    reasons = "Device unavailable; Device unavailable, in exclusive mode"
+    with pytest.raises(AuditionError, match=re.escape(f"cannot play 96000 Hz ({reasons}); audition never resamples")):
+        audition.audition(patch.edit(tight, "output.sample_rate", 96000))
 
 
 @pytest.mark.usefixtures("device", "one_tick")
