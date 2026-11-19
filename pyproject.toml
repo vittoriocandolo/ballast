@@ -24,7 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.15",
     "Topic :: Multimedia :: Sound/Audio :: Sound Synthesis",
 ]
-dependencies = ["numpy>=2.5", "scipy>=1.18"]
+dependencies = ["numpy>=2.4", "scipy>=1.17"]
 
 # Replace OWNER with the repository's account before releasing: the release workflow refuses the placeholder.
 [project.urls]
