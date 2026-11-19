@@ -280,23 +280,25 @@ def table(columns: dict[str, _Bounds], count: tuple[int, int], check: RowCheck, 
         if not count[0] <= len(raw) <= count[1]:
             problems.append(f"{path}: needs {count[0]} to {count[1]} rows, found {len(raw)}")
             return None
-        rows, malformed = [], False
-        for i, row in enumerate(raw):
-            if not isinstance(row, dict):
-                problems.append(f"{path}[{i}]: expected a {{ {keys} }} table, found {_kind(row)}")
-                malformed = True
-            elif _keys(problems, f"{path}[{i}].", row, columns):
-                values = [_number(f"{path}[{i}].{k}", row[k], problems, bounds) for k, bounds in columns.items()]
-                malformed |= None in values
-                rows.append(tuple(cast("list[float]", values)))
-            else:
-                malformed = True
-        if malformed:
+        rows = [_row(f"{path}[{i}]", row, columns, problems) for i, row in enumerate(raw)]  # every row, every problem
+        if None in rows:
             return None
-        check(path, tuple(rows), problems, section)
-        return tuple(rows)
+        checked = cast("Rows", tuple(rows))
+        check(path, checked, problems, section)
+        return checked
 
     return _rule(parse, note, columns=tuple(columns))
+
+
+def _row(path: str, row: object, columns: dict[str, _Bounds], problems: list[str]) -> tuple[float, ...] | None:
+    """Read one row of a table: a table of exactly these columns, each a number in its bounds; None if not."""
+    if not isinstance(row, dict):
+        problems.append(f"{path}: expected a {{ {', '.join(columns)} }} table, found {_kind(row)}")
+        return None
+    if not _keys(problems, f"{path}.", row, columns):
+        return None
+    values = [_number(f"{path}.{k}", row[k], problems, bounds) for k, bounds in columns.items()]
+    return None if None in values else tuple(cast("list[float]", values))
 
 
 def _modes(path: str, rows: Rows, problems: list[str], section: dict[str, Any]) -> None:
