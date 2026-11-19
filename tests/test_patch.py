@@ -4,6 +4,7 @@
 """The patch: validation with every problem and its path, canonical TOML, edits and tuning."""
 
 import codecs
+import dataclasses
 import datetime as dt
 import math
 from collections.abc import Callable
@@ -622,3 +623,117 @@ def test_notes_by_number() -> None:
     assert [patch.note_name(n) for n in (0, 24, 61, 69)] == ["C-1", "C1", "C#4", "A4"]
     assert [patch.note_number(s) for s in ("C1", "c#1", "Db1", "B-1", "H1")] == [24, 25, 25, 11, None]
     assert [patch.note_hz(69), patch.note_hz(24)] == [440.0, 32.703]
+
+
+GRIT = {"rate_hz": 8000.0, "input_db": 0.0}  # a grit section, but for its bits
+
+
+@pytest.mark.parametrize(
+    ("bits", "message"),
+    [
+        (4, None),
+        (16, None),
+        (3, "grit.bits: 3 is outside 4 … 16"),
+        (17, "grit.bits: 17 is outside 4 … 16"),
+        (True, "grit.bits: expected an integer, found a boolean"),
+        ("8", "grit.bits: expected an integer, found a string"),
+        (8.0, "grit.bits: expected an integer, found a float"),
+    ],
+)
+def test_a_whole_number_holds_its_bounds_and_no_other_type(
+    raw: dict[str, Any],
+    bits: object,
+    message: str | None,
+) -> None:
+    """Accept a whole number at either bound, and refuse one past it, a boolean, a string and a float."""
+    raw["grit"] = {**GRIT, "bits": bits}
+    if message is None:
+        assert patch.from_dict(raw).grit == patch.Grit(8000.0, raw["grit"]["bits"], 0.0)
+    else:
+        assert problems(raw) == [message]
+
+
+@pytest.mark.parametrize(
+    ("band", "message"),
+    [
+        ([10.0, 900.0], "attack.noise_band_hz[0]: 10 is outside 20 … 20000"),
+        ([700.0, 30000.0], "attack.noise_band_hz[1]: 30000 is outside 20 … 20000"),
+        ([700.0, 700.0], "attack.noise_band_hz: the low edge must be below the high edge"),
+    ],
+)
+def test_each_edge_of_a_band_holds_its_range(raw: dict[str, Any], band: list[float], message: str) -> None:
+    """Refuse either edge outside 20 Hz … 20 kHz, and edges that meet."""
+    raw["attack"]["noise_band_hz"] = band
+    assert problems(raw) == [message]
+
+
+def test_a_curve_and_a_table_take_up_to_their_most(raw: dict[str, Any]) -> None:
+    """Accept 32 knots and 16 modes, and refuse a 33rd knot and a 17th mode."""
+    gains = [0.0, 1.0, *(1 - k / 31 for k in range(2, 31)), 0.0]
+    raw["body"]["amp"] = [{"ms": float(k), "gain": g} for k, g in enumerate(gains)]
+    raw["body"]["modes"] = [{"ratio": 1.0 + k / 10, "db": -12.0, "decay_ms": 100.0} for k in range(16)]
+    assert len(patch.from_dict(raw).body.modes) == len(raw["body"]["modes"])
+    raw["body"]["amp"].insert(-1, {"ms": 30.5, "gain": 0.01})
+    raw["body"]["modes"].append({"ratio": 2.6, "db": -12.0, "decay_ms": 100.0})
+    found = problems(raw)
+    assert "body.amp: needs 3 to 32 knots, found 33" in found
+    assert "body.modes: needs 0 to 16 rows, found 17" in found
+
+
+def test_a_malformed_row_is_named_and_the_table_not_read(raw: dict[str, Any]) -> None:
+    """Refuse a mode whose decibels are not a number, naming that cell alone."""
+    raw["body"]["modes"] = [{"ratio": 1.5, "db": "loud", "decay_ms": 100.0}]
+    assert problems(raw) == ["body.modes[0].db: expected a number, found a string"]
+
+
+def test_knots_need_ten_microseconds_between_them(raw: dict[str, Any]) -> None:
+    """Refuse a knot 5 µs after the one before, as written, and name how far apart they are."""
+    raw["body"]["amp"].insert(2, {"ms": 0.255, "gain": 0.99})
+    assert problems(raw) == ["body.amp[2].ms: is 0.005 ms after the previous knot; knots need 0.01 ms"]
+
+
+def test_transient_samples_must_be_strict_base64(raw: dict[str, Any], tight: patch.Patch) -> None:
+    """Refuse samples holding a character that base64 does not use, which a lenient decoder would skip."""
+    with_transient = dataclasses.replace(tight, transient=patch.Transient.of(np.array([0.5, -1.0, 0.25]), 48000))
+    raw["transient"] = patch.to_dict(with_transient)["transient"]
+    good = raw["transient"]["samples"]
+    raw["transient"]["samples"] = good[:4] + "*" + good[4:]
+    assert problems(raw) == ["transient.samples: is not base64"]
+
+
+def test_the_seed_holds_its_bounds(raw: dict[str, Any]) -> None:
+    """Accept the seeds 0 and 2**63 - 1, and refuse one past either."""
+    for seed in (0, patch.MAX_SEED):
+        raw["seed"] = seed
+        assert patch.from_dict(raw).seed == seed
+    for seed in (-1, patch.MAX_SEED + 1):
+        raw["seed"] = seed
+        assert problems(raw) == [f"seed: {seed} is outside 0 … 2**63 - 1"]
+
+
+def test_an_amp_gain_above_1_is_named(raw: dict[str, Any]) -> None:
+    """Refuse a shape's gain above 1 as outside its range, not only as a highest point other than 1."""
+    raw["body"]["amp"][2]["gain"] = 1.5
+    assert "body.amp[2].gain: 1.5 is outside 0 … 1" in problems(raw)
+
+
+def test_a_transient_keeps_its_level_to_a_hundredth_of_a_decibel() -> None:
+    """Take samples as they sound, their peak as the level, rounded to 0.01 dB."""
+    assert patch.Transient.of(np.array([0.123456, -0.05]), 48000).level_db == round(20 * math.log10(0.123456), 2)
+
+
+def test_stretched_knots_land_on_whole_microseconds(tight: patch.Patch) -> None:
+    """Stretch the body's shape by a third from its peak at 0.25 ms, every moved knot at a whole microsecond."""
+    moved = patch.stretch(tight, "body.amp", 1 / 3).body.amp
+    assert [ms for ms, _ in moved] == [0.0, 0.25, 10.167, 33.5, 60.167, 80.167]
+
+
+def test_a_note_just_flat_reads_as_plus_zero_cents() -> None:
+    """Describe a pitch 0.04 cents flat of A1 as on it, with no minus sign before the zero."""
+    assert patch.describe_tuning(55.0 * 2 ** (-0.0004 / 12)) == "A1 +0.0 cents"
+
+
+def test_a_later_section_is_written_after_one_left_out(tight: patch.Patch) -> None:
+    """Write a patch with no room but a [play] section after it, and read the same patch back."""
+    played = dataclasses.replace(tight, room=None, play=patch.Play(-18.0, -6.0, 0.6, 0.5))
+    assert patch.loads(patch.dumps(played)) == played
