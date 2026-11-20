@@ -417,20 +417,22 @@ def _renders_as(text: str, expected: bytes) -> None:
         raise AssertionError
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no fork")
 def test_a_process_forked_after_a_render_renders_too(tight_text: str) -> None:
     """Render, fork as multiprocessing does by default on Linux before Python 3.14, and render the same in the child.
 
     The child inherits the parent's pool of threads but none of the threads; it must make its own, not wait forever.
     """
-    expected = render.render(patch.loads(tight_text))[0].tobytes()
-    with warnings.catch_warnings():  # Python warns that forking a process with threads may deadlock: the point here
-        warnings.simplefilter("ignore", DeprecationWarning)
-        child = multiprocessing.get_context("fork").Process(target=_renders_as, args=(tight_text, expected))
-        child.start()
-    child.join(timeout=60)
-    alive = child.is_alive()
-    child.kill()
-    child.join()
-    assert not alive, "the forked child hung"
-    assert child.exitcode == 0
+    if sys.platform != "win32":  # a check the type checker reads too, unlike a skip mark
+        expected = render.render(patch.loads(tight_text))[0].tobytes()
+        with warnings.catch_warnings():  # Python warns that forking a process with threads may deadlock: the point here
+            warnings.simplefilter("ignore", DeprecationWarning)
+            child = multiprocessing.get_context("fork").Process(target=_renders_as, args=(tight_text, expected))
+            child.start()
+        child.join(timeout=60)
+        alive = child.is_alive()
+        child.kill()
+        child.join()
+        assert not alive, "the forked child hung"
+        assert child.exitcode == 0
+        return
+    pytest.skip("Windows has no fork")
