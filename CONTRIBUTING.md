@@ -90,10 +90,8 @@ which changes every render.
 
 ## Releasing
 
-1. Set the version in `pyproject.toml` and `src/ballast_synth/__init__.py`;
-   a test checks that they agree. Before the first release, replace `OWNER`
-   in `[project.urls]` with the repository's account: the release workflow
-   refuses the placeholder. The build points the README's links on PyPI at
+1. Set the version in `pyproject.toml` and `src/ballast_synth/__init__.py`; a
+   test checks that they agree. The build points the README's links on PyPI at
    the repository at the release's tag (see `hatch_build.py`), so the page
    shows the documentation of that very release.
 2. Move the changelog's entries under the new version, with the date.
