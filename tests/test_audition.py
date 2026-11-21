@@ -144,6 +144,31 @@ def test_the_watcher_reports_new_text_only(tmp_path: Path) -> None:
     assert watcher.poll() == "ccc"
 
 
+def test_the_watcher_sees_an_edit_stamped_alike(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Find an edit of the same length stamped with the same time, as Windows' 16 ms clock stamps two quick saves.
+
+    Once the file is old enough for its stamp to be trusted, the watcher no longer reads it while the stamp holds.
+    """
+    path = tmp_path / "kick.toml"
+    path.write_text("a", encoding="utf-8")
+    now = time.time_ns()
+    os.utime(path, ns=(now, now))
+    watcher = Watcher(path, "a")
+    assert watcher.poll() is None
+    path.write_text("b", encoding="utf-8")
+    os.utime(path, ns=(now, now))  # the same size and time as before the edit
+    assert watcher.poll() == "b"
+    old = now - 2 * audition.RACY_NS
+    os.utime(path, ns=(old, old))
+    assert watcher.poll() is None  # read once more at its new stamp, and unchanged
+
+    def unread(_path: object) -> str:
+        raise AssertionError
+
+    monkeypatch.setattr(audition, "read_text", unread)
+    assert watcher.poll() is None  # an old file whose stamp holds: not read
+
+
 class PortAudioError(Exception):
     """The error PortAudio raises for a stream it cannot open."""
 

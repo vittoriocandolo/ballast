@@ -150,8 +150,14 @@ class Hits:
         return out
 
 
+# A file's size and modification time show every edit only once the file is older than its file system's clock can
+# tell apart: Windows stamps times in steps of about 16 ms and FAT in steps of 2 s, so an edit of the same length made
+# within one step of the last leaves both unchanged. Until a file is this old, its content is compared as well.
+RACY_NS = 2_000_000_000
+
+
 class Watcher:
-    """A file's text, read again whenever its size or modification time changes."""
+    """A file's text, read again whenever its size or modification time changes, or is too recent to tell."""
 
     def __init__(self, path: str | os.PathLike[str], text: str) -> None:
         """Watch the file at `path`, which held `text` when the session started."""
@@ -163,7 +169,7 @@ class Watcher:
         try:
             st = self.path.stat()
             stamp = (st.st_mtime_ns, st.st_size)
-            if stamp == self.stamp:
+            if stamp == self.stamp and time.time_ns() - st.st_mtime_ns > RACY_NS:
                 return None
             text = read_text(self.path)
         except (OSError, UnicodeDecodeError):  # unreadable mid-save: the next poll retries
