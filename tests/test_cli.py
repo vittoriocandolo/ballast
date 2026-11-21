@@ -72,7 +72,7 @@ def test_render_then_extract_gives_back_the_exact_text(
 ) -> None:
     """Render a patch with a comment of its own, and extract the very same text from the WAV."""
     text = read_preset("driven").replace("seed = 1", "seed = 1  # kept verbatim, comments and all")
-    (tmp_path / "kick.toml").write_text(text, encoding="utf-8")
+    (tmp_path / "kick.toml").write_text(text, encoding="utf-8", newline="\n")  # as written, line ends and all
     status, out, err = run("render", "kick.toml", "-o", "kick.wav", "--format", "pcm24")
     assert status == 0
     assert err == ""
@@ -450,8 +450,11 @@ def test_commands_name_the_files_they_cannot_read_or_write(run: Run, tmp_path: P
     assert (status, out) == (BAD_INPUT, "")
     assert err.startswith("notes.wav: ")
     (tmp_path / "taken").write_text("", encoding="utf-8")
-    assert run("vary", "kick.toml", "-o", "taken", "-n", "1") == (BAD_INPUT, "", "taken: File exists\n")
-    assert run("pack", "kick.toml", "-o", "taken") == (BAD_INPUT, "", "taken: File exists\n")
+    with pytest.raises(FileExistsError) as exists:  # what this system says, in its own words, for a folder there
+        (tmp_path / "taken").mkdir()
+    said = f"taken: {exists.value.strerror}\n"
+    assert run("vary", "kick.toml", "-o", "taken", "-n", "1") == (BAD_INPUT, "", said)
+    assert run("pack", "kick.toml", "-o", "taken") == (BAD_INPUT, "", said)
 
 
 def test_pack_and_vary_refuse_kits_too_large_or_unplayable(
@@ -513,12 +516,15 @@ def test_pack_refuses_names_it_cannot_tell_apart(run: Run, tmp_path: Path) -> No
     assert run("pack", "empty", "-o", "kit")[0] == BAD_INPUT
 
 
+NOT_ON_WINDOWS = pytest.mark.skipif(sys.platform == "win32", reason="Windows allows no file a name like this")
+
+
 @pytest.mark.parametrize(
     ("name", "holds"),
     [
-        ("kick\n<region> sample=other.wav key=1", "U+000A < > ="),
+        pytest.param("kick\n<region> sample=other.wav key=1", "U+000A < > =", marks=NOT_ON_WINDOWS),
         ("kick $KEY", "$"),
-        ("kick\\..", "\\"),
+        pytest.param("kick\\..", "\\", marks=NOT_ON_WINDOWS),
         ("kick\u2028two", "U+2028"),
         ("kick ", None),
     ],
