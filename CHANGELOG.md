@@ -1,0 +1,64 @@
+# Changelog
+
+All notable changes to Ballast are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html). Within a version, a patch renders the same samples bit for
+bit on one platform with the same NumPy and SciPy, and the same sound on any other, the same samples to within a
+millionth of full scale; a change to the sound of an existing patch is a new version.
+
+## [0.1.0] - Unreleased
+
+The first public release. The presets' voicing may change in later versions, and each such change will be recorded here.
+
+### Added
+
+- A one-voice kick drum synthesizer: a body with an exact pitch sweep, a second harmonic, a brightness that turns its
+  sine into a saw fading above a frequency, and modes that ring from the strike like a drum head's, an attack of a tone
+  with a pitch sweep of its own and seeded band-limited noise, and a tanh saturator anti-aliased to the second order,
+  computed at 32 times the sample rate: every setting keeps its aliases at least 104 dB down.
+- Frozen minimum-phase decimators for the 44.1 and 48 kHz families, verified by checksum: flat to ±0.000014 dB up to 20
+  kHz and at least 116.4 dB down from half the base rate.
+- Patches in TOML, with every field required, every problem reported with its field path, and a canonical form. Schema 3
+  is current; patches of schemas 1 and 2 still read and render exactly as they always sounded.
+- Drive and clipping: the drive's asymmetry, even harmonics that leave full scale and the drive's gain where they were,
+  and its mix with the undriven kick; and a clipper that takes exactly `clip.db` off the file's true peak, from a hard
+  to a soft knee, anti-aliased like the drive.
+- Exports at 44.1, 48, 88.2, 96, 176.4 and 192 kHz, as float32 or as 24- or 16-bit PCM with seeded TPDF dither,
+  normalized to a gain, a sample peak or a true peak, with the root key in a `smpl` chunk and the patch and its
+  provenance in a `blst` chunk. Every file is written whole or not at all.
+- A clean sub: the sine the body's tail meets, under its own shape, added after the drive.
+- A room: a seeded tail of noise whose every frequency fades on its own clock, after the drive, holding exactly its
+  level of the kick's energy.
+- Grit: a low-rate sampler modelled on purpose, at its own rate without a filter against aliasing, its bits without
+  dither, and its staircase, averaged exactly so that Ballast adds no aliasing of its own.
+- A three-band EQ after the drive, low shelf, bell and high shelf, within 0.004 dB of its analog prototypes up to 20
+  kHz, and a resonant low-pass within 0.012 dB of its own, whose cutoff `eq.sweep` moves for up to a second through a
+  topology-preserving state-variable filter, at the internal rate, before the static biquad takes over exactly.
+- Sampled transients: `ballast transient` layers a short WAV over the attack, stored in the patch as base64 float32,
+  brought up by the family's frozen filter and played at any pitch and from either rate family within 140 dB of exact
+  interpolation.
+- Eleven presets at −1 dBTP, complete patches to start from, each retuned with `--tune`.
+- An exact true peak, read on the file's own reconstruction at 32 times the base rate, for true-peak targets, the report
+  and the clipper, whose threshold is solved in four to ten trials to within 0.0000001 dB.
+- The report's loudness: the highest momentary loudness of EBU R128, slid sample by sample, K-weighted at every sample
+  rate.
+- Kits: `ballast vary` writes seeded variations of a patch, the same in every version, or every combination along axes,
+  and `ballast pack` renders a folder of patches into a kit with a manifest, refused whole unless every kick passes its
+  gates.
+- Played kits: `[play]` says how a kick sounds hit softer and how much each repeat differs, and
+  `ballast pack --velocities --round-robins` renders the layers and repeats through one chain, with an SFZ map; each
+  hit's WAV records that chain, so its patch renders it again exactly.
+- The `ballast` command: `init` from the presets, `tune`, `stretch`, `transient`, `vary`, `render`, `pack`,
+  `multisample` for one sample per key with an SFZ map, `audition` with live re-rendering, tempo, a bed and dropout
+  warnings, and `extract`.
+- Exit statuses a script can rely on: 0 when done, 1 for a refusal or a failure, 2 for bad input, 130 after Ctrl+C; a
+  reader that goes away, as `| head` does, ends a command quietly.
+- Documentation with figures and sounds generated from the code: a figure for every stage of the signal path, a gallery
+  of the presets with their sounds, curves, spectra and patches, and the sound of every design move in the usage guide.
+- A test suite that checks the documented properties on every platform.
+- Type annotations throughout, with a `py.typed` marker so that type checkers use them.
+- Input that cannot be misread: a patch whose file name a sampler would read as part of the SFZ map written for it is
+  refused; `extract` never prints control characters, which a terminal would act on; WAVs, embedded chunks and patches
+  are read with every size checked, so a damaged or crafted file is refused with its reason; a bed holding samples that
+  are not numbers is refused before it reaches the device. A process forked after a render renders too. Releases are
+  published with attestations of where they were built.

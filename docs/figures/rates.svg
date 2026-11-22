@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="fig" viewBox="0 0 960 486" width="960" height="486" role="img"><title>The tight preset&#x27;s click at 48, 96 and 192 kHz, where every lower-rate sample is also a higher-rate one</title><style>
+.fig{--paper:#fbfcfd;--panel:#f1f4f7;--ink:#0e1116;--ink-2:#4a5361;--muted:#626c7a;--rule:#dde3ea;--grid:#e9edf2;--accent:#2a78d6;--series-2:#eb6834;--series-3:#1baf7a;--step-1:#86b6ef;--step-2:#3987e5;--step-3:#1c5cab;--step-4:#0d366b;--heat-1:#cde2fb;--heat-2:#9ec5f4;--heat-3:#6da7ec;--heat-4:#256abf;--heat-5:#184f95;--heat-6:#0d366b;--show-light:inline;--show-dark:none;}
+@media (prefers-color-scheme: dark){.fig{--paper:#0f1216;--panel:#171c22;--ink:#e7ecf1;--ink-2:#aab4c0;--muted:#8b96a4;--rule:#29313b;--grid:#1c2229;--accent:#3987e5;--series-2:#d95926;--series-3:#199e70;--step-1:#184f95;--step-2:#2a78d6;--step-3:#6da7ec;--step-4:#b7d3f6;--heat-1:#104281;--heat-2:#184f95;--heat-3:#1c5cab;--heat-4:#6da7ec;--heat-5:#9ec5f4;--heat-6:#cde2fb;--show-light:none;--show-dark:inline;}}
+.fig .bg{fill:var(--paper)}
+.fig .grid{fill:none;stroke:var(--grid);stroke-width:1}
+.fig .axis{fill:none;stroke:var(--rule);stroke-width:1}
+.fig .zero{fill:none;stroke:var(--muted);stroke-width:1;stroke-opacity:.45}
+.fig text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:12px;fill:var(--muted);font-variant-numeric:tabular-nums}
+.fig .label{fill:var(--ink-2)}
+.fig .title{fill:var(--ink);font-size:15px;font-weight:600}
+.fig .name{fill:var(--ink);font-family:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono","Roboto Mono",Menlo,Consolas,monospace;font-size:15px;font-weight:700}
+.fig .math{fill:var(--ink-2);font-family:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono","Roboto Mono",Menlo,Consolas,monospace;font-size:12px}
+.fig .boxtitle{fill:var(--ink);font-size:13px;font-weight:600}
+.fig .peak{fill:var(--accent);fill-opacity:.3}
+.fig .rms{fill:var(--accent)}
+.fig .trace{fill:none;stroke:var(--accent);stroke-width:1.25;stroke-linejoin:round}
+.fig .s1{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--accent)}
+.fig .s2{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--series-2)}
+.fig .s3{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--series-3)}
+.fig .o1{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--step-1)}
+.fig .o2{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--step-2)}
+.fig .o3{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--step-3)}
+.fig .o4{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--step-4)}
+.fig .ref{fill:none;stroke:var(--muted);stroke-width:1.25}
+.fig .halo{fill:none;stroke:var(--muted);stroke-opacity:.35;stroke-width:7}
+.fig .key1,.fig .bar{fill:var(--accent)}
+.fig .key2{fill:var(--series-2)}
+.fig .key3{fill:var(--series-3)}
+.fig .ko1{fill:var(--step-1)}
+.fig .ko2{fill:var(--step-2)}
+.fig .ko3{fill:var(--step-3)}
+.fig .ko4{fill:var(--step-4)}
+.fig .kref{fill:var(--muted)}
+.fig .khalo{fill:var(--muted);fill-opacity:.35}
+.fig .knot,.fig .dot1{fill:var(--accent);stroke:var(--paper);stroke-width:2}
+.fig .dot2{fill:var(--series-2);stroke:var(--paper);stroke-width:2}
+.fig .do1{fill:var(--step-1);stroke:var(--paper);stroke-width:2}
+.fig .do2{fill:var(--step-2);stroke:var(--paper);stroke-width:2}
+.fig .do3{fill:var(--step-3);stroke:var(--paper);stroke-width:2}
+.fig .do4{fill:var(--step-4);stroke:var(--paper);stroke-width:2}
+.fig .dot3{fill:var(--series-3);stroke:var(--paper);stroke-width:2}
+.fig .band{fill:var(--accent);fill-opacity:.08}
+.fig .limit{fill:none;stroke:var(--ink-2);stroke-width:1}
+.fig .box{fill:var(--paper);stroke:var(--rule);stroke-width:1}
+.fig .zone{fill:var(--panel);stroke:var(--rule);stroke-width:1}
+.fig .flow{fill:none;stroke:var(--ink-2);stroke-width:1.5}
+.fig .head{fill:var(--ink-2)}
+.fig .h0{fill:var(--panel)}
+.fig .h1{fill:var(--heat-1)}
+.fig .h2{fill:var(--heat-2)}
+.fig .h3{fill:var(--heat-3)}
+.fig .h4{fill:var(--heat-4)}
+.fig .h5{fill:var(--heat-5)}
+.fig .h6{fill:var(--heat-6)}
+.fig .on-light{fill:var(--ink);font-size:11px}
+.fig .on-dark{fill:var(--paper);font-size:11px}
+.fig .light{display:var(--show-light)}
+.fig .dark{display:var(--show-dark)}
+</style><rect class="bg" width="960" height="486" rx="10"/><text class="title" x="28" y="36">Rates</text><text class="label" x="28" y="57">Each higher rate keeps every sample of the lower one, bit for bit, and fills in between</text><path class="grid" d="M64,321.0H928"/><text x="56" y="325.0" text-anchor="end">0.4</text><path class="grid" d="M64,233.7H928"/><text x="56" y="237.7" text-anchor="end">0.6</text><path class="grid" d="M64,146.4H928"/><text x="56" y="150.4" text-anchor="end">0.8</text><path class="grid" d="M190.4,96V356"/><text x="190.4" y="374" text-anchor="middle">0.2</text><path class="grid" d="M443.3,96V356"/><text x="443.3" y="374" text-anchor="middle">0.25</text><path class="grid" d="M696.2,96V356"/><text x="696.2" y="374" text-anchor="middle">0.3</text><path class="axis" d="M64,356H928"/><text class="label" x="928" y="392" text-anchor="end">time, ms</text><text class="label" x="64" y="86">Samples of the tight preset's click, where it moves fastest</text><circle class="dot1" cx="127.2" cy="315.9" r="9.0"/><circle class="dot1" cx="232.6" cy="257.7" r="9.0"/><circle class="dot1" cx="338.0" cy="255.2" r="9.0"/><circle class="dot1" cx="443.3" cy="293.6" r="9.0"/><circle class="dot1" cx="548.7" cy="228.2" r="9.0"/><circle class="dot1" cx="654.0" cy="192.0" r="9.0"/><circle class="dot1" cx="759.4" cy="186.1" r="9.0"/><circle class="dot1" cx="864.8" cy="124.3" r="9.0"/><circle class="dot2" cx="74.5" cy="330.8" r="6.5"/><circle class="dot2" cx="127.2" cy="315.9" r="6.5"/><circle class="dot2" cx="179.9" cy="288.4" r="6.5"/><circle class="dot2" cx="232.6" cy="257.7" r="6.5"/><circle class="dot2" cx="285.3" cy="242.9" r="6.5"/><circle class="dot2" cx="338.0" cy="255.2" r="6.5"/><circle class="dot2" cx="390.6" cy="282.0" r="6.5"/><circle class="dot2" cx="443.3" cy="293.6" r="6.5"/><circle class="dot2" cx="496.0" cy="271.4" r="6.5"/><circle class="dot2" cx="548.7" cy="228.2" r="6.5"/><circle class="dot2" cx="601.4" cy="196.3" r="6.5"/><circle class="dot2" cx="654.0" cy="192.0" r="6.5"/><circle class="dot2" cx="706.7" cy="198.2" r="6.5"/><circle class="dot2" cx="759.4" cy="186.1" r="6.5"/><circle class="dot2" cx="812.1" cy="152.3" r="6.5"/><circle class="dot2" cx="864.8" cy="124.3" r="6.5"/><circle class="dot2" cx="917.5" cy="125.9" r="6.5"/><circle class="dot3" cx="74.5" cy="330.8" r="4.0"/><circle class="dot3" cx="100.9" cy="324.9" r="4.0"/><circle class="dot3" cx="127.2" cy="315.9" r="4.0"/><circle class="dot3" cx="153.6" cy="303.6" r="4.0"/><circle class="dot3" cx="179.9" cy="288.4" r="4.0"/><circle class="dot3" cx="206.2" cy="272.3" r="4.0"/><circle class="dot3" cx="232.6" cy="257.7" r="4.0"/><circle class="dot3" cx="258.9" cy="247.2" r="4.0"/><circle class="dot3" cx="285.3" cy="242.9" r="4.0"/><circle class="dot3" cx="311.6" cy="245.8" r="4.0"/><circle class="dot3" cx="338.0" cy="255.2" r="4.0"/><circle class="dot3" cx="364.3" cy="268.5" r="4.0"/><circle class="dot3" cx="390.6" cy="282.0" r="4.0"/><circle class="dot3" cx="417.0" cy="291.5" r="4.0"/><circle class="dot3" cx="443.3" cy="293.6" r="4.0"/><circle class="dot3" cx="469.7" cy="286.7" r="4.0"/><circle class="dot3" cx="496.0" cy="271.4" r="4.0"/><circle class="dot3" cx="522.3" cy="250.5" r="4.0"/><circle class="dot3" cx="548.7" cy="228.2" r="4.0"/><circle class="dot3" cx="575.0" cy="209.0" r="4.0"/><circle class="dot3" cx="601.4" cy="196.3" r="4.0"/><circle class="dot3" cx="627.7" cy="191.1" r="4.0"/><circle class="dot3" cx="654.0" cy="192.0" r="4.0"/><circle class="dot3" cx="680.4" cy="195.9" r="4.0"/><circle class="dot3" cx="706.7" cy="198.2" r="4.0"/><circle class="dot3" cx="733.1" cy="195.5" r="4.0"/><circle class="dot3" cx="759.4" cy="186.1" r="4.0"/><circle class="dot3" cx="785.8" cy="170.6" r="4.0"/><circle class="dot3" cx="812.1" cy="152.3" r="4.0"/><circle class="dot3" cx="838.4" cy="135.5" r="4.0"/><circle class="dot3" cx="864.8" cy="124.3" r="4.0"/><circle class="dot3" cx="891.1" cy="121.2" r="4.0"/><circle class="dot3" cx="917.5" cy="125.9" r="4.0"/><path class="ref" d="M88.0,126L127.2,303.9"/><text class="label" x="88.0" y="118" text-anchor="start">one sample, at every rate</text><circle class="dot1" cx="73" cy="414" r="5"/><text class="label" x="90" y="418">48 kHz</text><circle class="dot2" cx="73" cy="434" r="5"/><text class="label" x="90" y="438">96 kHz: the 48 kHz samples, and one between each pair</text><circle class="dot3" cx="73" cy="454" r="5"/><text class="label" x="90" y="458">192 kHz</text></svg>

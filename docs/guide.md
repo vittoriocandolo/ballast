@@ -1,0 +1,479 @@
+# User guide
+
+- [A session](#a-session)
+- [Commands](#commands)
+- [Rendering for DAWs and samplers](#rendering-for-daws-and-samplers)
+- [Audition](#audition)
+- [Designing a kick](#designing-a-kick)
+- [Python API](#python-api)
+
+## A session
+
+Start from the preset closest to what you want, tuned to the key of your track:
+
+```
+ballast init tight --tune F1 -o kick.toml
+```
+
+Play it on the beat, and keep it playing while you edit:
+
+```
+ballast audition kick.toml --watch --bpm 128
+```
+
+Open `kick.toml` in any editor. Every save renders again, and the new sound takes over at the next hit; an invalid edit
+is reported and the last valid sound keeps playing. When it sounds right, render it:
+
+```
+ballast render kick.toml -o kick.wav --format pcm24
+```
+
+The WAV carries the patch. `ballast extract kick.wav -o kick.toml` gives it back, so a folder of rendered kicks is also
+a library of patches.
+
+## Commands
+
+Every command prints `--help`. `init`, `tune`, `stretch`, `transient` and `extract` print the patch unless given
+`-o FILE`, which writes it as UTF-8 with plain newlines. On Windows, prefer `-o` to shell redirection: PowerShell
+re-encodes what it redirects, so comments may not survive.
+
+### `ballast init PRESET [--tune NOTE] [-o FILE]`
+
+Writes a complete patch from a preset: `house`, `tech-house` or `trance`; one of `sampled`, `deep`, `fat` and `kit`,
+from sampled to acoustic, the last two with a `[play]` section; or one of the four shapes `tight`, `driven`, `round` and
+`long`. Every preset peaks at −1 dBTP. `--tune` takes a note name such as `F1`, `C#2` or `Db2`, or a frequency in Hz. A
+note name sets `tune_hz` to its equal-tempered frequency (A4 = 440 Hz), rounded to 3 decimals.
+
+### `ballast tune PATCH NOTE [-o FILE]`
+
+Retunes a patch. The pitch curve is a ratio to `tune_hz`, so the whole sweep moves with it, and every knot must stay
+within 10 Hz – 20 kHz.
+
+### `ballast stretch PATCH CURVE FACTOR [--after MS] [-o FILE]`
+
+Rescales the knot times of `body.pitch`, `body.amp`, `attack.pitch` or `attack.amp`. Below 1 shortens, above 1
+lengthens. Knots up to `--after` stay put; by default, that is the peak of an amplitude shape, so the rise keeps its
+shape, and 0 ms for a pitch curve. Times are rounded to 1 µs, and the result is checked like any patch.
+
+### `ballast transient PATCH WAV [-o FILE]`
+
+Layers a WAV over the attack as the patch's `[transient]`, replacing any it had. The WAV must be mono, or stereo, which
+is taken as its mid, (L + R) / 2, at one of the six sample rates, and end within 1 s. It goes in as it sounds: at its
+own rate, with its own peak as `level_db`, from the trigger, at pitch 1. Then `start_ms`, `pitch`, `level_db` and
+`polarity` place it; deleting the section removes it.
+
+`init`, `tune`, `stretch` and `transient` write the canonical form of the patch, with its standard comments: your own
+comments in the file are not kept.
+
+### `ballast vary PATCH -o DIR [-n N] [--seed SEED] [--along FIELD STEPS]...`
+
+Writes N variations of a patch, 8 by default, into the folder `DIR`, as `kick-v1.toml`, `kick-v2.toml` and so on:
+patches near yours, to audition and keep. Each makes seven bounded moves, drawn from the seed:
+
+| Move | What changes | Reach |
+| -- | -- | -- |
+| drop | the first pitch ratio | × 2^±0.5 |
+| speed | the pitch curve's times | × 2^±0.5 |
+| length | the body's shape after its peak | × 2^±0.4 |
+| click | the attack's level | ± 4 dB |
+| tone | the attack's tone | × 2^±0.5 |
+| drive | the drive | ± 4 dB |
+| bright | the body's brightness, when it has any | × 2^±1 |
+
+Each move stays within what the patch allows, and the tuning, the levels of the body, the sub and the transient, and the
+output stay as they were. The same seed gives the same variations on every computer and in every version of Ballast, and
+each line printed says what moved, such as `drop ×1.08, speed ×1.01, length ×1.222, …`. `ballast pack` renders the
+folder.
+
+With `--along`, `vary` sets fields along axes instead, and writes every combination, the first axis outermost:
+
+```
+ballast vary kick.toml -o grid --along drive.db 6,12,18 --along body.amp x0.8,x1,x1.25
+```
+
+Each axis is a field and its steps, separated by commas. A number sets the field; `x` and a factor stretches a curve, as
+`ballast stretch` does, or multiplies a number; any other word sets a choice, such as
+`--along body.phase_ref onset,tail`. Every combination is checked before any file is written, and each invalid one is
+listed. A grid takes neither `-n` nor `--seed`, and makes at most 999 patches.
+
+### `ballast render PATCH -o WAV [--format FORMAT] [--allow-over]`
+
+Renders to a mono WAV at the patch's sample rate, prints a report and writes the file. `--format` is `float32` (the
+default), `pcm24` or `pcm16`. See [Rendering](#rendering-for-daws-and-samplers).
+
+### `ballast multisample PATCH LOW HIGH -o DIR [--format FORMAT]`
+
+Renders the patch at every semitone from `LOW` to `HIGH`, such as `C1 C2`, into the folder `DIR`: one WAV per key, named
+after the patch and the note, with its root key set, and an SFZ map that assigns each sample to its key. A sampler then
+plays the patch as an instrument, at every pitch, with the real length and spectrum of each note rather than a
+transposed copy, so a bassline keeps its tail's length on every note. Every note must be a valid tuning of the patch and
+fit full scale; otherwise nothing is written and every problem is listed.
+
+### `ballast pack PATCH... -o DIR [--rate RATE]... [--format FORMAT] [--velocities N] [--round-robins M]`
+
+Renders patches, given as files or as folders of `.toml` files, into a finished kit in the folder `DIR`:
+
+- one WAV per patch, named after the patch and its key, such as `house-A1.wav`, or its frequency, such as
+  `driven-50Hz.wav`, when it is more than half a cent off every note;
+- the patch it was rendered from beside each WAV;
+- `manifest.csv` and `manifest.json`, with each kick's sample rate, format, tuning, key and cents, length, sample and
+  true peaks, loudness, and the SHA-256 of its WAV.
+
+`--format` is `pcm24` by default, as sample packs and samplers expect. Each patch renders at its own sample rate unless
+`--rate` says otherwise; given more than once, each rate gets a folder of its own, such as `44100/` and `48000/`. The
+manifest holds nothing of when or how fast the kit was made, so the same patches always make the same kit.
+
+`--velocities` and `--round-robins` render each patch as velocity layers and repeats, for patches with a `[play]`
+section: N velocity layers, softest to hardest, each in M repeats, named such as `house-A1-v2-rr3.wav`, and an SFZ map
+per patch, such as `house-A1.sfz`, on key 36, General MIDI's bass drum, whose groups place the layers on a square law of
+velocity and whose regions take the repeats in turn, and every hit is a one-shot: it plays out whatever the note's
+length, so a short note never cuts the kick. The hits of a kit go through one chain: its hardest hit sets the clipper's
+threshold, and its loudest hit, whichever it is, sets the gain they all share, so a soft hit stays soft after the output
+stage and every repeat keeps its own small difference. Each hit's patch, written beside its WAV, is that hit alone,
+without `[play]`.
+
+![The house preset played in three velocity layers, and two repeats of its hardest hit](figures/play.svg)
+
+Every kick must pass two gates: its true peak at or below 0 dBTP, with no sample over the format's ceiling, and its
+first and last samples below −90 dBFS, so no sampler clicks where the file starts or stops. If one fails, nothing is
+written and every failure is listed, as `multisample` does.
+
+### `ballast audition PATCH [--watch] [--bpm BPM] [--with WAV]`
+
+Plays the patch until you press Ctrl+C. `--watch` renders again on every save, `--bpm` hits on the beat, and `--with`
+loops a bed, such as your bass line, under the hits. See [Audition](#audition).
+
+### `ballast extract WAV [-o FILE]`
+
+Recovers the exact patch text from a WAV that Ballast rendered. Text holding control characters, which no patch does and
+a terminal would act on, is refused rather than written.
+
+### Exit status
+
+| Status | Meaning |
+| -- | -- |
+| 0 | done |
+| 1 | refused or failed: a render over the format's ceiling, a pack that fails its gates, or an audition that cannot play |
+| 2 | bad input: an invalid patch, a file that cannot be read or written, or bad arguments |
+| 130 | interrupted with Ctrl+C |
+
+Every file Ballast writes is written whole: to a temporary file beside it, then renamed over it. A failed or interrupted
+write leaves the previous file as it was, so retuning a patch in place can never destroy it.
+
+Errors go to standard error and name the file and the problem. An invalid patch lists every problem with its field path:
+
+```
+kick.toml: invalid patch
+  body.tune_hz: 5 is outside 20 … 1000
+  body.h2: expected a number, found a string
+```
+
+## Rendering for DAWs and samplers
+
+### Formats
+
+| Format | Use | Largest sample |
+| -- | -- | -- |
+| `float32` | DAWs; keeps any level exactly | full scale, or above with `--allow-over` |
+| `pcm24` | hardware samplers, archives | 2 LSB below full scale |
+| `pcm16` | older samplers | 2 LSB below full scale |
+
+PCM exports add triangular (TPDF) dither of ±1 LSB before rounding. The dither is seeded from the patch, so a PCM file
+is as reproducible as a float one, and exact zeros stay zero. Peaks are kept 2 LSB below full scale so the dither can
+never clip: in `peak` mode the target comes down by that much (0.0005 dB at 16 bits), and a `gain`-mode render above it
+is refused.
+
+### Levels and overs
+
+`output.mode = "gain"` applies `output.db` as a plain gain, which keeps relative levels between kicks.
+`output.mode = "peak"` scales the kick so its highest sample sits at `output.db` dBFS. `output.mode = "true-peak"`
+scales it so its true peak, the peak between samples, sits at `output.db` dBTP, for files that must not exceed a level
+after conversion; the highest sample still stays within the format's ceiling. A gain-mode render over full scale is
+never clipped: `ballast render` refuses it, says by how much to lower `output.db`, and exits with status 1.
+`--allow-over` writes it anyway as a float file with overs, for a DAW to bring down.
+
+### The report
+
+```
+tuning   43.654 Hz, F1 +0.0 cents
+length   240.0 ms source, 241.9 ms exported (11612 samples at 48000 Hz, 24-bit PCM)
+peak     -1.09 dBFS sample, -1.00 dBTP true
+loudness -14.4 LUFS momentary, at its loudest
+render   66 ms
+```
+
+- **tuning**: `tune_hz`, and the nearest note with its offset in cents.
+- **length**: the patch's length, and the exported length, which adds the decimator's tail: 1.9 ms at 48 or 96 kHz, 3.7
+  ms at 44.1 or 88.2 kHz.
+- **peak**: the highest sample, and the true peak between samples, read on the file's own reconstruction at 32 times the
+  base rate, to within 0.00001 dB: a converter cannot play the file louder. A render over full scale or over the PCM
+  ceiling says by how much.
+- **loudness**: the highest momentary loudness, in LUFS: EBU R128's 400 ms window, slid one sample at a time over the
+  kick played once, with the K-weighting of ITU-R BS.1770 derived for the file's sample rate. It compares kicks as a
+  loudness meter would, at their loudest moment.
+- **render**: the wall-clock time.
+
+### What the file holds
+
+A standard RIFF WAVE file, mono, which any DAW or sampler reads. Besides the audio it holds:
+
+- a `smpl` chunk with the MIDI root note and its fine tuning, from `tune_hz`, so samplers map the kick to its key. A
+  pitch less than half a cent flat of a note counts as that note, so samplers that ignore the fine tuning are never a
+  semitone off;
+- a `blst` chunk with JSON: the patch text, the renderer version, the decimator's checksum and rates, the platform and
+  the Python, NumPy and SciPy versions, for PCM the dither's bit depth, key and seed, and for a hit of a played kit,
+  under `kit`, the clipper threshold and the gain its kit's hits share, without which its patch alone renders a kick of
+  its own.
+
+Readers skip chunks they do not know.
+
+### In a kit with Halyard and Brightwork
+
+Ballast's presets peak at −1 dBTP, as loud as a file may be. Halyard's snares and claps and Brightwork's hats and
+cymbals match their own references at a lower level, so that a snap or a crash never passes full scale, and dropped next
+to a preset they sit some 18 and 24 dB under the kick in a loop. For a working balance, set the kick's `output.db` to
+−10, 9 dB under the presets, and raise theirs as their guides say: in eight bars of 4/4 with the kick on every beat, a
+snare or clap on two and four then reads 5 dB under the kick by loudness, the hats on the offbeats 10 dB under, and no
+file peaks above −1 dBFS. It was measured with the `house`, `tech-house` and `trance` presets, at 124, 126 and 138 bpm,
+by each sister's `tools/balance.py`.
+
+### Playing kits and multisamples
+
+Each WAV works on its own: drop it on a DAW's drum pad or sampler, which reads its root key from the `smpl` chunk. The
+SFZ maps that `pack` and `multisample` write play a whole set as one instrument, in any SFZ player, such as the free
+sfizz or Sforzando, loaded on an instrument track: both run as plugins in FL Studio, Ableton Live and Logic Pro, and
+sfizz on Linux too. A map names its samples by file name, so keep it in the folder beside them, as Ballast writes it.
+For the same reason a patch whose file name a sampler would read as part of the map, one holding `<`, `>`, `=`, `$`, a
+backslash, a comment's start, a control character or a line break, or beginning or ending with a space, is refused:
+rename it.
+
+- **A played kit** sits on key 36, General MIDI's bass drum, where drum patterns and pad controllers expect the kick.
+  Ballast calls it C2, as scientific pitch does, with middle C, key 60, as C4; DAWs that call middle C C3, such as
+  Ableton Live, Cubase and Logic Pro, call it C1. How hard you play picks the layer, and the level follows a square law,
+  40·log₁₀(v/127) dB, as Halyard's and Brightwork's kits do: a layer's velocities run up to its own, where the law
+  reaches its loudness against the loudest, and the map adds a curve at every velocity below it, so the kick grows
+  quieter smoothly, across the layers' boundaries too, and no velocity plays a hit louder than it was played. A kit of
+  one layer follows the law as well. Each hit is rendered from its own patch: a soft hit's level is lowered before the
+  drive, so the drive adds fewer harmonics, its click is lowered further and it keeps less of its pitch drop (`[play]`);
+  it is not a quieter copy of the hardest one. A kit whose layers do not grow louder by a velocity step from each to the
+  next is refused, every such kit named, with what to change. Within a layer, each hit takes the next repeat in turn, so
+  a steady pattern never plays one file twice in a row.
+- **A multisample** puts each note's own render on its key, at its root, so nothing is transposed and every note keeps
+  its own length and spectrum: play it from a MIDI clip as a bassline. Unlike a kit, it is an instrument: a note plays
+  as long as it is held, so its length shapes the bass. The map leaves polyphony to the player, so overlapping notes
+  ring together; for a line in which each note cuts off the last, write the notes so that they do not overlap, or limit
+  the player to one voice.
+
+## Audition
+
+`ballast audition` plays the exact buffer `ballast render` would write, at the patch's sample rate.
+
+![Audition of the long preset at 128 bpm: each hit plays to its end and the tails sum, while a bed loops on the bar](figures/audition.svg)
+
+- **Hits.** Without `--bpm`, the kick repeats after its own length plus half a second. With `--bpm`, it hits on every
+  beat. Hits are unchoked: each plays to its end, so long tails overlap and sum, as in a DAW.
+- **A bed.** `--with bass.wav --bpm 128` loops a mono or stereo WAV under the hits. It must be at the patch's sample
+  rate and last a whole number of bars at the tempo, within 1 ms. Each loop starts on the beat grid, so it never drifts
+  from the kick. If the kick over the bed would clip, audition warns you.
+- **Watching.** With `--watch`, every save renders again and the new sound takes over at the next hit. An invalid patch,
+  a render over full scale or a new sample rate is reported, and the last valid sound keeps playing. Edits saved while a
+  render runs are rendered next, and the stale render is dropped.
+- **Dropouts.** If the device ever runs out of samples, for example while a long render keeps the computer busy,
+  audition says so, with a count.
+- **No resampling.** Audition opens the device at the patch's sample rate or says it cannot. On Windows it plays through
+  WASAPI, in exclusive mode when the shared mixer runs at another rate. On macOS it asks Core Audio to switch the device
+  to the patch's rate, or fails. On Linux, a sound server such as PipeWire or PulseAudio may still resample to its own
+  rate; set it to the patch's rate to hear the exact samples.
+
+## Designing a kick
+
+Sixteen of the moves below are made on the `tight` preset, each with a link to its sound, to compare with
+[tight itself](audio/tight.wav); the figure shows what they do.
+
+![The tight preset and seventeen moves made on it: retuned to E1, a faster pitch drop, a longer body, a louder click, a brighter body, a zap, a sampled click, a sub, a room, grit, more drive, a bell, a low-pass, a swept low-pass, a low cut, asymmetry and clipping](figures/design.svg)
+
+- **Tune it to the track.** `tune_hz` sets the note the body's tail settles on; set it to a note of the track's key. Use
+  `ballast tune kick.toml E1`, or `--tune` with `init`. [Hear it in E1](audio/tight-e1.wav).
+
+- **The pitch drop.** A higher first ratio starts the sweep higher, and a faster fall makes it shorter. The `tight`
+  preset falls from 7 times the tuning to 2.2 in 6 ms, then to the note by 40 ms;
+  `ballast stretch kick.toml body.pitch 0.5` makes it fall twice as fast. [Hear the faster fall](audio/tight-fall.wav).
+
+- **Length is the body's amplitude shape.** Stretch it after the peak with `ballast stretch kick.toml body.amp 1.5`,
+  which keeps the attack intact. [Hear the longer body](audio/tight-long.wav).
+
+- **Brightness adds harmonics small speakers can play.** `body.bright_hz` turns the body's sine into a saw whose
+  harmonics fade above it, the same in Hz at every pitch, while the fundamental stays put. Its harmonics, unlike the
+  drive's, last as long as the tail. `body.bright_hz = 1000.0` puts 15% of the tail's power above 150 Hz, where a laptop
+  can play it. [Hear the brighter body](audio/tight-bright.wav).
+
+- **An acoustic body is modes.** `body.modes` adds partials at fixed ratios to the body, each fading at its own rate: a
+  drum head instead of a sweep. With a slight glide, `pitch = [{ ms = 0.0, ratio = 1.12 }, { ms = 40.0, ratio = 1.0 }]`,
+  a click of noise only, and four membrane modes and a shell mode:
+
+  ```toml
+  modes = [
+    { ratio = 1.594, db = -5.0,  decay_ms = 140.0 },
+    { ratio = 2.136, db = -9.0,  decay_ms = 90.0 },
+    { ratio = 2.296, db = -12.0, decay_ms = 80.0 },
+    { ratio = 2.653, db = -14.0, decay_ms = 60.0 },
+    { ratio = 7.3,   db = -16.0, decay_ms = 35.0 },
+  ]
+  ```
+
+  [Hear the drum](audio/drum.wav).
+
+- **The click is the attack.** A tone around 1.5–3 kHz with band-limited noise, a few milliseconds long, above most of
+  the kick's own energy; `noise_mix` blends the two at constant power. `attack.level_db = -8.0` brings the click 8 dB
+  forward. [Hear the louder click](audio/tight-click.wav).
+
+- **A zap is the click's own sweep.** `attack.pitch` is a pitch curve for the attack's tone, a ratio to `tone_hz` like
+  the body's. Falling to 1, it sweeps down into `tone_hz` and adds higher frequencies to the click:
+  `pitch = [{ ms = 0.0, ratio = 4.0 }, { ms = 2.0, ratio = 1.0 }]` dives two octaves, from 10 kHz, in 2 ms.
+  [Hear the zap](audio/tight-zap.wav).
+
+- **Layer a sampled click.** `ballast transient kick.toml click.wav` layers any short WAV over the attack, before the
+  drive, so the drive saturates the two together. Try it with [this click](audio/click.wav), three decaying modes of a
+  struck block. `transient.pitch` tunes it as a sampler would, `start_ms` places it, and `polarity = -1` flips it if its
+  first swing opposes the body's, which would cancel part of the attack. [Hear it layered](audio/tight-sample.wav).
+
+- **The drive adds odd harmonics.** `drive.db` adds odd harmonics and lowers the crest factor while full scale stays at
+  full scale; `h2` adds the even second harmonic. `drive.db = 18.0`, up from 6, brings the body's waveform close to a
+  square wave. [Hear the heavier drive](audio/tight-drive.wav).
+
+- **A sub is a sine after the drive.** A `[sub]` section adds the sine the body's tail meets, under its own shape, after
+  the drive: however hard the body is driven, the sub stays a sine, in phase with the tail. A sub at -6 dB that outlasts
+  the body by 160 ms:
+
+  ```toml
+  [sub]
+  level_db = -6.0
+  amp = [
+    { ms = 0.0,   gain = 0.0 },
+    { ms = 5.0,   gain = 1.0 },
+    { ms = 150.0, gain = 0.6 },
+    { ms = 400.0, gain = 0.0 },
+  ]
+  ```
+
+  [Hear the sub](audio/tight-sub.wav).
+
+- **A room adds a reverb tail.** A `[room]` section adds a seeded tail of noise whose high frequencies fade faster,
+  after the drive, so the drive does not saturate it. `decay_ms` is how long it takes to fall 60 dB, `damping_hz` where
+  it fades twice as fast, and `predelay_ms` the delay before it starts:
+
+  ```toml
+  [room]
+  level_db    = -12.0         # re the kick's energy
+  decay_ms    = 600.0         # to fall 60 dB, at low frequencies
+  damping_hz  = 4000.0        # fades twice as fast here
+  predelay_ms = 8.0
+  ```
+
+  [Hear the room](audio/tight-room.wav).
+
+- **Asymmetry adds even harmonics.** `drive.asymmetry` adds even harmonics that grow as the body decays, and leaves full
+  scale where it was; `drive.mix` below 1 mixes in some of the undriven kick, which keeps its transient. Even harmonics
+  bring a little DC, so pair them with a low cut. [Hear `drive.asymmetry = 1.0`](audio/tight-asymmetry.wav).
+
+- **The clipper trades peak for loudness.** `clip.db`, 0.01 to 12 or 0 for none, takes exactly that many decibels off
+  the kick's true peak and leaves everything below the knee alone; `knee_db` softens the edge. The presets normalize to
+  −1 dBTP, so the decibels come back as loudness: here `tight` goes from −13.4 to −11.4 LUFS. In gain mode the kick just
+  peaks lower. [Hear `clip.db = 4.0`](audio/tight-clip.wav).
+
+- **Long tuned tails want `phase_ref = "tail"`.** The tail is then exactly the sine at `tune_hz` with phase `phase_deg`,
+  whatever the sweep does before it. Editing the sweep never shifts the tail, and kicks that share a tuning share a
+  tail, so layered and edited kicks stay in phase.
+
+- **Watch the true peak.** For files that must not exceed a level after conversion, use `output.mode = "true-peak"`, or
+  read the dBTP figure in the report rather than the sample peak.
+
+- **A bell lifts one band.** `eq.bell_db = 6.0` lifts 200 Hz by 6 dB, where the body sweeps through at full strength in
+  its first milliseconds. It raises the kick's peak more than its loudness, so at −1 dBTP `tight` comes out quieter,
+  −17.1 LUFS against −13.4; let the clipper take that peak back, as `tech-house` does.
+  [Hear the bell](audio/tight-bell.wav).
+
+- **Grit is a low-rate sampler.** A `[grit]` section samples the kick at a low rate with no filter against aliasing,
+  rounds it to 12 bits and holds each sample, a staircase. Pair it with the EQ's low-pass, which stands in for the
+  sampler's output filter:
+
+  ```toml
+  [grit]
+  rate_hz  = 26040.0          # no filter against aliasing
+  bits     = 12               # no dither
+  input_db = 6.0              # into the converter, and back
+  ```
+
+  [Hear the grit](audio/tight-grit.wav).
+
+- **A low-pass removes the highs.** `eq.cutoff_hz = 1200.0` attenuates the kick above 1.2 kHz at 12 dB per octave,
+  leaving the body and little of the click. `eq.resonance` above 0.707 lifts and rings at the cutoff.
+  [Hear the low-pass](audio/tight-lowpass.wav).
+
+- **A sweep moves the cutoff.** `eq.sweep` moves the cutoff, in ratios to `cutoff_hz`, as a pitch curve moves the body:
+  this one closes the low-pass from 6 kHz to 400 Hz in the kick's first 80 ms, and the resonance rings down with it. A
+  sweep lasts up to a second; after it, the cutoff stays at `cutoff_hz`:
+
+  ```toml
+  [eq]
+  cutoff_hz = 400.0           # low-pass, 12 dB/oct; 0 = off
+  resonance = 3.0             # Q: 0.707 = flat … 10
+  sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+    { ms = 0.0,  ratio = 15.0 },
+    { ms = 80.0, ratio = 1.0 },
+  ]
+  ```
+
+  [Hear the sweep](audio/tight-sweep.wav).
+
+- **A low cut removes DC and sub-sonic energy.** `output.low_cut_hz = 30.0` high-passes the kick at 30 Hz with a 12
+  dB/octave Butterworth filter. The presets leave it off: on a one-shot, a high-pass also shifts the body's phase and
+  raises its peak against its loudness. [Hear the low cut](audio/tight-cut.wav).
+
+- **Velocity layers and round robins.** A `[play]` section says how the kick sounds hit softer, and how much each repeat
+  differs; `ballast pack` then writes velocity layers and round robins, with an SFZ map:
+
+  ```toml
+  [play]
+  soft_db       = -18.0       # the softest hit's level
+  soft_click_db = -6.0        # and its click's, further
+  soft_drop    = 0.6         # of the pitch drop it keeps
+  spread        = 0.5         # how much each repeat differs
+  ```
+
+  `ballast pack kick.toml -o kit --velocities 4 --round-robins 3` writes 12 hits and `kick-A1.sfz` in `kit`.
+
+- **A sample for every note.** `ballast multisample bass.toml E1 E2 -o bass` gives a bassline a sample for every note.
+
+## Python API
+
+The modules are importable for scripting renders:
+
+```python
+from ballast_synth import patch, render, tuning
+
+text = patch.read_text("kick.toml")  # UTF-8, or UTF-16 with a BOM
+kick = patch.loads(text)  # raises patch.PatchError, with .problems
+kick = patch.edit(kick, "body.tune_hz", tuning.parse_tune("G1"))
+audio, report = render.render(kick, 24)  # float32 at kick.output.sample_rate
+print(report)
+if not report.over:
+    render.export("kick-g1.wav", kick, patch.dumps(kick), audio, report)
+```
+
+`render.render` returns the audio as a float32 NumPy array and a report; `render.export` writes it in the format it was
+rendered for, as float32 when `bits` is `None` and as dithered PCM otherwise, with the patch text embedded.
+
+A hit of a played kit renders again from what its WAV records, its patch and its kit's chain:
+
+```python
+import json
+
+from ballast_synth import patch, render, wav
+
+meta = json.loads(wav.chunks("kit/kick-A1-v1-rr1.wav")[wav.PRIVATE])
+chain = render.Chain(meta["kit"]["clip_threshold"], meta["kit"]["gain"])
+hit = patch.loads(meta["patch"])
+audio, report = render.render(hit, 24, chain)  # for pack's default format, 24-bit PCM
+render.export("again.wav", hit, meta["patch"], audio, report)  # the same samples as the kit's file
+```
