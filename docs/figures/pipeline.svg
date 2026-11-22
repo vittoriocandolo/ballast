@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="fig" viewBox="0 0 960 492" width="960" height="492" role="img"><title>Signal flow from patch to WAV</title><style>
+.fig{--paper:#fbfcfd;--panel:#f1f4f7;--ink:#0e1116;--ink-2:#4a5361;--muted:#626c7a;--rule:#dde3ea;--grid:#e9edf2;--accent:#2a78d6;--series-2:#eb6834;--series-3:#1baf7a;--step-1:#86b6ef;--step-2:#3987e5;--step-3:#1c5cab;--step-4:#0d366b;--heat-1:#cde2fb;--heat-2:#9ec5f4;--heat-3:#6da7ec;--heat-4:#256abf;--heat-5:#184f95;--heat-6:#0d366b;--show-light:inline;--show-dark:none;}
+@media (prefers-color-scheme: dark){.fig{--paper:#0f1216;--panel:#171c22;--ink:#e7ecf1;--ink-2:#aab4c0;--muted:#8b96a4;--rule:#29313b;--grid:#1c2229;--accent:#3987e5;--series-2:#d95926;--series-3:#199e70;--step-1:#184f95;--step-2:#2a78d6;--step-3:#6da7ec;--step-4:#b7d3f6;--heat-1:#104281;--heat-2:#184f95;--heat-3:#1c5cab;--heat-4:#6da7ec;--heat-5:#9ec5f4;--heat-6:#cde2fb;--show-light:none;--show-dark:inline;}}
+.fig .bg{fill:var(--paper)}
+.fig .grid{fill:none;stroke:var(--grid);stroke-width:1}
+.fig .axis{fill:none;stroke:var(--rule);stroke-width:1}
+.fig .zero{fill:none;stroke:var(--muted);stroke-width:1;stroke-opacity:.45}
+.fig text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:12px;fill:var(--muted);font-variant-numeric:tabular-nums}
+.fig .label{fill:var(--ink-2)}
+.fig .title{fill:var(--ink);font-size:15px;font-weight:600}
+.fig .name{fill:var(--ink);font-family:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono","Roboto Mono",Menlo,Consolas,monospace;font-size:15px;font-weight:700}
+.fig .math{fill:var(--ink-2);font-family:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono","Roboto Mono",Menlo,Consolas,monospace;font-size:12px}
+.fig .boxtitle{fill:var(--ink);font-size:13px;font-weight:600}
+.fig .peak{fill:var(--accent);fill-opacity:.3}
+.fig .rms{fill:var(--accent)}
+.fig .trace{fill:none;stroke:var(--accent);stroke-width:1.25;stroke-linejoin:round}
+.fig .s1{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--accent)}
+.fig .s2{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--series-2)}
+.fig .s3{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--series-3)}
+.fig .o1{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--step-1)}
+.fig .o2{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--step-2)}
+.fig .o3{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--step-3)}
+.fig .o4{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke:var(--step-4)}
+.fig .ref{fill:none;stroke:var(--muted);stroke-width:1.25}
+.fig .halo{fill:none;stroke:var(--muted);stroke-opacity:.35;stroke-width:7}
+.fig .key1,.fig .bar{fill:var(--accent)}
+.fig .key2{fill:var(--series-2)}
+.fig .key3{fill:var(--series-3)}
+.fig .ko1{fill:var(--step-1)}
+.fig .ko2{fill:var(--step-2)}
+.fig .ko3{fill:var(--step-3)}
+.fig .ko4{fill:var(--step-4)}
+.fig .kref{fill:var(--muted)}
+.fig .khalo{fill:var(--muted);fill-opacity:.35}
+.fig .knot,.fig .dot1{fill:var(--accent);stroke:var(--paper);stroke-width:2}
+.fig .dot2{fill:var(--series-2);stroke:var(--paper);stroke-width:2}
+.fig .do1{fill:var(--step-1);stroke:var(--paper);stroke-width:2}
+.fig .do2{fill:var(--step-2);stroke:var(--paper);stroke-width:2}
+.fig .do3{fill:var(--step-3);stroke:var(--paper);stroke-width:2}
+.fig .do4{fill:var(--step-4);stroke:var(--paper);stroke-width:2}
+.fig .dot3{fill:var(--series-3);stroke:var(--paper);stroke-width:2}
+.fig .band{fill:var(--accent);fill-opacity:.08}
+.fig .limit{fill:none;stroke:var(--ink-2);stroke-width:1}
+.fig .box{fill:var(--paper);stroke:var(--rule);stroke-width:1}
+.fig .zone{fill:var(--panel);stroke:var(--rule);stroke-width:1}
+.fig .flow{fill:none;stroke:var(--ink-2);stroke-width:1.5}
+.fig .head{fill:var(--ink-2)}
+.fig .h0{fill:var(--panel)}
+.fig .h1{fill:var(--heat-1)}
+.fig .h2{fill:var(--heat-2)}
+.fig .h3{fill:var(--heat-3)}
+.fig .h4{fill:var(--heat-4)}
+.fig .h5{fill:var(--heat-5)}
+.fig .h6{fill:var(--heat-6)}
+.fig .on-light{fill:var(--ink);font-size:11px}
+.fig .on-dark{fill:var(--paper);font-size:11px}
+.fig .light{display:var(--show-light)}
+.fig .dark{display:var(--show-dark)}
+</style><rect class="bg" width="960" height="492" rx="10"/><text class="title" x="28" y="36">Signal flow</text><text class="label" x="28" y="57">From the patch's curves to a WAV file</text><defs><marker id="pipeline-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,1L10,5L0,9Z"/></marker></defs><rect class="zone" x="16" y="76" width="928" height="276" rx="8"/><text class="label" x="32" y="98">32 × the base rate: 1411.2 or 1536 kHz</text><text class="label" x="944" y="384" text-anchor="end">at the file's sample rate</text><rect class="box" x="32" y="112" width="150" height="64" rx="6"/><text class="boxtitle" x="44" y="133">Body</text><text class="math" x="44" y="152">sin φ + h₂ sin 2φ</text><text class="label" x="44" y="168">pitch curve to phase</text><rect class="box" x="32" y="192" width="150" height="64" rx="6"/><text class="boxtitle" x="44" y="213">Attack</text><text class="math" x="44" y="232">swept tone + noise</text><text class="label" x="44" y="248">seeded, band-limited</text><rect class="box" x="32" y="272" width="150" height="64" rx="6"/><text class="boxtitle" x="44" y="293">Transient</text><text class="label" x="44" y="312">a sampled click</text><text class="label" x="44" y="328">read at any pitch</text><circle class="box" cx="214" cy="224" r="14"/><text class="boxtitle" x="214" y="229" text-anchor="middle">+</text><path class="flow" d="M182,144C192,144 204,174 208,209" marker-end="url(#pipeline-head)"/><path class="flow" d="M182,224H198" marker-end="url(#pipeline-head)"/><path class="flow" d="M182,304C192,304 204,274 208,239" marker-end="url(#pipeline-head)"/><rect class="box" x="246" y="192" width="172" height="64" rx="6"/><text class="boxtitle" x="258" y="213">Drive</text><text class="math" x="258" y="232">tanh(αx)/tanh α + even</text><text class="label" x="258" y="248">mixed with the dry</text><path class="flow" d="M228,224H244" marker-end="url(#pipeline-head)"/><circle class="box" cx="442" cy="224" r="14"/><text class="boxtitle" x="442" y="229" text-anchor="middle">+</text><path class="flow" d="M418,224H426" marker-end="url(#pipeline-head)"/><rect class="box" x="372" y="112" width="140" height="64" rx="6"/><text class="boxtitle" x="384" y="133">Sub</text><text class="label" x="384" y="152">the tail's own sine</text><text class="label" x="384" y="168">clean, after the drive</text><path class="flow" d="M442,176V208" marker-end="url(#pipeline-head)"/><rect class="box" x="470" y="192" width="110" height="64" rx="6"/><text class="boxtitle" x="482" y="213">EQ</text><text class="label" x="482" y="232">low, bell, high</text><text class="label" x="482" y="248">0 dB: off</text><rect class="box" x="372" y="272" width="140" height="64" rx="6"/><text class="boxtitle" x="384" y="293">Room</text><text class="label" x="384" y="312">a seeded tail</text><text class="label" x="384" y="328">highs fade faster</text><path class="flow" d="M462,224V270" marker-end="url(#pipeline-head)"/><path class="flow" d="M512,304H526" marker-end="url(#pipeline-head)"/><rect class="box" x="528" y="272" width="120" height="64" rx="6"/><text class="boxtitle" x="540" y="293">Grit</text><text class="label" x="540" y="312">a low-rate sampler</text><text class="label" x="540" y="328">aliasing on purpose</text><path class="flow" d="M560,270V258" marker-end="url(#pipeline-head)"/><path class="flow" d="M456,224H468" marker-end="url(#pipeline-head)"/><rect class="box" x="600" y="192" width="110" height="64" rx="6"/><text class="boxtitle" x="612" y="213">Low cut</text><text class="label" x="612" y="232">12 dB/octave</text><text class="label" x="612" y="248">0 Hz: off</text><path class="flow" d="M580,224H598" marker-end="url(#pipeline-head)"/><rect class="box" x="730" y="192" width="180" height="64" rx="6"/><text class="boxtitle" x="742" y="213">Clipper</text><text class="label" x="742" y="232">true peak down by db</text><text class="label" x="742" y="248">knee: hard to soft</text><path class="flow" d="M710,224H728" marker-end="url(#pipeline-head)"/><rect class="box" x="730" y="400" width="180" height="64" rx="6"/><text class="boxtitle" x="742" y="421">Decimator</text><text class="math" x="742" y="440">↓32, ↓16 or ↓8</text><text class="label" x="742" y="456">minimum phase</text><path class="flow" d="M820,256V398" marker-end="url(#pipeline-head)"/><rect class="box" x="508" y="400" width="160" height="64" rx="6"/><text class="boxtitle" x="520" y="421">Output</text><text class="label" x="520" y="440">gain or peak target</text><text class="label" x="520" y="456">polarity</text><path class="flow" d="M730,432H670" marker-end="url(#pipeline-head)"/><rect class="box" x="306" y="400" width="140" height="64" rx="6"/><text class="boxtitle" x="318" y="421">WAV</text><text class="label" x="318" y="440">float or PCM</text><text class="label" x="318" y="456">patch inside</text><path class="flow" d="M508,432H448" marker-end="url(#pipeline-head)"/></svg>

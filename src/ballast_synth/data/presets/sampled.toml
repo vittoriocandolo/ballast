@@ -1,0 +1,75 @@
+schema = 3
+seed = 1
+
+[body]
+tune_hz   = 55.0
+level_db  = 0.0
+h2        = 0.1             # second harmonic, 0 … 0.5
+bright_hz = 0.0             # harmonics fade above; 0 = sine
+phase_deg = 0.0
+phase_ref = "onset"         # "onset" | "tail"
+pitch = [                   # ratio to tune_hz; starts at 0 ms, ends at 1
+  { ms = 0.0,  ratio = 4.5 },
+  { ms = 3.0,  ratio = 2.2 },
+  { ms = 12.0, ratio = 1.3 },
+  { ms = 40.0, ratio = 1.0 },
+]
+amp = [                     # shape: 0 at both ends, highest point exactly 1
+  { ms = 0.0,   gain = 0.0 },
+  { ms = 0.3,   gain = 1.0 },
+  { ms = 30.0,  gain = 0.85 },
+  { ms = 150.0, gain = 0.35 },
+  { ms = 260.0, gain = 0.08 },
+  { ms = 320.0, gain = 0.0 },
+]
+modes = []                  # ratio to the body, dB re its sine, ms to fall 60 dB
+
+[attack]
+level_db      = -14.0
+tone_hz       = 2200.0
+noise_mix     = 0.6         # 0 = tone … 1 = noise
+noise_band_hz = [1500.0, 9000.0]
+pitch = [                   # ratio to tone_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
+amp = [
+  { ms = 0.0,  gain = 0.0 },
+  { ms = 0.06, gain = 1.0 },
+  { ms = 1.2,  gain = 0.4 },
+  { ms = 5.0,  gain = 0.0 },
+]
+
+[drive]
+db        = 10.0            # small-signal gain; 0 = bypass
+asymmetry = 0.3             # even harmonics, 0 … 1
+mix       = 1.0             # 0 = dry … 1 = driven
+
+[grit]
+rate_hz  = 26040.0          # no filter against aliasing
+bits     = 12               # no dither
+input_db = 6.0              # into the converter, and back
+
+[eq]
+low_hz    = 80.0            # low shelf
+low_db    = 0.0             # 0 = off
+bell_hz   = 180.0           # bell
+bell_db   = 0.0             # 0 = off
+bell_q    = 1.0             # 0.3 = wide … 10 = narrow
+high_hz   = 8000.0          # high shelf
+high_db   = 0.0             # 0 = off
+cutoff_hz = 2500.0          # low-pass, 12 dB/oct; 0 = off
+resonance = 2.0             # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
+
+[clip]
+db      = 3.0               # off the peaks; 0 = off
+knee_db = 4.0               # 0 = hard … 6 = soft
+
+[output]
+sample_rate = 48000
+low_cut_hz  = 0.0           # high-pass, 12 dB/oct; 0 = off
+mode        = "true-peak"   # "gain" | "peak" | "true-peak"
+db          = -1.0          # gain in dB, or peak target
+polarity    = 1

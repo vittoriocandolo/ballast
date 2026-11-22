@@ -1,0 +1,69 @@
+schema = 3
+seed = 1
+
+[body]
+tune_hz   = 48.999
+level_db  = 0.0
+h2        = 0.08            # second harmonic, 0 … 0.5
+bright_hz = 0.0             # harmonics fade above; 0 = sine
+phase_deg = 0.0
+phase_ref = "onset"         # "onset" | "tail"
+pitch = [                   # ratio to tune_hz; starts at 0 ms, ends at 1
+  { ms = 0.0,  ratio = 4.5 },
+  { ms = 12.0, ratio = 1.7 },
+  { ms = 90.0, ratio = 1.0 },
+]
+amp = [                     # shape: 0 at both ends, highest point exactly 1
+  { ms = 0.0,   gain = 0.0 },
+  { ms = 0.6,   gain = 1.0 },
+  { ms = 60.0,  gain = 0.85 },
+  { ms = 220.0, gain = 0.42 },
+  { ms = 420.0, gain = 0.12 },
+  { ms = 600.0, gain = 0.0 },
+]
+modes = []                  # ratio to the body, dB re its sine, ms to fall 60 dB
+
+[attack]
+level_db      = -28.0
+tone_hz       = 900.0
+noise_mix     = 0.3         # 0 = tone … 1 = noise
+noise_band_hz = [300.0, 4000.0]
+pitch = [                   # ratio to tone_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
+amp = [
+  { ms = 0.0,  gain = 0.0 },
+  { ms = 0.4,  gain = 1.0 },
+  { ms = 3.0,  gain = 0.3 },
+  { ms = 12.0, gain = 0.0 },
+]
+
+[drive]
+db        = 3.0             # small-signal gain; 0 = bypass
+asymmetry = 0.0             # even harmonics, 0 … 1
+mix       = 1.0             # 0 = dry … 1 = driven
+
+[eq]
+low_hz    = 80.0            # low shelf
+low_db    = 0.0             # 0 = off
+bell_hz   = 200.0           # bell
+bell_db   = 0.0             # 0 = off
+bell_q    = 1.0             # 0.3 = wide … 10 = narrow
+high_hz   = 8000.0          # high shelf
+high_db   = 0.0             # 0 = off
+cutoff_hz = 0.0             # low-pass, 12 dB/oct; 0 = off
+resonance = 0.707           # Q: 0.707 = flat … 10
+sweep = [                   # ratio to cutoff_hz; starts at 0 ms, ends at 1
+  { ms = 0.0, ratio = 1.0 },
+]
+
+[clip]
+db      = 0.0               # off the peaks; 0 = off
+knee_db = 0.0               # 0 = hard … 6 = soft
+
+[output]
+sample_rate = 48000
+low_cut_hz  = 0.0           # high-pass, 12 dB/oct; 0 = off
+mode        = "true-peak"   # "gain" | "peak" | "true-peak"
+db          = -1.0          # gain in dB, or peak target
+polarity    = 1
